@@ -24,7 +24,7 @@
                     {% for estimate in portal_estimates %}
                         <a class="portal-document-row" href="{% url 'operations:portal-section' section='estimate-files' %}?client={{ portal_client.pk }}&amp;estimate={{ estimate.pk }}{% if estimate.portal_project %}&amp;project={{ estimate.portal_project.pk }}{% endif %}">
                             <span><strong>{{ estimate.title }}</strong><small>{% if estimate.portal_project %}{{ estimate.portal_project.title }}{% else %}Pre-project scope{% endif %}</small></span>
-                            <span>{{ estimate.get_external_status_display }}</span>
+                            <span>{% if estimate.external_url %}{{ estimate.get_external_status_display }}{% else %}{{ estimate.get_status_display }} · History{% endif %}</span>
                         </a>
                     {% endfor %}
                 </div>

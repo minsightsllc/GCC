@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from html import unescape
 
 import shutil
 import tempfile
@@ -21,7 +22,6 @@ from .models import (
     EmployeeNotification,
     EmployeeProfile,
     Estimate,
-    EstimateLineItem,
     Lead,
     MediaAsset,
     Project,
@@ -31,6 +31,7 @@ from .models import (
 )
 from .services import ensure_role_groups
 from django.core.files.uploadedfile import SimpleUploadedFile
+from .construction_services import record_external_estimate_status
 
 
 TEST_MEDIA_ROOT = Path(tempfile.mkdtemp(prefix="gcc-workflow-contract-"))
@@ -128,6 +129,13 @@ class WorkflowContractTests(TestCase):
 
     def make_estimate(self, *, status=Estimate.Status.SENT):
         self.next_number += 1
+        external_status = {
+            Estimate.Status.DRAFT: Estimate.ExternalEstimateStatus.NOT_STARTED,
+            Estimate.Status.SENT: Estimate.ExternalEstimateStatus.SENT,
+            Estimate.Status.ACCEPTED: Estimate.ExternalEstimateStatus.APPROVED,
+            Estimate.Status.DECLINED: Estimate.ExternalEstimateStatus.REJECTED,
+        }[status]
+        timestamp = timezone.now() if status != Estimate.Status.DRAFT else None
         estimate = Estimate.objects.create(
             number=self.next_number,
             lead=self.lead,
@@ -136,13 +144,14 @@ class WorkflowContractTests(TestCase):
             status=status,
             deposit_amount=Decimal("100.00"),
             created_by=self.owner,
-            sent_at=timezone.now() if status != Estimate.Status.DRAFT else None,
-        )
-        EstimateLineItem.objects.create(
-            estimate=estimate,
-            description="Site work",
-            quantity=Decimal("1.00"),
-            unit_price=Decimal("1000.00"),
+            external_url=f"https://estimates.example.com/{self.next_number}",
+            external_status=external_status,
+            external_status_at=timestamp,
+            external_status_by=self.owner if timestamp else None,
+            external_client_visible=status != Estimate.Status.DRAFT,
+            sent_at=timestamp if status == Estimate.Status.SENT else None,
+            accepted_at=timestamp if status == Estimate.Status.ACCEPTED else None,
+            declined_at=timestamp if status == Estimate.Status.DECLINED else None,
         )
         return estimate
 
@@ -188,9 +197,16 @@ class WorkflowContractTests(TestCase):
     @classmethod
     def sidebar_structure(cls, response):
         sidebar = cls.sidebar_markup(response)
-        groups = tuple(re.findall(r'<h2 class="sidebar-group-label"[^>]*>(.*?)</h2>', sidebar, re.DOTALL))
-        links = tuple(re.findall(r'<a class="[^"]*" href="([^"]+)">.*?<span>([^<]+)</span>', sidebar, re.DOTALL))
-        return groups, links
+        groups = tuple(
+            unescape(re.sub(r"<[^>]+>", "", value)).strip()
+            for value in re.findall(r'<h2 class="sidebar-group-label"[^>]*>(.*?)</h2>', sidebar, re.DOTALL)
+        )
+        links = []
+        for href, body in re.findall(r'<a class="[^"]*"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', sidebar, re.DOTALL):
+            label = re.search(r'<span>([^<]+)</span>\s*<span class="(?:nav-count|notification-nav-count)"', body)
+            if label:
+                links.append((href, unescape(label.group(1)).strip()))
+        return groups, tuple(links)
 
     def test_sidebar_structure_is_stable_across_every_workspace_route(self):
         self.login_as(self.owner)
@@ -232,20 +248,20 @@ class WorkflowContractTests(TestCase):
         owner_response = self.http.get(reverse("operations:dashboard"))
         owner_sidebar = self.sidebar_markup(owner_response)
         owner_tokens = (
-            ">Command Center<",
-            "Core work",
+            ">Overview<",
+            "Client &amp; Job Operations",
             ">Leads<",
-            ">Projects<",
-            ">Calendar<",
-            ">Messages<",
-            "More workspace",
-            ">Estimates<",
             ">Clients<",
+            ">Estimates<",
+            ">Projects<",
             ">Tasks<",
+            ">Calendar<",
             ">Time<",
             ">Documents<",
             ">Media<",
+            "Miscellaneous",
             ">Team<",
+            ">Messages<",
             ">Notifications<",
             ">Content<",
         )
@@ -256,13 +272,13 @@ class WorkflowContractTests(TestCase):
         employee_sidebar = self.sidebar_markup(employee_response)
         employee_tokens = (
             ">Overview<",
-            "Assigned work",
+            "Client &amp; Job Operations",
             ">Projects<",
             ">Tasks<",
             ">Calendar<",
             ">Time<",
             ">Media<",
-            "Personal",
+            "Miscellaneous",
             ">Notifications<",
             ">Profile<",
         )
@@ -277,11 +293,16 @@ class WorkflowContractTests(TestCase):
         employee_block = mobile_source[mobile_source.index("const employeeDrawerPages") : mobile_source.index("const adminDrawerPages")]
         admin_block = mobile_source[mobile_source.index("const adminDrawerPages") : mobile_source.index("const clientTabIcons")]
         employee_labels = ("Overview", "Projects", "Tasks", "Calendar", "Time", "Media", "Notifications", "Profile")
-        admin_labels = ("Command center", "Leads", "Projects", "Calendar", "Messages", "Workspace overview", "Estimates", "Clients", "Tasks", "Time", "Documents", "Media", "Team", "Notifications", "Content")
+        admin_labels = ("Overview", "Leads", "Clients", "Estimates", "Projects", "Tasks", "Calendar", "Time", "Documents", "Media", "Team", "Messages", "Notifications", "Content")
         for block, labels in ((employee_block, employee_labels), (admin_block, admin_labels)):
             positions = [block.index(f"label: '{label}'") for label in labels]
             self.assertEqual(positions, sorted(positions))
         self.assertIn("path: '/dashboard/clients/?messages=1'", admin_block)
+        self.assertIn("group: 'Client & Job Operations'", admin_block)
+        self.assertIn("group: 'Miscellaneous'", admin_block)
+        self.assertNotIn("Workspace overview", admin_block)
+        self.assertNotIn("Command center", admin_block)
+        self.assertNotIn("Today's work", employee_block)
         client_block = mobile_source[mobile_source.index("const clientDrawerPages") : mobile_source.index("const employeeDrawerPages")]
         for route in (
             "/portal/overview/",
@@ -312,7 +333,7 @@ class WorkflowContractTests(TestCase):
         self.assertIn("isPushWorkspace", mobile_source)
         self.assertIn("requestedPath.startsWith('/portal/')", mobile_source)
 
-    def test_client_is_authoritative_for_acceptance_and_project_setup_is_explicit(self):
+    def test_external_estimate_status_is_staff_confirmed_and_project_setup_is_explicit(self):
         estimate = self.make_estimate()
         owner_form = EstimateForm(
             data={"title": estimate.title, "status": Estimate.Status.ACCEPTED, "deposit_amount": "100", "notes": ""},
@@ -334,18 +355,33 @@ class WorkflowContractTests(TestCase):
             302,
         )
         estimate.refresh_from_db()
-        self.assertEqual(estimate.status, Estimate.Status.ACCEPTED)
-        self.assertEqual(estimate.accepted_by_id, self.client_user.pk)
+        self.assertEqual(estimate.status, Estimate.Status.SENT)
+        self.assertIsNone(estimate.accepted_by_id)
         self.assertFalse(ClientNotification.objects.filter(kind="estimate-accepted", estimate=estimate).exists())
-        self.assertTrue(EmployeeNotification.objects.filter(kind="estimate-accepted", estimate=estimate, employee=self.owner).exists())
+        self.assertFalse(EmployeeNotification.objects.filter(kind="estimate-accepted", estimate=estimate).exists())
 
         self.login_as(self.owner)
+        estimate, changed = record_external_estimate_status(
+            estimate,
+            actor=self.owner,
+            status=Estimate.ExternalEstimateStatus.APPROVED,
+            external_client_visible=True,
+            idempotency_key="contract-confirm-external-approval",
+        )
+        self.assertTrue(changed)
+        self.assertEqual(estimate.status, Estimate.Status.ACCEPTED)
+        self.assertIsNone(estimate.accepted_by_id)
+        self.assertEqual(estimate.external_status_by_id, self.owner.pk)
+        self.assertTrue(ClientNotification.objects.filter(kind="estimate-accepted", estimate=estimate).exists())
+        self.assertTrue(EmployeeNotification.objects.filter(kind="estimate-accepted", estimate=estimate, employee=self.manager).exists())
+
         response = self.http.post(reverse("operations:estimate-project", kwargs={"pk": estimate.pk}))
         self.assertEqual(response.status_code, 302)
         project = Project.objects.get(estimate=estimate)
         self.assertEqual(project.next_step, "Assign project staff")
         self.assertTrue(project.needs_staff_assignment)
-        self.assertTrue(ClientNotification.objects.filter(kind="project-created", project=project).exists())
+        project_notice = ClientNotification.objects.get(kind="project-created", project=project)
+        self.assertIn("has not started yet", project_notice.body)
         invalid_execution_form = ProjectForm(
             data=self.project_payload(project, status=Project.Status.CONSTRUCTION, staff=[]),
             instance=project,
@@ -361,6 +397,7 @@ class WorkflowContractTests(TestCase):
         project.refresh_from_db()
         self.assertFalse(project.needs_staff_assignment)
         self.assertTrue(EmployeeNotification.objects.filter(kind="project-assignment", project=project, employee=self.manager).exists())
+        self.assertTrue(ClientNotification.objects.filter(kind="project-staff-assigned", project=project).exists())
 
     def test_required_publication_alerts_and_read_states_are_durable(self):
         estimate = self.make_estimate(status=Estimate.Status.ACCEPTED)

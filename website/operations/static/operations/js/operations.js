@@ -37,6 +37,138 @@
         }
     }
 
+    function initLeadDetailTabs() {
+        each(".leads-split .record-detail", function (record, recordIndex) {
+            var tabList = record.querySelector(".detail-tabs");
+            var columns = record.querySelector(".detail-columns");
+            if (!tabList || !columns || columns.children.length < 2) {
+                return;
+            }
+
+            var tabNodes = Array.prototype.slice.call(tabList.querySelectorAll(".detail-tab"));
+            if (tabNodes.length !== 2) {
+                return;
+            }
+
+            var recordId = String(recordIndex + 1);
+            var priorityForm = record.querySelector('form[action*="lead-priority"]');
+            var priorityAction = priorityForm ? priorityForm.getAttribute("action") : "";
+            var recordMatch = priorityAction.match(/dashboard\/leads\/([^/]+)\/priority/);
+            if (recordMatch) {
+                recordId = recordMatch[1];
+            }
+
+            var detailsPanel = columns.children[0];
+            var notesPanel = columns.children[1];
+            var panelDefinitions = [
+                { key: "details", label: "Details", panel: detailsPanel },
+                { key: "notes", label: "Notes & tasks", panel: notesPanel }
+            ];
+
+            tabList.setAttribute("role", "tablist");
+            tabList.setAttribute("aria-label", "Lead record sections");
+            columns.classList.add("lead-detail-tabbed-columns");
+            detailsPanel.classList.add("lead-tab-panel", "lead-details-panel");
+            notesPanel.classList.add("lead-tab-panel", "lead-notes-panel");
+
+            var tabs = panelDefinitions.map(function (definition, index) {
+                var original = tabNodes[index];
+                var button = document.createElement("button");
+                button.type = "button";
+                button.className = original.className;
+                button.textContent = definition.label;
+                button.setAttribute("role", "tab");
+                button.id = "lead-" + recordId + "-" + definition.key + "-tab";
+                button.setAttribute("aria-controls", "lead-" + recordId + "-" + definition.key + "-panel");
+                button.setAttribute("data-lead-tab", definition.key);
+                tabList.replaceChild(button, original);
+
+                definition.panel.id = "lead-" + recordId + "-" + definition.key + "-panel";
+                definition.panel.setAttribute("role", "tabpanel");
+                definition.panel.setAttribute("aria-labelledby", button.id);
+                definition.panel.setAttribute("tabindex", "0");
+                return button;
+            });
+
+            detailsPanel.classList.add("lead-facts-panel");
+            notesPanel.classList.add("lead-notes-and-tasks-panel");
+            var attachments = record.querySelector(".lead-attachments");
+            if (attachments) {
+                detailsPanel.appendChild(attachments);
+            }
+
+            function writeTabToAddress(tabKey, includeTaskHash) {
+                if (!window.history || !window.history.replaceState || !window.URL) {
+                    return;
+                }
+                var url = new URL(window.location.href);
+                if (tabKey === "details") {
+                    url.searchParams.delete("lead_tab");
+                } else {
+                    url.searchParams.set("lead_tab", tabKey);
+                }
+                if (includeTaskHash) {
+                    url.hash = "follow-up";
+                }
+                window.history.replaceState(window.history.state, "", url.toString());
+            }
+
+            function activateTab(tabKey, updateAddress, includeTaskHash) {
+                panelDefinitions.forEach(function (definition, index) {
+                    var selected = definition.key === tabKey;
+                    tabs[index].classList.toggle("is-current", selected);
+                    tabs[index].setAttribute("aria-selected", String(selected));
+                    tabs[index].setAttribute("tabindex", selected ? "0" : "-1");
+                    definition.panel.hidden = !selected;
+                });
+                if (updateAddress) {
+                    writeTabToAddress(tabKey, includeTaskHash);
+                }
+            }
+
+            var requestedTab = new URLSearchParams(window.location.search).get("lead_tab");
+            if (!requestedTab && document.body) {
+                requestedTab = document.body.getAttribute("data-lead-detail-tab");
+            }
+            activateTab(requestedTab === "notes" ? "notes" : "details", false, false);
+
+            tabs.forEach(function (tab, index) {
+                tab.addEventListener("click", function () {
+                    activateTab(tab.getAttribute("data-lead-tab"), true, false);
+                });
+                tab.addEventListener("keydown", function (event) {
+                    var nextIndex = index;
+                    if (event.key === "ArrowRight") {
+                        nextIndex = (index + 1) % tabs.length;
+                    } else if (event.key === "ArrowLeft") {
+                        nextIndex = (index + tabs.length - 1) % tabs.length;
+                    } else if (event.key === "Home") {
+                        nextIndex = 0;
+                    } else if (event.key === "End") {
+                        nextIndex = tabs.length - 1;
+                    } else {
+                        return;
+                    }
+                    event.preventDefault();
+                    tabs[nextIndex].focus();
+                    activateTab(tabs[nextIndex].getAttribute("data-lead-tab"), true, false);
+                });
+            });
+
+            var addTaskShortcut = record.querySelector('a[href="#follow-up"]');
+            if (addTaskShortcut) {
+                addTaskShortcut.addEventListener("click", function (event) {
+                    event.preventDefault();
+                    activateTab("notes", true, true);
+                    var taskTitle = record.querySelector('form[action*="lead-followup"] input[name$="-title"]');
+                    if (taskTitle) {
+                        taskTitle.focus();
+                    }
+                });
+            }
+        });
+    }
+
     function initGoogleReviewsCarousel() {
         each("[data-google-reviews-carousel]", function (carousel) {
             var viewport = carousel.querySelector("[data-google-reviews-viewport]");
@@ -1362,6 +1494,7 @@
 
     function init() {
         initNavigation();
+        initLeadDetailTabs();
         initProjectFilters();
         initGoogleReviewsCarousel();
         initFileInputs();

@@ -1,15 +1,15 @@
 <nav class="admin-nav grouped-admin-nav" aria-label="{% if team_mode %}Employee workspace{% else %}Operations{% endif %} navigation">
     <div class="sidebar-nav-overview">
-        <a class="{% if active_section == 'overview' or active_section == 'command-center' %}is-current{% endif %}" href="{% if team_mode %}{% url 'operations:team' %}{% else %}{% url 'operations:dashboard' %}{% endif %}">
+        <a class="{% if active_section == 'overview' or active_section == 'command-center' %}is-current{% endif %}" {% if active_section == 'overview' or active_section == 'command-center' %}aria-current="page"{% endif %} href="{% if team_mode %}{% url 'operations:team' %}{% else %}{% url 'operations:dashboard' %}{% endif %}">
             <span class="nav-icon">⌂</span>
-            <span>{% if team_mode %}Overview{% else %}Command Center{% endif %}</span>
+            <span>Overview</span>
             <span class="nav-count" aria-label="{{ operations_nav_counts.overview }} notifications">{{ operations_nav_counts.overview }}</span>
         </a>
     </div>
 
     {% if team_mode %}
-        <section class="sidebar-nav-group" aria-labelledby="sidebar-group-assigned-work">
-            <h2 class="sidebar-group-label" id="sidebar-group-assigned-work">Assigned work</h2>
+        <section class="sidebar-nav-group" aria-labelledby="sidebar-group-client-job-operations">
+            <h2 class="sidebar-group-label" id="sidebar-group-client-job-operations">Client &amp; Job Operations</h2>
             <div class="sidebar-nav-links">
                 <a class="{% if active_section == 'projects' %}is-current{% endif %}" href="{% url 'operations:team-section' section='projects' %}"><span class="nav-icon">⌂</span><span>Projects</span><span class="nav-count" aria-label="{{ operations_nav_counts.projects }} notifications">{{ operations_nav_counts.projects }}</span></a>
                 <a class="{% if active_section == 'tasks' %}is-current{% endif %}" href="{% url 'operations:team-section' section='tasks' %}"><span class="nav-icon">✓</span><span>Tasks</span><span class="nav-count" aria-label="{{ operations_nav_counts.tasks }} notifications">{{ operations_nav_counts.tasks }}</span></a>
@@ -19,37 +19,37 @@
             </div>
         </section>
 
-        <section class="sidebar-nav-group" aria-labelledby="sidebar-group-personal">
-            <h2 class="sidebar-group-label" id="sidebar-group-personal">Personal</h2>
+        <section class="sidebar-nav-group" aria-labelledby="sidebar-group-miscellaneous">
+            <h2 class="sidebar-group-label" id="sidebar-group-miscellaneous">Miscellaneous</h2>
             <div class="sidebar-nav-links">
                 <a class="{% if active_section == 'notifications' %}is-current{% endif %}" href="{% url 'operations:team-section' section='notifications' %}"><span class="nav-icon">!</span><span>Notifications</span><span class="notification-nav-count" aria-label="{{ operations_nav_counts.notifications }} unread notifications">{{ operations_nav_counts.notifications }}</span></a>
                 <a class="{% if active_section == 'profile' %}is-current{% endif %}" href="{% url 'operations:team-section' section='profile' %}"><span class="nav-icon">◉</span><span>Profile</span><span class="nav-count" aria-label="{{ operations_nav_counts.profile }} notifications">{{ operations_nav_counts.profile }}</span></a>
             </div>
         </section>
     {% else %}
-        <section class="sidebar-nav-group" aria-labelledby="sidebar-group-core-work">
-            <h2 class="sidebar-group-label" id="sidebar-group-core-work">Core work</h2>
+        <section class="sidebar-nav-group" aria-labelledby="sidebar-group-client-job-operations">
+            <h2 class="sidebar-group-label" id="sidebar-group-client-job-operations">Client &amp; Job Operations</h2>
             <div class="sidebar-nav-links">
-                <a class="{% if active_section == 'leads' %}is-current{% endif %}" href="{% url 'operations:dashboard-section' section='leads' %}"><span class="nav-icon">◎</span><span>Leads</span><span class="nav-count" aria-label="{{ operations_nav_counts.leads }} notifications">{{ operations_nav_counts.leads }}</span></a>
-                <a class="{% if active_section == 'projects' %}is-current{% endif %}" href="{% url 'operations:dashboard-section' section='projects' %}"><span class="nav-icon">⌂</span><span>Projects</span><span class="nav-count" aria-label="{{ operations_nav_counts.projects }} notifications">{{ operations_nav_counts.projects }}</span></a>
-                <a class="{% if active_section == 'calendar' %}is-current{% endif %}" href="{% url 'operations:dashboard-section' section='calendar' %}"><span class="nav-icon">◷</span><span>Calendar</span><span class="nav-count" aria-label="{{ operations_nav_counts.calendar }} notifications">{{ operations_nav_counts.calendar }}</span></a>
-                <a class="{% if active_section == 'clients' and request.GET.messages %}is-current{% endif %}{% if unread_messages_count %} has-unread{% endif %}" href="{% url 'operations:dashboard-section' section='clients' %}?messages=1"><span class="nav-icon">!</span><span>Messages</span><span class="nav-count" aria-label="{{ operations_nav_counts.messages }} unread messages">{{ operations_nav_counts.messages }}</span></a>
+                <a class="{% if active_section == 'leads' %}is-current{% endif %}" {% if active_section == 'leads' %}aria-current="page"{% endif %} href="{% url 'operations:dashboard-section' section='leads' %}"><span class="nav-icon">◎</span><span>Leads</span><span class="nav-count" aria-label="{{ operations_nav_counts.leads }} notifications">{{ operations_nav_counts.leads }}</span></a>
+                <a class="{% if active_section == 'clients' and not request.GET.messages %}is-current{% endif %}" {% if active_section == 'clients' and not request.GET.messages %}aria-current="page"{% endif %} href="{% url 'operations:dashboard-section' section='clients' %}"><span class="nav-icon">◎</span><span>Clients</span><span class="nav-count" aria-label="{{ operations_nav_counts.clients }} notifications">{{ operations_nav_counts.clients }}</span></a>
+                <a class="{% if active_section == 'estimates' %}is-current{% endif %}" {% if active_section == 'estimates' %}aria-current="page"{% endif %} href="{% url 'operations:dashboard-section' section='estimates' %}"><span class="nav-icon">▤</span><span>Estimates</span><span class="nav-count" aria-label="{{ operations_nav_counts.estimates }} notifications">{{ operations_nav_counts.estimates }}</span></a>
+                <a class="{% if active_section == 'projects' %}is-current{% endif %}" {% if active_section == 'projects' %}aria-current="page"{% endif %} href="{% url 'operations:dashboard-section' section='projects' %}"><span class="nav-icon">⌂</span><span>Projects</span><span class="nav-count" aria-label="{{ operations_nav_counts.projects }} notifications">{{ operations_nav_counts.projects }}</span></a>
+                <a class="{% if active_section == 'tasks' %}is-current{% endif %}" {% if active_section == 'tasks' %}aria-current="page"{% endif %} href="{% url 'operations:dashboard-section' section='tasks' %}"><span class="nav-icon">✓</span><span>Tasks</span><span class="nav-count" aria-label="{{ operations_nav_counts.tasks }} notifications">{{ operations_nav_counts.tasks }}</span></a>
+                <a class="{% if active_section == 'calendar' %}is-current{% endif %}" {% if active_section == 'calendar' %}aria-current="page"{% endif %} href="{% url 'operations:dashboard-section' section='calendar' %}"><span class="nav-icon">◷</span><span>Calendar</span><span class="nav-count" aria-label="{{ operations_nav_counts.calendar }} notifications">{{ operations_nav_counts.calendar }}</span></a>
+                <a class="{% if active_section == 'time' %}is-current{% endif %}" {% if active_section == 'time' %}aria-current="page"{% endif %} href="{% url 'operations:dashboard-section' section='time' %}"><span class="nav-icon">◴</span><span>Time</span><span class="nav-count" aria-label="{{ operations_nav_counts.time }} notifications">{{ operations_nav_counts.time }}</span></a>
+                <a class="{% if active_section == 'documents' %}is-current{% endif %}" {% if active_section == 'documents' %}aria-current="page"{% endif %} href="{% url 'operations:dashboard-section' section='documents' %}"><span class="nav-icon">▱</span><span>Documents</span><span class="nav-count" aria-label="{{ operations_nav_counts.documents }} notifications">{{ operations_nav_counts.documents }}</span></a>
+                <a class="{% if active_section == 'media' %}is-current{% endif %}" {% if active_section == 'media' %}aria-current="page"{% endif %} href="{% url 'operations:dashboard-section' section='media' %}"><span class="nav-icon">▧</span><span>Media</span><span class="nav-count" aria-label="{{ operations_nav_counts.media }} notifications">{{ operations_nav_counts.media }}</span></a>
             </div>
         </section>
 
-        <details class="sidebar-nav-more" {% if active_section == 'estimates' or active_section == 'clients' or active_section == 'tasks' or active_section == 'time' or active_section == 'documents' or active_section == 'media' or active_section == 'team' or active_section == 'notifications' or active_section == 'content' or request.GET.messages %}open{% endif %}>
-            <summary class="sidebar-group-label">More workspace <span class="sidebar-more-mark" aria-hidden="true"></span></summary>
+        <section class="sidebar-nav-group" aria-labelledby="sidebar-group-miscellaneous">
+            <h2 class="sidebar-group-label" id="sidebar-group-miscellaneous">Miscellaneous</h2>
             <div class="sidebar-nav-links">
-                <a class="{% if active_section == 'estimates' %}is-current{% endif %}" href="{% url 'operations:dashboard-section' section='estimates' %}"><span class="nav-icon">▤</span><span>Estimates</span><span class="nav-count" aria-label="{{ operations_nav_counts.estimates }} notifications">{{ operations_nav_counts.estimates }}</span></a>
-                <a class="{% if active_section == 'clients' and not request.GET.messages %}is-current{% endif %}" href="{% url 'operations:dashboard-section' section='clients' %}"><span class="nav-icon">◎</span><span>Clients</span><span class="nav-count" aria-label="{{ operations_nav_counts.clients }} notifications">{{ operations_nav_counts.clients }}</span></a>
-                <a class="{% if active_section == 'tasks' %}is-current{% endif %}" href="{% url 'operations:dashboard-section' section='tasks' %}"><span class="nav-icon">✓</span><span>Tasks</span><span class="nav-count" aria-label="{{ operations_nav_counts.tasks }} notifications">{{ operations_nav_counts.tasks }}</span></a>
-                <a class="{% if active_section == 'time' %}is-current{% endif %}" href="{% url 'operations:dashboard-section' section='time' %}"><span class="nav-icon">◴</span><span>Time</span><span class="nav-count" aria-label="{{ operations_nav_counts.time }} notifications">{{ operations_nav_counts.time }}</span></a>
-                <a class="{% if active_section == 'documents' %}is-current{% endif %}" href="{% url 'operations:dashboard-section' section='documents' %}"><span class="nav-icon">▱</span><span>Documents</span><span class="nav-count" aria-label="{{ operations_nav_counts.documents }} notifications">{{ operations_nav_counts.documents }}</span></a>
-                <a class="{% if active_section == 'media' %}is-current{% endif %}" href="{% url 'operations:dashboard-section' section='media' %}"><span class="nav-icon">▧</span><span>Media</span><span class="nav-count" aria-label="{{ operations_nav_counts.media }} notifications">{{ operations_nav_counts.media }}</span></a>
-                {% if can_manage_team %}<a class="{% if active_section == 'team' %}is-current{% endif %}" href="{% url 'operations:dashboard-section' section='team' %}"><span class="nav-icon">♙</span><span>Team</span><span class="nav-count" aria-label="{{ operations_nav_counts.team }} notifications">{{ operations_nav_counts.team }}</span></a>{% endif %}
-                <a class="{% if active_section == 'notifications' %}is-current{% endif %}" href="{% url 'operations:dashboard-section' section='notifications' %}"><span class="nav-icon">◌</span><span>Notifications</span><span class="nav-count" aria-label="{{ operations_nav_counts.notifications }} unread notifications">{{ operations_nav_counts.notifications }}</span></a>
-                <a class="{% if active_section == 'content' %}is-current{% endif %}" href="{% url 'operations:dashboard-section' section='content' %}"><span class="nav-icon">✦</span><span>Content</span><span class="nav-count" aria-label="{{ operations_nav_counts.content }} notifications">{{ operations_nav_counts.content }}</span></a>
+                {% if can_manage_team %}<a class="{% if active_section == 'team' %}is-current{% endif %}" {% if active_section == 'team' %}aria-current="page"{% endif %} href="{% url 'operations:dashboard-section' section='team' %}"><span class="nav-icon">♙</span><span>Team</span><span class="nav-count" aria-label="{{ operations_nav_counts.team }} notifications">{{ operations_nav_counts.team }}</span></a>{% endif %}
+                <a class="{% if active_section == 'clients' and request.GET.messages %}is-current{% endif %}{% if unread_messages_count %} has-unread{% endif %}" {% if active_section == 'clients' and request.GET.messages %}aria-current="page"{% endif %} href="{% url 'operations:dashboard-section' section='clients' %}?messages=1"><span class="nav-icon">!</span><span>Messages</span><span class="nav-count" aria-label="{{ operations_nav_counts.messages }} unread messages">{{ operations_nav_counts.messages }}</span></a>
+                <a class="{% if active_section == 'notifications' %}is-current{% endif %}" {% if active_section == 'notifications' %}aria-current="page"{% endif %} href="{% url 'operations:dashboard-section' section='notifications' %}"><span class="nav-icon">◌</span><span>Notifications</span><span class="nav-count" aria-label="{{ operations_nav_counts.notifications }} unread notifications">{{ operations_nav_counts.notifications }}</span></a>
+                <a class="{% if active_section == 'content' %}is-current{% endif %}" {% if active_section == 'content' %}aria-current="page"{% endif %} href="{% url 'operations:dashboard-section' section='content' %}"><span class="nav-icon">✦</span><span>Content</span><span class="nav-count" aria-label="{{ operations_nav_counts.content }} notifications">{{ operations_nav_counts.content }}</span></a>
             </div>
-        </details>
+        </section>
     {% endif %}
 </nav>

@@ -284,12 +284,39 @@ class ExternalEstimateStatusTests(TestCase):
         self.assertEqual(portal.status_code, 200)
         self.assertContains(portal, "Open estimate")
         self.assertNotContains(portal, "Internal budget line that must not appear in External mode")
+        client_estimate_link = http.get(
+            reverse("operations:external-estimate-link", kwargs={"pk": self.estimate.pk}),
+        )
+        self.assertEqual(client_estimate_link.status_code, 302)
+        self.assertEqual(client_estimate_link["Location"], "https://app.external.com/estimate/test-123")
+        client_invoice_link = http.get(
+            reverse("operations:external-invoice-link", kwargs={"pk": schedule.pk}),
+        )
+        self.assertEqual(client_invoice_link.status_code, 302)
+        self.assertEqual(client_invoice_link["Location"], "https://app.external.com/invoice/test-123")
 
         http.force_login(self.field)
         self.assertEqual(
             http.get(reverse("operations:external-estimate-link", kwargs={"pk": self.estimate.pk})).status_code,
             404,
         )
+
+        http.force_login(self.owner)
+        self.assertEqual(
+            http.get(reverse("operations:external-estimate-link", kwargs={"pk": self.estimate.pk})).status_code,
+            404,
+        )
+        self.assertEqual(
+            http.get(reverse("operations:external-invoice-link", kwargs={"pk": schedule.pk})).status_code,
+            404,
+        )
+        owner_estimates = http.get(
+            reverse("operations:dashboard-section", kwargs={"section": "estimates"}),
+            {"estimate": self.estimate.pk},
+        )
+        self.assertEqual(owner_estimates.status_code, 200)
+        self.assertContains(owner_estimates, 'href="https://app.external.com/estimate/test-123"')
+        self.assertNotContains(owner_estimates, 'href="/portal/')
 
     def test_estimate_status_surface_is_automatic_for_authorized_users(self):
         project = self._approve_and_create_project()

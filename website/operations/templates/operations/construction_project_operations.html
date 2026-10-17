@@ -19,7 +19,7 @@
                 <span class="avatar">{{ request.user.first_name|slice:':1'|default:request.user.username|slice:':1'|upper }}</span>
                 <span><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Staff workspace</small></span>
             </div>
-            <a class="sidebar-back" href="{% url 'operations:command-center' %}">Command center</a>
+            <a class="sidebar-back" href="{% if can_access_dashboard %}{% url 'operations:command-center' %}{% else %}{% url 'operations:team' %}{% endif %}">Overview</a>
             <form method="post" action="{% url 'operations:logout' %}">{% csrf_token %}<button class="sidebar-reset" type="submit">Sign out</button></form>
         </div>
     </aside>
@@ -29,8 +29,8 @@
             <button class="admin-menu-toggle" type="button" data-admin-menu-toggle aria-expanded="false" aria-label="Open Operations navigation">Menu</button>
             <div><span class="admin-breadcrumb">Grand Coast / Projects / Operations</span><h1>{{ operations_project.title }}</h1></div>
             <div class="admin-top-actions">
-                <a class="topbar-link" href="{% url 'operations:command-center' %}">← Command center</a>
-                <a class="button button-outline button-small" href="{% url 'operations:dashboard-section' section='projects' %}?project={{ operations_project.pk }}">Legacy project view</a>
+                <a class="topbar-link" href="{% if can_access_dashboard %}{% url 'operations:command-center' %}{% else %}{% url 'operations:team' %}{% endif %}">← Overview</a>
+                {% if can_access_dashboard %}<a class="button button-outline button-small" href="{% url 'operations:dashboard-section' section='projects' %}?project={{ operations_project.pk }}">Legacy project view</a>{% endif %}
             </div>
         </header>
         <div class="admin-workspace-notice">
@@ -87,7 +87,7 @@
                                 </form>
                             </details>
                         {% elif external_estimate.external_url and can_manage_external_estimate %}
-                            <a class="button button-outline button-small" href="{% url 'operations:external-estimate-link' pk=external_estimate.pk %}">Open estimate</a>
+                            <a class="button button-outline button-small" href="{{ external_estimate.external_url }}" target="_blank" rel="noopener noreferrer">Open estimate</a>
                         {% endif %}
                     {% endif %}
                     {% if external_payment_schedules %}
@@ -97,7 +97,7 @@
                                 <div class="construction-list-row">
                                     <span class="status-badge {% if row.schedule.external_invoice_status == 'paid' %}green{% elif row.schedule.external_invoice_status == 'overdue' %}red{% elif row.schedule.external_invoice_status == 'sent' or row.schedule.external_invoice_status == 'pending' %}gold{% endif %}">{{ row.schedule.get_external_invoice_status_display }}</span>
                                     <span><strong>{{ row.schedule.description }}</strong><small>{% if can_view_project_financials %}${{ row.schedule.amount|floatformat:2 }}{% endif %}{% if row.schedule.external_invoice_status_at %} · Confirmed {{ row.schedule.external_invoice_status_at|date:'M j, Y' }}{% endif %}</small></span>
-                                    {% if row.schedule.external_invoice_url and can_manage_external_estimate %}<a class="text-link-button" href="{% url 'operations:external-invoice-link' pk=row.schedule.pk %}">Open invoice →</a>{% endif %}
+                                    {% if row.schedule.external_invoice_url and can_manage_external_estimate %}<a class="text-link-button" href="{{ row.schedule.external_invoice_url }}" target="_blank" rel="noopener noreferrer">Open invoice →</a>{% endif %}
                                 </div>
                                 {% if can_manage_external_estimate %}<details class="construction-subsection"><summary><span class="section-kicker">Update invoice status</span><small>{{ row.schedule.description }}</small></summary><form class="execution-record-card" method="post" action="{% url 'operations:external-invoice-status' pk=row.schedule.pk %}">{% csrf_token %}<input type="hidden" name="expected_updated_at" value="{{ row.schedule.updated_at|date:'U' }}"><input type="hidden" name="idempotency_key" value="{{ external_status_idempotency_key }}">{{ row.form.as_p }}<div class="construction-form-actions"><button class="button button-primary button-small" type="submit">Save invoice status</button></div></form></details>{% endif %}
                             {% empty %}

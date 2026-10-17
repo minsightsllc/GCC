@@ -7,3 +7,6 @@ __pycache__/
 /.website-git-backup/
 output/
 kevinsnotes.md
+/docs
+DESIGN.md
+UX-CONTRACT.md

@@ -12,12 +12,14 @@ import json
 import uuid
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
+from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.validators import validate_email
 from django.db import IntegrityError, transaction
 from django.db.models import Q, Sum
+from django.urls import reverse
 from django.utils import timezone
 
 from .construction_policies import (
@@ -29,6 +31,7 @@ from .construction_policies import (
     can_view_estimate,
     can_view_lead,
     can_view_project,
+    external_estimate_enabled_for,
     is_staff_user,
     is_field,
     is_client,
@@ -71,6 +74,7 @@ from .models import (
     WorkflowEvent,
     validate_construction_document,
 )
+from .notifications import queue_client_notifications, queue_employee_notifications
 from .services import get_or_create_client_for_lead, record_activity
 
 
@@ -763,6 +767,7 @@ def record_external_estimate_status(
         "external_total": str(locked.external_total) if locked.external_total is not None else None,
         "external_deposit_amount": str(locked.external_deposit_amount) if locked.external_deposit_amount is not None else None,
         "external_url_present": bool(locked.external_url),
+        "external_client_visible": locked.external_client_visible,
     }
     new_total = _external_money(external_total, "external_total") if external_total not in (None, "") else locked.external_total
     new_deposit = (
@@ -806,9 +811,8 @@ def record_external_estimate_status(
         if locked.status != Estimate.Status.ACCEPTED:
             locked.status = Estimate.Status.ACCEPTED
             locked.accepted_at = locked.accepted_at or now
-            locked.accepted_by = locked.accepted_by or actor
             locked.locked_at = locked.locked_at or now
-            update_fields.extend(["status", "accepted_at", "accepted_by", "locked_at"])
+            update_fields.extend(["status", "accepted_at", "locked_at"])
         if locked.lead_id:
             locked.lead.workflow_stage = Lead.WorkflowStage.APPROVED
             locked.lead.next_action = "Prepare agreement and project"
@@ -844,6 +848,74 @@ def record_external_estimate_status(
         estimate=locked,
         lead=locked.lead,
     )
+    status_changed = status != current
+    newly_visible = locked.external_client_visible and not before["external_client_visible"]
+    if locked.client_id and locked.external_client_visible:
+        client_event = None
+        if status == Estimate.ExternalEstimateStatus.SENT and (status_changed or newly_visible):
+            client_event = (
+                "estimate-sent",
+                "Estimate ready to review",
+                "Grand Coast shared an estimate link. Open Estimate & files in your client portal to review it in the estimate service.",
+            )
+        elif status == Estimate.ExternalEstimateStatus.APPROVED and (status_changed or newly_visible):
+            client_event = (
+                "estimate-accepted",
+                "Grand Coast confirmed estimate approval",
+                "Our team checked the external estimate service and recorded this estimate as approved. Project setup is the next step.",
+            )
+        elif status == Estimate.ExternalEstimateStatus.REJECTED and (status_changed or newly_visible):
+            client_event = (
+                "estimate-declined",
+                "Grand Coast confirmed estimate declined",
+                "Our team checked the external estimate service and recorded this estimate as declined. Message us if you would like to discuss a revision.",
+            )
+        if client_event:
+            queue_client_notifications(
+                [locked.client],
+                kind=client_event[0],
+                title=client_event[1],
+                body=client_event[2],
+                destination_url=(
+                    reverse("operations:portal-section", kwargs={"section": "estimate-files"})
+                    + "?"
+                    + urlencode({"estimate": locked.pk})
+                ),
+                metadata={"estimate_id": str(locked.pk)},
+                created_by=actor,
+                estimate=locked,
+                lead=locked.lead,
+            )
+    if status_changed and status in {
+        Estimate.ExternalEstimateStatus.APPROVED,
+        Estimate.ExternalEstimateStatus.REJECTED,
+    }:
+        user_model = get_user_model()
+        employee_recipients = list(
+            user_model.objects.filter(is_active=True, is_staff=True, is_superuser=True)
+        )
+        if locked.lead_id and locked.lead.assigned_to_id:
+            employee_recipients.append(locked.lead.assigned_to)
+        outcome = "approved" if status == Estimate.ExternalEstimateStatus.APPROVED else "declined"
+        queue_employee_notifications(
+            employee_recipients,
+            kind="estimate-accepted" if status == Estimate.ExternalEstimateStatus.APPROVED else "estimate-declined",
+            title=f"External estimate {outcome}",
+            body=(
+                f"{locked.title} was recorded as {outcome} by {actor.get_full_name() or actor.get_username()} "
+                "after checking the external estimate service."
+            ),
+            destination_url=(
+                reverse("operations:dashboard-section", kwargs={"section": "estimates"})
+                + "?"
+                + urlencode({"estimate": locked.pk})
+            ),
+            metadata={"estimate_id": str(locked.pk)},
+            created_by=actor,
+            exclude_users=[actor],
+            estimate=locked,
+            lead=locked.lead,
+        )
     return locked, True
 
 
@@ -1046,8 +1118,12 @@ def create_project_from_estimate(estimate, *, actor, idempotency_key=None):
     if existing:
         initialize_readiness(existing, actor=actor)
         return existing, False
-    if locked.status != Estimate.Status.ACCEPTED:
-        raise ValidationError("Only accepted estimates can become projects.")
+    if (
+        locked.status != Estimate.Status.ACCEPTED
+        or locked.external_status != Estimate.ExternalEstimateStatus.APPROVED
+        or not locked.external_url
+    ):
+        raise ValidationError("Only an externally approved estimate recorded in GCC can become a project.")
     client = locked.client
     if client is None and locked.lead is not None:
         client = get_or_create_client_for_lead(locked.lead, actor=actor)
@@ -1173,6 +1249,22 @@ def create_project_from_estimate(estimate, *, actor, idempotency_key=None):
         estimate=locked,
         project=project,
     )
+    queue_client_notifications(
+        [client],
+        kind="project-created",
+        title="Project setup is in progress",
+        body=f"{project.title} has been created. Grand Coast is assigning an employee; project work has not started yet.",
+        destination_url=(
+            reverse("operations:portal")
+            + "?"
+            + urlencode({"project": project.pk})
+        ),
+        metadata={"project_id": str(project.pk), "estimate_id": str(locked.pk)},
+        created_by=actor,
+        estimate=locked,
+        lead=lead,
+        project=project,
+    )
     return project, True
 
 
@@ -1187,6 +1279,13 @@ def complete_readiness_item(item, *, actor, idempotency_key=None, notes=None):
         return locked
     if locked.status == PreconstructionItem.Status.COMPLETE:
         return locked
+    remaining_required = locked.project.readiness_items.filter(required=True).exclude(
+        status__in=[PreconstructionItem.Status.COMPLETE, PreconstructionItem.Status.SKIPPED]
+    )
+    if locked.required:
+        remaining_required = remaining_required.exclude(pk=locked.pk)
+    if not remaining_required.exists() and not locked.project.assigned_staff.exists():
+        raise ValidationError("Assign at least one employee before advancing this project into execution.")
     before = state_snapshot(locked, ["status", "completed_at", "completed_by_id", "notes"])
     locked.status = PreconstructionItem.Status.COMPLETE
     locked.completed_at = timezone.now()
@@ -2409,6 +2508,13 @@ def complete_closeout_item(item, *, actor, status=CloseoutItem.Status.COMPLETE, 
         raise ValidationError("Closeout items can only be completed or marked not applicable.")
     if locked.status in {CloseoutItem.Status.COMPLETE, CloseoutItem.Status.NOT_APPLICABLE}:
         return locked
+    remaining_required = locked.project.closeout_items.filter(required=True).exclude(
+        status__in=[CloseoutItem.Status.COMPLETE, CloseoutItem.Status.NOT_APPLICABLE]
+    )
+    if locked.required:
+        remaining_required = remaining_required.exclude(pk=locked.pk)
+    if not remaining_required.exists() and not locked.project.assigned_staff.exists():
+        raise ValidationError("An unassigned project cannot be marked complete. Assign an employee before closeout.")
     before = state_snapshot(locked, ["status", "notes", "completed_at", "completed_by_id"])
     locked.status = status
     if notes is not None:

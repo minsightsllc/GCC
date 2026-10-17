@@ -38,6 +38,7 @@ from .models import (
     CALENDAR_TIME_ZONE,
     Activity,
     CalendarDayOverride,
+    ClientNotification,
     Client as ClientRecord,
     ClientMessage,
     EmployeeInvite,
@@ -58,6 +59,7 @@ from .models import (
     TimeEntry,
 )
 from .services import (
+    create_client_invite,
     create_employee_invite,
     ensure_role_groups,
     find_employee_invite,
@@ -81,6 +83,7 @@ TEST_STORAGES = {
 @override_settings(
     MEDIA_ROOT=TEST_MEDIA_ROOT,
     STORAGES=TEST_STORAGES,
+    GCC_TURNSTILE_ENABLED=False,
     CLOUDFLARE_TURNSTILE_SITE_KEY="",
     CLOUDFLARE_TURNSTILE_SECRET_KEY="",
 )
@@ -176,7 +179,11 @@ class PlatformWorkflowTests(TestCase):
             status=Estimate.Status.ACCEPTED,
             deposit_amount=Decimal('125.00'),
             accepted_at=timezone.now() - timedelta(days=1),
-            accepted_by=cls.client_user,
+            external_url='https://estimates.example.com/platform-kitchen',
+            external_status=Estimate.ExternalEstimateStatus.APPROVED,
+            external_status_at=timezone.now() - timedelta(days=1),
+            external_status_by=cls.owner,
+            external_client_visible=True,
             created_by=cls.owner,
         )
         EstimateLineItem.objects.create(
@@ -325,10 +332,10 @@ class PlatformWorkflowTests(TestCase):
         self.assert_sidebar_sequence(
             dashboard_response,
             (
-                '>Command Center<', 'Core work', '>Leads<', '>Projects<',
-                '>Calendar<', '>Messages<', 'More workspace', '>Estimates<',
-                '>Clients<', '>Tasks<', '>Time<', '>Documents<', '>Media<',
-                '>Team<', '>Notifications<', '>Content<',
+                '>Overview<', 'Client &amp; Job Operations', '>Leads<',
+                '>Clients<', '>Estimates<', '>Projects<', '>Tasks<',
+                '>Calendar<', '>Time<', '>Documents<', '>Media<',
+                'Miscellaneous', '>Team<', '>Messages<', '>Notifications<', '>Content<',
             ),
         )
 
@@ -338,7 +345,7 @@ class PlatformWorkflowTests(TestCase):
         self.assert_operations_badges(workspace_response, 'admin', admin_keys, 14)
         self.assert_sidebar_sequence(
             workspace_response,
-            ('>Command Center<', '>Leads<', '>Projects<', '>Calendar<', '>Messages<', 'More workspace', '>Estimates<', '>Clients<', '>Tasks<', '>Time<', '>Documents<', '>Media<', '>Team<', '>Notifications<', '>Content<'),
+            ('>Overview<', 'Client &amp; Job Operations', '>Leads<', '>Clients<', '>Estimates<', '>Projects<', '>Tasks<', '>Calendar<', '>Time<', '>Documents<', '>Media<', 'Miscellaneous', '>Team<', '>Messages<', '>Notifications<', '>Content<'),
         )
 
     def test_employee_operations_sidebar_always_renders_visible_category_counts(self):
@@ -349,7 +356,7 @@ class PlatformWorkflowTests(TestCase):
         self.assert_operations_badges(response, 'employee', employee_keys, 7)
         self.assert_sidebar_sequence(
             response,
-            ('>Overview<', 'Assigned work', '>Projects<', '>Tasks<', '>Calendar<', '>Time<', '>Media<', 'Personal', '>Notifications<', '>Profile<'),
+            ('>Overview<', 'Client &amp; Job Operations', '>Projects<', '>Tasks<', '>Calendar<', '>Time<', '>Media<', 'Miscellaneous', '>Notifications<', '>Profile<'),
         )
         self.assertEqual(
             response.context['operations_nav_counts']['projects'],
@@ -484,6 +491,16 @@ class PlatformWorkflowTests(TestCase):
         self.login(self.owner)
         self.assertEqual(self.browser.get(reverse('operations:dashboard')).status_code, 200)
         self.assertEqual(self.browser.get(reverse('admin:index')).status_code, 200)
+        self.assertEqual(self.browser.get(reverse('operations:team')).status_code, 403)
+        self.assertEqual(
+            self.browser.get(reverse('operations:team-section', kwargs={'section': 'projects'})).status_code,
+            403,
+        )
+        owner_team_management = self.browser.get(
+            reverse('operations:dashboard-section', kwargs={'section': 'team'})
+        )
+        self.assertEqual(owner_team_management.status_code, 200)
+        self.assertNotContains(owner_team_management, 'My team workspace')
 
         for employee in (self.manager, self.office, self.field):
             self.login(employee)
@@ -491,6 +508,17 @@ class PlatformWorkflowTests(TestCase):
             self.assertEqual(self.browser.get(reverse('admin:index')).status_code, 403)
 
         user_model = get_user_model()
+        owner_group_account = user_model.objects.create_user(
+            username='platform-owner-group-only',
+            password='owner-group-pass-123',
+            is_staff=True,
+        )
+        owner_group_account.groups.add(Group.objects.get(name='Owner'))
+        EmployeeProfile.objects.create(user=owner_group_account, job_title='Owner group only')
+        self.login(owner_group_account)
+        self.assertEqual(self.browser.get(reverse('operations:dashboard')).status_code, 403)
+        self.assertEqual(self.browser.get(reverse('admin:index')).status_code, 403)
+
         ungrouped = user_model.objects.create_user(
             username='platform-ungrouped',
             password='ungrouped-pass-123',
@@ -534,6 +562,7 @@ class PlatformWorkflowTests(TestCase):
         self.assertNotContains(owner_response, '%(username)s')
 
     @override_settings(
+        GCC_TURNSTILE_ENABLED=True,
         CLOUDFLARE_TURNSTILE_SITE_KEY="test-site-key",
         CLOUDFLARE_TURNSTILE_SECRET_KEY="test-secret-key",
     )
@@ -624,6 +653,7 @@ class PlatformWorkflowTests(TestCase):
         self.assertEqual(Lead.objects.count(), lead_count + 2)
 
     @override_settings(
+        GCC_TURNSTILE_ENABLED=True,
         CLOUDFLARE_TURNSTILE_SITE_KEY="test-site-key",
         CLOUDFLARE_TURNSTILE_SECRET_KEY="test-secret-key",
     )
@@ -680,6 +710,7 @@ class PlatformWorkflowTests(TestCase):
         self.assertTrue(self.client_user.check_password("mobile-new-password-123"))
 
     @override_settings(
+        GCC_TURNSTILE_ENABLED=True,
         CLOUDFLARE_TURNSTILE_SITE_KEY="test-site-key",
         CLOUDFLARE_TURNSTILE_SECRET_KEY="test-secret-key",
     )
@@ -741,7 +772,7 @@ class PlatformWorkflowTests(TestCase):
         self.assertContains(client_response, reverse('operations:portal'))
         self.assertNotContains(client_response, 'Sign in')
 
-    def test_portal_requires_a_client_or_owner_session(self):
+    def test_portal_requires_a_client_session(self):
         anonymous_response = self.browser.get(reverse('operations:portal'))
         self.assertEqual(anonymous_response.status_code, 302)
         self.assertIn(reverse('operations:login'), anonymous_response['Location'])
@@ -757,12 +788,103 @@ class PlatformWorkflowTests(TestCase):
         self.assertIn(inactive_client_response.status_code, (302, 403))
 
         self.login(self.owner)
-        preview = self.browser.get(
+        for path in (
             reverse('operations:portal'),
-            {'client': self.other_client_record.pk},
+            reverse('operations:portal-section', kwargs={'section': 'overview'}),
+            reverse('operations:portal-section', kwargs={'section': 'messages'}),
+        ):
+            self.assertEqual(self.browser.get(path, {'client': self.other_client_record.pk}).status_code, 403)
+
+        self.assertEqual(
+            self.browser.get(
+                reverse('operations:external-estimate-link', kwargs={'pk': self.estimate.pk}),
+            ).status_code,
+            404,
         )
-        self.assertEqual(preview.status_code, 200)
-        self.assertContains(preview, self.other_project.title)
+
+    def test_authenticated_roles_cannot_use_other_workspace_invites(self):
+        _invite, raw_token = create_client_invite(self.other_client_record, actor=self.owner)
+        client_invite_url = reverse('operations:client-invite', kwargs={'token': raw_token})
+
+        employee_invite, employee_token = create_employee_invite(
+            email='new.invitee@gcc.example.com',
+            first_name='New',
+            last_name='Invitee',
+            group=Group.objects.get(name='Field'),
+            actor=self.owner,
+        )
+        employee_invite_url = reverse('operations:employee-invite', kwargs={'token': employee_token})
+
+        for user in (self.owner, self.manager, self.client_user):
+            with self.subTest(user=user.username, invite='client'):
+                self.login(user)
+                self.assertEqual(self.browser.get(client_invite_url).status_code, 403)
+
+            with self.subTest(user=user.username, invite='employee'):
+                self.login(user)
+                self.assertEqual(self.browser.get(employee_invite_url).status_code, 403)
+
+    def test_private_dashboards_do_not_link_into_other_roles_workspaces(self):
+        self.login(self.owner)
+        owner_dashboard = self.browser.get(reverse('operations:dashboard'))
+        self.assertEqual(owner_dashboard.status_code, 200)
+        self.assertNotContains(owner_dashboard, 'href="/portal/"')
+        self.assertNotContains(owner_dashboard, 'href="/team/"')
+
+        self.login(self.manager)
+        employee_dashboard = self.browser.get(reverse('operations:team'))
+        self.assertEqual(employee_dashboard.status_code, 200)
+        self.assertNotContains(employee_dashboard, 'href="/dashboard/"')
+        self.assertNotContains(employee_dashboard, 'href="/portal/"')
+
+        self.login(self.client_user)
+        client_dashboard = self.browser.get(reverse('operations:portal'))
+        self.assertEqual(client_dashboard.status_code, 200)
+        self.assertNotContains(client_dashboard, 'href="/dashboard/"')
+        self.assertNotContains(client_dashboard, 'href="/team/"')
+
+    def test_notification_links_stay_inside_each_private_workspace(self):
+        EmployeeNotification.objects.create(
+            employee=self.owner,
+            kind='project-update',
+            title='Employee route for owner',
+            body='This destination belongs to the employee workspace.',
+            destination_url='/team/projects/',
+        )
+        self.login(self.owner)
+        owner_notifications = self.browser.get(
+            reverse('operations:dashboard-section', kwargs={'section': 'notifications'}),
+        )
+        self.assertEqual(owner_notifications.status_code, 200)
+        self.assertNotContains(owner_notifications, 'href="/team/projects/"')
+
+        EmployeeNotification.objects.create(
+            employee=self.manager,
+            kind='estimate-update',
+            title='Admin route for employee',
+            body='This destination belongs to the admin workspace.',
+            destination_url='/dashboard/estimates/',
+        )
+        self.login(self.manager)
+        employee_notifications = self.browser.get(
+            reverse('operations:team-section', kwargs={'section': 'notifications'}),
+        )
+        self.assertEqual(employee_notifications.status_code, 200)
+        self.assertNotContains(employee_notifications, 'href="/dashboard/estimates/"')
+
+        ClientNotification.objects.create(
+            client=self.client_user.client_record,
+            kind='project-update',
+            title='Admin route for client',
+            body='This destination belongs to the admin workspace.',
+            destination_url='/dashboard/projects/',
+        )
+        self.login(self.client_user)
+        client_notifications = self.browser.get(
+            reverse('operations:portal-section', kwargs={'section': 'notifications'}),
+        )
+        self.assertEqual(client_notifications.status_code, 200)
+        self.assertNotContains(client_notifications, 'href="/dashboard/projects/"')
 
     def test_client_only_reaches_own_portal_records(self):
         self.login(self.client_user)
@@ -770,7 +892,7 @@ class PlatformWorkflowTests(TestCase):
         self.assertEqual(self.browser.get(reverse('operations:team')).status_code, 403)
         portal_response = self.browser.get(
             reverse('operations:portal'),
-            {'project': self.other_project.pk},
+            {'project': self.other_project.pk, 'client': self.other_client_record.pk},
         )
         self.assertEqual(portal_response.status_code, 200)
         self.assertContains(portal_response, self.project.title)
@@ -1100,13 +1222,11 @@ class PlatformWorkflowTests(TestCase):
         blocked = self.browser.post(
             reverse('operations:estimate-create'),
             {
-                'lead': unconverted.pk,
-                'title': 'Blocked estimate',
-                'deposit_amount': '0.00',
+                'external_url': 'https://estimates.example.com/blocked',
             },
         )
         self.assertEqual(blocked.status_code, 200)
-        self.assertContains(blocked, 'Please provide an estimate title and lead or client.')
+        self.assertContains(blocked, 'Choose a client and provide a secure external estimate link.')
         self.assertEqual(Estimate.objects.count(), before)
 
         assignment = self.browser.post(
@@ -1126,15 +1246,20 @@ class PlatformWorkflowTests(TestCase):
         created = self.browser.post(
             reverse('operations:estimate-create'),
             {
-                'lead': unconverted.pk,
-                'title': 'Allowed estimate',
-                'deposit_amount': '0.00',
+                'client': unconverted.client.pk,
+                'external_url': 'https://estimates.example.com/allowed',
             },
         )
         self.assertEqual(created.status_code, 302)
-        self.assertTrue(Estimate.objects.filter(title='Allowed estimate', client=unconverted.client).exists())
+        self.assertTrue(
+            Estimate.objects.filter(
+                client=unconverted.client,
+                external_url='https://estimates.example.com/allowed',
+                status=Estimate.Status.DRAFT,
+            ).exists()
+        )
 
-    def test_lead_derived_project_requires_accepted_estimate(self):
+    def test_lead_derived_project_requires_accepted_external_estimate(self):
         lead = Lead.objects.create(
             name='Needs approval',
             email='needs-approval@example.com',
@@ -1159,13 +1284,15 @@ class PlatformWorkflowTests(TestCase):
             },
         )
         self.assertFalse(form.is_valid())
-        self.assertIn('accepted estimate', str(form.errors).lower())
+        self.assertIn('externally approved estimate', str(form.errors).lower())
 
         lead.estimates.create(
             number=9901,
             client=self.client_record,
             title='Approved scope',
             status=Estimate.Status.ACCEPTED,
+            external_url='https://estimates.example.com/approved-scope',
+            external_status=Estimate.ExternalEstimateStatus.APPROVED,
         )
         form = ProjectForm(form.data)
         self.assertTrue(form.is_valid())
@@ -1193,8 +1320,9 @@ class PlatformWorkflowTests(TestCase):
             client=self.client_record,
             title='Client-approved project scope',
             status=Estimate.Status.ACCEPTED,
+            external_url='https://estimates.example.com/client-approved',
+            external_status=Estimate.ExternalEstimateStatus.APPROVED,
             accepted_at=timezone.now(),
-            accepted_by=self.client_user,
             created_by=self.owner,
         )
         response = self.browser.post(
@@ -1279,10 +1407,32 @@ class PlatformWorkflowTests(TestCase):
             },
         )
         self.assertEqual(response.status_code, 302)
+        self.assertIn("lead_tab=notes", response.url)
         task = Task.objects.get(title='Call about selections')
         self.assertEqual(task.lead_id, self.lead.pk)
         self.assertEqual(task.assigned_to_id, self.manager.pk)
         self.assertEqual(task.priority, Task.Priority.HIGH)
+
+    def test_lead_note_save_returns_to_notes_and_tasks(self):
+        self.login(self.owner)
+        response = self.browser.post(
+            reverse('operations:lead-note', kwargs={'pk': self.lead.pk}),
+            {'note-note': 'Confirm the site walkthrough date.'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f'lead={self.lead.pk}', response.url)
+        self.assertIn('lead_tab=notes', response.url)
+        self.lead.refresh_from_db()
+        self.assertEqual(self.lead.note, 'Confirm the site walkthrough date.')
+
+    def test_invalid_lead_task_keeps_notes_and_tasks_selected(self):
+        self.login(self.owner)
+        response = self.browser.post(
+            reverse('operations:lead-followup', kwargs={'pk': self.lead.pk}),
+            {'followup-title': ''},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-lead-detail-tab="notes"')
 
     def test_admin_can_soft_delete_and_restore_lead_without_losing_tasks(self):
         self.login(self.owner)
@@ -2021,7 +2171,7 @@ class PlatformWorkflowTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
-    def test_direct_client_estimate_reaches_preproject_portal_as_status_only(self):
+    def test_direct_client_external_estimate_is_published_in_preproject_portal(self):
         user_model = get_user_model()
         preproject_user = user_model.objects.create_user(
             username='platform-preproject-client',
@@ -2039,22 +2189,22 @@ class PlatformWorkflowTests(TestCase):
         create_response = self.browser.post(
             reverse('operations:estimate-create'),
             {
-                'lead': '',
                 'client': preproject_client.pk,
-                'title': 'Standalone bathroom scope',
-                'deposit_amount': '0.00',
+                'external_url': 'https://estimates.example.com/preproject-bathroom',
             },
         )
         self.assertEqual(create_response.status_code, 302)
-        estimate = Estimate.objects.get(title='Standalone bathroom scope')
+        estimate = Estimate.objects.get(client=preproject_client)
         self.assertEqual(estimate.client_id, preproject_client.pk)
+        self.assertEqual(estimate.external_url, 'https://estimates.example.com/preproject-bathroom')
 
         ready_response = self.browser.post(
-            reverse('operations:estimate-send', kwargs={'pk': estimate.pk}),
+            reverse('operations:external-estimate-send', kwargs={'pk': estimate.pk}),
         )
         self.assertEqual(ready_response.status_code, 302)
         estimate.refresh_from_db()
-        self.assertEqual(estimate.status, Estimate.Status.SENT)
+        self.assertEqual(estimate.external_status, Estimate.ExternalEstimateStatus.SENT)
+        self.assertTrue(estimate.external_client_visible)
 
         self.login(preproject_user)
         portal_response = self.browser.get(
@@ -2063,16 +2213,18 @@ class PlatformWorkflowTests(TestCase):
         )
         self.assertEqual(portal_response.status_code, 200)
         self.assertContains(portal_response, estimate.title)
-        self.assertContains(portal_response, 'Not started')
-        self.assertContains(portal_response, 'Grand Coast will publish the estimate link here when it is ready.')
+        self.assertContains(portal_response, 'Sent')
+        self.assertContains(portal_response, 'Open estimate link')
+        self.assertContains(portal_response, 'Review and respond in the external estimate service.')
         self.assertNotContains(portal_response, 'Accept estimate')
 
-    def test_mark_ready_persists_submitted_scope_before_client_access(self):
+    def test_legacy_internal_estimate_remains_read_only_history(self):
         draft = Estimate.objects.create(
             lead=self.lead,
             client=self.client_record,
             number=9802,
             title='Draft scope before send',
+            status=Estimate.Status.SENT,
             created_by=self.owner,
         )
         line = EstimateLineItem.objects.create(
@@ -2082,44 +2234,46 @@ class PlatformWorkflowTests(TestCase):
             unit_price=Decimal('100.00'),
         )
         self.login(self.owner)
-        response = self.browser.post(
-            reverse('operations:estimate-send', kwargs={'pk': draft.pk}),
+        update_response = self.browser.post(
+            reverse('operations:estimate-update', kwargs={'pk': draft.pk}),
             {
                 'title': 'Final scope before send',
-                'status': Estimate.Status.DRAFT,
+                'status': Estimate.Status.ACCEPTED,
                 'deposit_amount': '75.00',
                 'notes': 'Visible client scope',
-                'lines-TOTAL_FORMS': '2',
-                'lines-INITIAL_FORMS': '1',
-                'lines-MIN_NUM_FORMS': '0',
-                'lines-MAX_NUM_FORMS': '50',
-                'lines-0-id': str(line.pk),
-                'lines-0-description': 'Revised cabinetry',
-                'lines-0-quantity': '2.00',
-                'lines-0-unit_price': '250.00',
-                'lines-0-sort_order': '1',
-                'lines-1-id': '',
-                'lines-1-description': 'Hardware allowance',
-                'lines-1-quantity': '1.00',
-                'lines-1-unit_price': '50.00',
-                'lines-1-sort_order': '2',
             },
         )
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(update_response.status_code, 302)
+        send_response = self.browser.post(
+            reverse('operations:estimate-send', kwargs={'pk': draft.pk}),
+            {'title': 'Another attempted change', 'status': Estimate.Status.ACCEPTED},
+        )
+        self.assertEqual(send_response.status_code, 302)
         draft.refresh_from_db()
-        self.assertEqual(draft.title, 'Final scope before send')
+        self.assertEqual(draft.title, 'Draft scope before send')
         self.assertEqual(draft.status, Estimate.Status.SENT)
-        self.assertEqual(draft.total, Decimal('550.00'))
-        self.assertTrue(draft.line_items.filter(description='Hardware allowance').exists())
+        self.assertEqual(draft.total, Decimal('100.00'))
+        self.assertEqual(draft.line_items.count(), 1)
+        self.assertEqual(draft.line_items.get().description, 'Original scope')
+
+        admin_response = self.browser.get(
+            reverse('operations:dashboard-section', kwargs={'section': 'estimates'}),
+            {'estimate': draft.pk},
+        )
+        self.assertEqual(admin_response.status_code, 200)
+        self.assertContains(admin_response, 'read-only history')
+        self.assertContains(admin_response, 'Original scope')
+        self.assertNotContains(admin_response, 'Revised cabinetry')
 
         self.login(self.client_user)
         portal_response = self.browser.get(
             reverse('operations:portal-section', kwargs={'section': 'estimate-files'}),
             {'estimate': draft.pk},
         )
-        self.assertContains(portal_response, 'Final scope before send')
-        self.assertContains(portal_response, 'Grand Coast will publish the estimate link here when it is ready.')
-        self.assertNotContains(portal_response, 'Revised cabinetry')
+        self.assertContains(portal_response, 'Draft scope before send')
+        self.assertContains(portal_response, 'Historical estimate records are read-only in GCC.')
+        self.assertNotContains(portal_response, 'Accept estimate')
+        self.assertNotContains(portal_response, 'Original scope')
 
     def test_project_portal_view_keeps_primary_estimate_in_project_context(self):
         unrelated = Estimate.objects.create(

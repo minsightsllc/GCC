@@ -1,21 +1,28 @@
 <section class="estimate-card" id="documents">
     {% if portal_estimate %}
-        <div class="estimate-card-top"><span class="section-kicker">Estimate</span><span class="estimate-number">Status</span></div>
+        <div class="estimate-card-top"><span class="section-kicker">Estimate</span><span class="estimate-number">{% if portal_estimate.external_url %}External estimate{% else %}Estimate history{% endif %}</span></div>
         <h2>{{ portal_estimate.title }}</h2>
         {% if portal_estimate.portal_project %}<p class="detail-value">{{ portal_estimate.portal_project.title }}</p>{% endif %}
-        <div class="estimate-status"><span class="status-check">{% if portal_estimate.external_status == 'approved' %}&#10003;{% else %}&bull;{% endif %}</span><span>{{ portal_estimate.get_external_status_display }}</span></div>
+        <div class="estimate-status"><span class="status-check">{% if portal_estimate.external_url and portal_estimate.external_status == 'approved' or not portal_estimate.external_url and portal_estimate.status == 'accepted' %}&#10003;{% else %}&bull;{% endif %}</span><span>{% if portal_estimate.external_url %}{{ portal_estimate.get_external_status_display }}{% else %}Historical status: {{ portal_estimate.get_status_display }}{% endif %}</span></div>
         {% if portal_estimate.external_client_visible and portal_estimate.external_url %}
-            <p class="detail-value">Your detailed estimate is hosted by the estimate service selected by Grand Coast.</p>
+            <p class="detail-value">Your detailed estimate is hosted by the estimate service selected by Grand Coast. The service is authoritative for your response.</p>
             <a class="button button-primary full-width" href="{% url 'operations:external-estimate-link' pk=portal_estimate.pk %}" aria-label="Open estimate for {{ portal_estimate.title }}">Open estimate link &rarr;</a>
+            {% if portal_estimate.external_status_by and portal_estimate.external_status_at %}<p class="detail-value">Grand Coast last confirmed this status on {{ portal_estimate.external_status_at|date:'M d, Y' }}.</p>{% endif %}
         {% else %}
-            <p class="detail-value">Grand Coast will publish the estimate link here when it is ready.</p>
+            {% if portal_estimate.external_url %}
+                <p class="detail-value">Grand Coast has not published the estimate link to your portal yet. Contact the team if you expected to see it.</p>
+            {% else %}
+                <p class="detail-value">This is an older estimate record kept for reference. Message Grand Coast for current scope, pricing, or a revised estimate.</p>
+            {% endif %}
         {% endif %}
-        {% if portal_estimate.external_status == 'approved' %}
-            <div class="portal-accepted-note">Grand Coast has recorded the estimate as approved. The team will share the next project step here.</div>
-        {% elif portal_estimate.external_status == 'rejected' %}
-            <div class="portal-accepted-note">This estimate was declined. Contact Grand Coast if you would like to discuss a revision.</div>
+        {% if portal_estimate.external_url and portal_estimate.external_status == 'approved' %}
+            <div class="portal-accepted-note">Grand Coast staff confirmed the approval in the external estimate service. The Owner will set up your project next.</div>
+        {% elif portal_estimate.external_url and portal_estimate.external_status == 'rejected' %}
+            <div class="portal-accepted-note">Grand Coast staff confirmed that the estimate was declined in the external service. Contact Grand Coast if you would like to discuss a revision.</div>
+        {% elif portal_estimate.external_url %}
+            <div class="portal-accepted-note">Review and respond in the external estimate service. Grand Coast will record the result here after checking it.</div>
         {% else %}
-            <div class="portal-accepted-note">The detailed estimate and any signature action are handled by the estimate service selected by Grand Coast.</div>
+            <div class="portal-accepted-note">Historical estimate records are read-only in GCC. There are no Accept or Decline actions in this portal.</div>
         {% endif %}
     {% else %}
         <span class="section-kicker">Estimate</span>

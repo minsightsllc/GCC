@@ -7,7 +7,7 @@ import uuid
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from functools import wraps
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -43,10 +43,7 @@ from .forms import (
     ContentStudioForm,
     ContactLeadForm,
     ClientForm,
-    EstimateCreateForm,
     ExternalEstimateCreateForm,
-    EstimateForm,
-    EstimateLineItemFormSet,
     EmployeeInviteForm,
     EmployeeInviteAcceptForm,
     EmployeeProfileForm,
@@ -90,7 +87,6 @@ from .models import (
     ClientMessage,
     Estimate,
     GoogleReview,
-    EstimateLineItem,
     EmployeeInvite,
     EmployeeProfile,
     EmployeeNotification,
@@ -155,7 +151,6 @@ from .google_reviews import (
 )
 from .construction_services import (
     accept_agreement as accept_agreement_command,
-    accept_estimate as accept_estimate_command,
     advance_selection as advance_selection_command,
     approve_change_order as approve_change_order_command,
     convert_lead as convert_lead_command,
@@ -163,7 +158,6 @@ from .construction_services import (
     record_external_estimate_status,
     record_external_invoice_status,
     set_milestone_status,
-    send_estimate as send_estimate_command,
 )
 from .construction_policies import (
     can_manage_external_estimate,
@@ -302,6 +296,7 @@ def _is_active_client(user):
         user.is_authenticated
         and user.is_active
         and not user.is_staff
+        and not user.is_superuser
         and Client.objects.filter(user=user).exists()
     )
 
@@ -330,7 +325,7 @@ def _can_access_team(user):
     roles = _group_names(user)
     if not _is_active_staff(user):
         return False
-    return bool(user.is_superuser or roles & EMPLOYEE_GROUPS)
+    return bool(not user.is_superuser and roles & EMPLOYEE_GROUPS)
 
 
 def _can_delete_employee_account(user):
@@ -655,10 +650,7 @@ def client_required(view_func):
     @wraps(view_func)
     @login_required
     def wrapped(request, *args, **kwargs):
-        if request.user.is_staff:
-            if not _can_access_dashboard(request.user):
-                raise PermissionDenied
-        elif not _is_active_client(request.user):
+        if request.user.is_staff or not _is_active_client(request.user):
             raise PermissionDenied
         return view_func(request, *args, **kwargs)
 
@@ -1016,10 +1008,9 @@ def _dashboard_context(request, section, form_overrides=None):
         selected_lead = leads[0]
 
     external_estimate_enabled = external_estimate_enabled_for(request.user)
-    estimate_queryset = visible_estimates(request.user) if external_estimate_enabled else Estimate.objects.all()
-    estimate_queryset = estimate_queryset.select_related("lead", "client").prefetch_related("projects")
-    if not external_estimate_enabled:
-        estimate_queryset = estimate_queryset.prefetch_related("line_items")
+    estimate_queryset = visible_estimates(request.user).select_related(
+        "lead", "client", "external_status_by"
+    ).prefetch_related("projects", "line_items")
     estimates = list(estimate_queryset)
     selected_estimate = None
     if request.GET.get("estimate"):
@@ -1098,24 +1089,20 @@ def _dashboard_context(request, section, form_overrides=None):
 
     new_type = request.GET.get("new", "")
     initial_lead = selected_lead if new_type == "estimate" else None
-    estimate_create_form = (
-        ExternalEstimateCreateForm(client_queryset=Client.objects.all())
-        if external_estimate_enabled
-        else EstimateCreateForm(
-            lead_queryset=Lead.objects.filter(deleted_at__isnull=True).exclude(status=Lead.Status.LOST),
-            client_queryset=Client.objects.all(),
-            initial={"lead": initial_lead.pk if initial_lead else None},
-        )
+    initial_client = (
+        initial_lead.client
+        if initial_lead and initial_lead.client_id
+        else Client.objects.filter(pk=request.GET.get("client")).first()
+        if new_type == "estimate" and request.GET.get("client")
+        else None
+    )
+    estimate_create_form = ExternalEstimateCreateForm(
+        client_queryset=Client.objects.all(),
+        initial={"client": initial_client.pk} if initial_client else None,
     )
     dashboard_forms = {
         "lead_form": LeadForm(staff_queryset=_staff_users()),
         "estimate_create_form": estimate_create_form,
-        "estimate_form": EstimateForm(instance=selected_estimate) if selected_estimate else EstimateForm(),
-        "estimate_line_formset": (
-            EstimateLineItemFormSet(instance=selected_estimate, prefix="lines")
-            if selected_estimate and selected_estimate.status != Estimate.Status.ACCEPTED
-            else None
-        ),
         "project_form": (
             ProjectForm(instance=selected_project, staff_queryset=_staff_users())
             if selected_project and new_type != "project"
@@ -1137,6 +1124,7 @@ def _dashboard_context(request, section, form_overrides=None):
             if (
                 external_estimate_enabled
                 and selected_estimate
+                and selected_estimate.external_url
                 and can_manage_external_estimate(request.user, estimate=selected_estimate)
             )
             else None
@@ -1982,6 +1970,18 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
             or (team_mode and selected_task.assigned_to_id == request.user.id)
         )
     )
+    employee_notifications = list(
+        EmployeeNotification.objects.filter(
+            employee=request.user,
+            dismissed_at__isnull=True,
+        )[:100]
+    )
+    notification_workspace = "employee" if team_mode else "admin"
+    for notification in employee_notifications:
+        notification.destination_url = _safe_notification_destination(
+            notification.destination_url,
+            workspace=notification_workspace,
+        )
     return {
         "active_section": section,
         "team_mode": team_mode,
@@ -2067,12 +2067,7 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
         "last_invite_url": request.session.pop("last_invite_url", ""),
         "last_invite_email_status": request.session.pop("last_invite_email_status", ""),
         "last_invite_recipient": request.session.pop("last_invite_recipient", ""),
-        "employee_notifications": list(
-            EmployeeNotification.objects.filter(
-                employee=request.user,
-                dismissed_at__isnull=True,
-            )[:100]
-        ),
+        "employee_notifications": employee_notifications,
     }
 
 
@@ -2086,7 +2081,9 @@ def _render_dashboard_form_error(request, section, form_overrides=None, *, selec
     if edit:
         query["edit"] = edit
     request.GET = query
-    return render(request, "operations/dashboard.html", _dashboard_context(request, section, form_overrides=form_overrides))
+    context = _dashboard_context(request, section, form_overrides=form_overrides)
+    context["lead_detail_tab"] = query.get("lead_tab", "")
+    return render(request, "operations/dashboard.html", context)
 
 
 def _render_workspace_form_error(request, section, form_overrides=None, *, selections=None, new=None, edit=None):
@@ -2280,7 +2277,13 @@ def lead_convert_client(request, pk):
         actor=request.user,
         idempotency_key=f"lead-client:{lead.pk}",
     )
-    messages.success(request, f"{lead.name} is now a client record.")
+    if client.user_id:
+        next_step = "Client portal access is active; you can now add and send an external estimate link."
+    elif client.email:
+        next_step = "Next: create a portal invitation from the client record, then add an external estimate link."
+    else:
+        next_step = "Next: add the client’s email, then create a portal invitation before sending an estimate link."
+    messages.success(request, f"{lead.name} is now a client record. {next_step}")
     return _workspace_redirect(request, "clients", client=client.pk)
 
 
@@ -3410,6 +3413,7 @@ def time_update(request, pk):
 
 @require_POST
 @team_required
+@transaction.atomic
 def document_upload(request):
     if not _can_manage_documents(request.user):
         raise PermissionDenied
@@ -3487,6 +3491,7 @@ def agreement_file(request, pk):
 
 @require_POST
 @team_required
+@transaction.atomic
 def staff_message_reply(request, client_pk):
     team_mode = request.path.startswith("/team/")
     if not team_mode and not _can_manage_messages(request.user):
@@ -3615,6 +3620,8 @@ def employee_password_reset_create(request, pk):
 
 
 def employee_invite(request, token):
+    if request.user.is_authenticated:
+        raise PermissionDenied
     invite = find_employee_invite(token)
     if invite is None:
         return render(request, "operations/invite_invalid.html", {"invite_kind": "employee"}, status=410)
@@ -3766,9 +3773,9 @@ def lead_update_note(request, pk):
             request,
             "leads",
             {"lead_note_form": form},
-            selections={"lead": lead.pk},
+            selections={"lead": lead.pk, "lead_tab": "notes"},
         )
-    return _dashboard_redirect("leads", lead=lead.pk)
+    return _dashboard_redirect("leads", lead=lead.pk, lead_tab="notes")
 
 
 @require_POST
@@ -3796,31 +3803,9 @@ def lead_create_followup(request, pk):
             request,
             "leads",
             {"follow_up_form": form},
-            selections={"lead": lead.pk},
+            selections={"lead": lead.pk, "lead_tab": "notes"},
         )
-    return _dashboard_redirect("leads", lead=lead.pk)
-
-
-def _estimate_from_form(form, request):
-    estimate = form.save(commit=False)
-    estimate.created_by = request.user
-    lead = form.cleaned_data.get("lead")
-    if lead:
-        estimate.client = lead.client
-    else:
-        estimate.client = form.cleaned_data.get("client")
-    estimate.save()
-    EstimateLineItem.objects.create(
-        estimate=estimate,
-        description="Initial project scope",
-        quantity=Decimal("1.00"),
-        unit_price=Decimal("0.00"),
-        sort_order=0,
-    )
-    if lead and lead.status not in {Lead.Status.WON, Lead.Status.LOST}:
-        lead.status = Lead.Status.QUOTED
-        lead.save(update_fields=["status", "updated_at"])
-    return estimate
+    return _dashboard_redirect("leads", lead=lead.pk, lead_tab="notes")
 
 
 def _external_estimate_from_form(form, request):
@@ -3852,51 +3837,25 @@ def _external_estimate_from_form(form, request):
 @require_POST
 @staff_required
 def estimate_create(request):
-    # New estimate records use the simple recipient/link workflow. Keep the
-    # legacy detailed form available for existing callers and compatibility
-    # routes that still submit the old line-item fields.
-    if external_estimate_enabled_for(request.user) and "external_url" in request.POST:
-        form = ExternalEstimateCreateForm(
-            request.POST,
-            client_queryset=Client.objects.all(),
-        )
-        if form.is_valid():
-            with transaction.atomic():
-                estimate = _external_estimate_from_form(form, request)
-                record_activity(
-                    f"Estimate #{estimate.number} created",
-                    f"{estimate.client or 'Unassigned client'} - external link recorded",
-                    actor=request.user,
-                    lead=estimate.lead,
-                    estimate=estimate,
-                )
-            messages.success(request, f"Estimate #{estimate.number} created.")
-            return _dashboard_redirect("estimates", estimate=estimate.pk)
-        messages.error(request, "Please choose a client and provide a secure estimate link.")
-        return _render_dashboard_form_error(
-            request,
-            "estimates",
-            {"estimate_create_form": form},
-            new="estimate",
-        )
-    form = EstimateCreateForm(
+    if not external_estimate_enabled_for(request.user):
+        raise PermissionDenied
+    form = ExternalEstimateCreateForm(
         request.POST,
-        lead_queryset=Lead.objects.filter(deleted_at__isnull=True).exclude(status=Lead.Status.LOST),
         client_queryset=Client.objects.all(),
     )
     if form.is_valid():
         with transaction.atomic():
-            estimate = _estimate_from_form(form, request)
+            estimate = _external_estimate_from_form(form, request)
             record_activity(
                 f"Estimate #{estimate.number} created",
-                f"{estimate.client or 'Unassigned client'} · just now",
+                f"{estimate.client or 'Unassigned client'} - external link recorded",
                 actor=request.user,
                 lead=estimate.lead,
                 estimate=estimate,
             )
         messages.success(request, f"Estimate #{estimate.number} created.")
         return _dashboard_redirect("estimates", estimate=estimate.pk)
-    messages.error(request, "Please provide an estimate title and lead or client.")
+    messages.error(request, "Choose a client and provide a secure external estimate link.")
     return _render_dashboard_form_error(
         request,
         "estimates",
@@ -3952,8 +3911,12 @@ def external_estimate_send(request, pk):
                 "Your Grand Coast Construction estimate is ready to review. "
                 "Open it here:\n\n"
                 f"{locked.external_url}\n\n"
-                "The same estimate link is also available in your Grand Coast client portal.\n\n"
-                "Grand Coast Construction"
+                + (
+                    "The same link is available in your Grand Coast client portal.\n\n"
+                    if client.user_id
+                    else "This link is saved for your Grand Coast client portal. Portal access is separate and will be available after your invitation is accepted.\n\n"
+                )
+                + "Grand Coast Construction"
             ),
             actor=request.user,
             client=client,
@@ -3963,187 +3926,61 @@ def external_estimate_send(request, pk):
     if outbox and outbox.status == EmailOutbox.Status.SENT:
         messages.success(
             request,
-            f"Estimate link emailed to {client.email} and published to the client portal.",
+            (
+                f"Estimate link emailed to {client.email} and added to the active client portal."
+                if client.user_id
+                else f"Estimate link emailed to {client.email}. Portal access is not active yet; create an invitation from the client record."
+            ),
         )
     elif outbox and outbox.status == EmailOutbox.Status.FAILED:
         messages.warning(
             request,
-            "The estimate link was published to the client portal, but email delivery failed. You can continue sending the link manually.",
+            (
+                "Email delivery failed. The estimate remains available in the active client portal; you can copy the link and send it manually."
+                if client.user_id
+                else "Email delivery failed and portal access is not active. Create a portal invitation and send the estimate link manually."
+            ),
         )
     else:
-        messages.info(request, "Estimate link queued for email delivery and published to the client portal.")
+        messages.info(
+            request,
+            "Estimate email queued. Portal access is active."
+            if client.user_id
+            else "Estimate email queued; portal access is still separate. Create an invitation from the client record if needed.",
+        )
     return _dashboard_redirect("estimates", estimate=estimate.pk)
 
-
-def _estimate_formset_total(formset):
-    total = Decimal("0.00")
-    for form in formset.forms:
-        if not form.cleaned_data or form.cleaned_data.get("DELETE"):
-            continue
-        total += form.cleaned_data.get("quantity", Decimal("0")) * form.cleaned_data.get("unit_price", Decimal("0"))
-    return total.quantize(Decimal("0.01"))
-
-
-def _apply_estimate_status(estimate, previous_status, actor):
-    now = timezone.now()
-    if estimate.status == Estimate.Status.SENT and not estimate.sent_at:
-        estimate.sent_at = now
-    if estimate.status == Estimate.Status.ACCEPTED and not estimate.accepted_at:
-        estimate.accepted_at = now
-        estimate.accepted_by = actor
-    if estimate.status == Estimate.Status.DECLINED and not estimate.declined_at:
-        estimate.declined_at = now
-    estimate.save(update_fields=["status", "sent_at", "accepted_at", "accepted_by", "declined_at", "updated_at"])
-    if previous_status != estimate.status:
-        record_activity(
-            f"Estimate #{estimate.number} moved to {estimate.get_status_display()}",
-            estimate.title,
-            actor=actor,
-            lead=estimate.lead,
-            estimate=estimate,
-        )
-
-
-def _notify_estimate_status_change(estimate, previous_status, *, actor):
-    if previous_status == estimate.status or not estimate.client_id:
-        return []
-    if estimate.status == Estimate.Status.SENT:
-        return queue_client_notifications(
-            [estimate.client],
-            kind="estimate-sent",
-            title=f"Estimate #{estimate.number} is ready to review",
-            body=f"{estimate.title} is ready in your client portal.",
-            destination_url=_portal_notification_url(
-                estimate.client,
-                estimate=estimate,
-            ),
-            metadata={"estimate_id": str(estimate.pk)},
-            created_by=actor,
-            estimate=estimate,
-            lead=estimate.lead,
-        )
-    if estimate.status == Estimate.Status.DECLINED:
-        return queue_client_notifications(
-            [estimate.client],
-            kind="estimate-declined",
-            title=f"Estimate #{estimate.number} was declined",
-            body="The estimate needs a follow-up conversation before work can begin.",
-            destination_url=_portal_notification_url(
-                estimate.client,
-                estimate=estimate,
-            ),
-            metadata={"estimate_id": str(estimate.pk)},
-            created_by=actor,
-            estimate=estimate,
-            lead=estimate.lead,
-        )
-    return []
 
 @require_POST
 @staff_required
 def estimate_update(request, pk):
-    estimate = get_object_or_404(Estimate.objects.select_related("lead", "client"), pk=pk)
-    if estimate.status == Estimate.Status.ACCEPTED:
-        messages.error(request, "Accepted estimates are locked. Create a new revision to make changes.")
-        return _dashboard_redirect("estimates", estimate=estimate.pk)
-    form = EstimateForm(request.POST, instance=estimate)
-    formset = EstimateLineItemFormSet(request.POST, instance=estimate, prefix="lines")
-    if form.is_valid() and formset.is_valid():
-        total = _estimate_formset_total(formset)
-        if form.cleaned_data["deposit_amount"] > total:
-            form.add_error("deposit_amount", "Deposit amount cannot exceed the updated estimate total.")
-        else:
-            with transaction.atomic():
-                previous_status = estimate.status
-                estimate = form.save(commit=False)
-                estimate.save()
-                formset.save()
-                _apply_estimate_status(estimate, previous_status, request.user)
-                record_activity(
-                    f"Estimate #{estimate.number} updated",
-                    f"{estimate.title} · just now",
-                    actor=request.user,
-                    lead=estimate.lead,
-                    estimate=estimate,
-                )
-            messages.success(request, "Estimate changes saved.")
-            _notify_estimate_status_change(estimate, previous_status, actor=request.user)
-            return _dashboard_redirect("estimates", estimate=estimate.pk)
-    messages.error(request, "Please correct the estimate fields and line items.")
-    return _render_dashboard_form_error(
+    estimate = get_object_or_404(Estimate, pk=pk)
+    messages.info(
         request,
-        "estimates",
-        {"estimate_form": form, "estimate_line_formset": formset},
-        selections={"estimate": estimate.pk},
+        "Estimate details are maintained in the external estimate service. GCC keeps legacy internal estimates as read-only history.",
     )
+    return _dashboard_redirect("estimates", estimate=estimate.pk)
 
 
 @require_POST
 @staff_required
 def estimate_send(request, pk):
-    estimate = get_object_or_404(Estimate.objects.select_related("lead", "client"), pk=pk)
-    if estimate.status == Estimate.Status.ACCEPTED:
-        messages.info(request, "This estimate has already been accepted.")
-        return _dashboard_redirect("estimates", estimate=estimate.pk)
-
-    # The dashboard uses the same form for Save and Mark ready. Persist the
-    # submitted scope before changing visibility in the client portal.
-    has_editor_payload = "title" in request.POST or "lines-TOTAL_FORMS" in request.POST
-    form = EstimateForm(request.POST, instance=estimate) if has_editor_payload else None
-    formset = (
-        EstimateLineItemFormSet(request.POST, instance=estimate, prefix="lines")
-        if has_editor_payload
-        else None
+    estimate = get_object_or_404(Estimate, pk=pk)
+    messages.info(
+        request,
+        "Use ‘Send link to client’ on the external estimate record. Existing internal estimates are read-only history.",
     )
-    if has_editor_payload and (not form.is_valid() or not formset.is_valid()):
-        messages.error(request, "Please correct the estimate fields and line items before sending.")
-        return _render_dashboard_form_error(
-            request,
-            "estimates",
-            {"estimate_form": form, "estimate_line_formset": formset},
-            selections={"estimate": estimate.pk},
-        )
-
-    if form is not None:
-        total = _estimate_formset_total(formset)
-        if form.cleaned_data["deposit_amount"] > total:
-            form.add_error("deposit_amount", "Deposit amount cannot exceed the estimate total.")
-            messages.error(request, "Please correct the estimate fields and line items before sending.")
-            return _render_dashboard_form_error(
-                request,
-                "estimates",
-                {"estimate_form": form, "estimate_line_formset": formset},
-                selections={"estimate": estimate.pk},
-            )
-
-    with transaction.atomic():
-        estimate = Estimate.objects.select_for_update().get(pk=estimate.pk)
-        previous_status = estimate.status
-        if form is not None:
-            # The form was validated before the row lock. Copy its cleaned
-            # values onto the locked instance explicitly so the submitted
-            # title, notes, and deposit are not lost when marking it ready.
-            for field_name in EstimateForm.Meta.fields:
-                setattr(estimate, field_name, form.cleaned_data[field_name])
-            estimate.save()
-            formset.instance = estimate
-            formset.save()
-        estimate = send_estimate_command(
-            estimate,
-            actor=request.user,
-            idempotency_key=f"estimate-send:{estimate.pk}:{request.POST.get('lines-TOTAL_FORMS', '0')}",
-        )
-    _notify_estimate_status_change(estimate, previous_status, actor=request.user)
-    messages.success(request, f"Estimate #{estimate.number} is ready in the client portal.")
     return _dashboard_redirect("estimates", estimate=estimate.pk)
 
 
 def _accepted_estimate_for_project_client(client):
     return (
         Estimate.objects.filter(status=Estimate.Status.ACCEPTED)
+        .filter(external_status=Estimate.ExternalEstimateStatus.APPROVED)
+        .exclude(external_url="")
         .filter(Q(client=client) | Q(lead__client=client))
         .exclude(projects__isnull=False)
-        .select_related("lead")
+        .select_related("lead", "external_status_by")
         .order_by("-accepted_at", "-created_at")
         .first()
     )
@@ -4151,6 +3988,7 @@ def _accepted_estimate_for_project_client(client):
 
 @require_POST
 @staff_required
+@transaction.atomic
 def project_create(request):
     form = ProjectCreateForm(request.POST, staff_queryset=_staff_users())
     if form.is_valid():
@@ -4182,10 +4020,15 @@ def project_create(request):
         _notify_project_client(
             project,
             kind="project-created",
-            title="Your project workspace is ready",
+            title=(
+                "Your project team is assigned"
+                if project.assigned_staff.exists()
+                else "Project setup is in progress"
+            ),
             body=(
-                f"{project.title} has been created. "
-                "The Grand Coast team will share the next step here."
+                f"{project.title} has been created. Your project team is assigned and will share the next step here."
+                if project.assigned_staff.exists()
+                else f"{project.title} has been created. Grand Coast is assigning an employee; project work has not started yet."
             ),
             created_by=request.user,
             estimate=project.estimate,
@@ -4222,31 +4065,13 @@ def estimate_create_project(request, pk):
         return _dashboard_redirect("estimates", estimate=estimate.pk)
     if not created:
         return _dashboard_redirect("projects", project=project.pk)
-    _notify_project_staff(
-        project,
-        kind="project-assignment",
-        title="A project was assigned to you",
-        body=f"{project.title} is ready for project work.",
-        created_by=request.user,
-        notify_owners=True,
-    )
-    _notify_project_client(
-        project,
-        kind="project-created",
-        title="Your project workspace is ready",
-        body=(
-            f"{project.title} has been created. "
-            "The Grand Coast team will share the next step here."
-        ),
-        created_by=request.user,
-        estimate=estimate,
-    )
     messages.success(request, f"{project.title} is now in Projects.")
     return _dashboard_redirect("projects", project=project.pk)
 
 
 @require_POST
 @staff_required
+@transaction.atomic
 def project_update(request, pk):
     project = get_object_or_404(Project, pk=pk)
     previous_status = project.status
@@ -4272,6 +4097,12 @@ def project_update(request, pk):
         record_activity("Project details updated", f"{project.title} · just now", actor=request.user, project=project)
         current_staff_ids = set(project.assigned_staff.values_list("pk", flat=True))
         staff_changed = previous_staff_ids != current_staff_ids
+        if staff_changed and not current_staff_ids and project.status != Project.Status.COMPLETE:
+            project.next_step = "Assign project staff"
+            project.save(update_fields=["next_step", "updated_at"])
+        elif staff_changed and current_staff_ids and project.next_step == "Assign project staff":
+            project.next_step = "Confirm project schedule"
+            project.save(update_fields=["next_step", "updated_at"])
         status_changed = previous_status != project.status
         execution_statuses = {
             Project.Status.SELECTIONS,
@@ -4288,6 +4119,18 @@ def project_update(request, pk):
                 created_by=request.user,
                 notify_owners=True,
                 additional_recipients=additional_staff,
+            )
+            _notify_project_client(
+                project,
+                kind="project-staff-assigned" if current_staff_ids else "project-setup-required",
+                title=("Your project team is assigned" if current_staff_ids else "Project setup is in progress"),
+                body=(
+                    f"Grand Coast has assigned an employee to {project.title}. The team will coordinate the next steps here."
+                    if current_staff_ids
+                    else f"{project.title} needs a new employee assignment. Work will not move into execution until an employee is assigned."
+                ),
+                created_by=request.user,
+                estimate=project.estimate,
             )
         if status_changed and project.status == Project.Status.COMPLETE:
             _notify_project_staff(
@@ -4450,6 +4293,7 @@ def project_create_invite(request, pk):
 
 @require_POST
 @staff_or_field_required
+@transaction.atomic
 def media_upload(request):
     team_mode = request.path.startswith("/team/")
     if not team_mode and not _can_access_dashboard(request.user):
@@ -4495,6 +4339,7 @@ def media_upload(request):
 
 @require_POST
 @staff_or_field_required
+@transaction.atomic
 def media_edit(request, pk):
     team_mode = request.path.startswith("/team/")
     if not team_mode and not _can_access_dashboard(request.user):
@@ -4651,20 +4496,6 @@ def project_cover_file(request, pk):
 
 
 def _portal_client(request):
-    if request.user.is_staff:
-        requested = request.GET.get("client")
-        if requested:
-            client = Client.objects.filter(pk=requested).first()
-            if client:
-                return client
-        return (
-            Client.objects.filter(
-                estimates__status__in=[Estimate.Status.SENT, Estimate.Status.ACCEPTED]
-            )
-            .order_by("name")
-            .first()
-            or Client.objects.order_by("name").first()
-        )
     return getattr(request.user, "client_record", None)
 
 
@@ -4675,12 +4506,12 @@ def external_estimate_link(request, pk):
     """Permission-checked redirect to a manually published estimate."""
     estimate = get_object_or_404(Estimate.objects.select_related("client"), pk=pk)
     is_linked_client = bool(
-        is_client(request.user)
+        _is_active_client(request.user)
         and estimate.client_id
         and estimate.client.user_id == request.user.pk
         and estimate.external_client_visible
     )
-    if not is_linked_client and not can_manage_external_estimate(request.user, estimate=estimate):
+    if not is_linked_client:
         raise Http404
     if not estimate.external_url:
         raise Http404
@@ -4698,12 +4529,12 @@ def external_invoice_link(request, pk):
         pk=pk,
     )
     is_linked_client = bool(
-        is_client(request.user)
+        _is_active_client(request.user)
         and schedule.project.client_id
         and schedule.project.client.user_id == request.user.pk
         and schedule.external_client_visible
     )
-    if not is_linked_client and not can_manage_external_estimate(request.user, project=schedule.project):
+    if not is_linked_client:
         raise Http404
     if not schedule.external_invoice_url:
         raise Http404
@@ -4738,6 +4569,27 @@ def _portal_navigation(request, client, project=None, estimate=None):
             "url": f"{destination}?{urlencode(params)}",
         })
     return navigation
+
+
+def _safe_notification_destination(destination_url, *, workspace):
+    """Only show notification links that stay inside the viewer's workspace."""
+    allowed_prefix = {
+        "admin": "/dashboard/",
+        "employee": "/team/",
+        "client": "/portal/",
+    }.get(workspace)
+    try:
+        parsed = urlsplit(str(destination_url or ""))
+    except ValueError:
+        return ""
+    if (
+        not allowed_prefix
+        or parsed.scheme
+        or parsed.netloc
+        or not parsed.path.startswith(allowed_prefix)
+    ):
+        return ""
+    return urlunsplit(("", "", parsed.path, parsed.query, parsed.fragment))
 
 
 @client_required
@@ -4776,7 +4628,8 @@ def portal(request, section="overview"):
     portal_estimate_queryset = (
         Estimate.objects.filter(client=client)
         .exclude(status=Estimate.Status.DRAFT)
-        .select_related("lead")
+        .filter(Q(external_url="") | Q(external_client_visible=True))
+        .select_related("lead", "external_status_by")
         .prefetch_related("projects")
     )
     portal_estimates = list(portal_estimate_queryset)
@@ -4843,6 +4696,11 @@ def portal(request, section="overview"):
     )
     portal_messages.sort(key=lambda message: message.created_at)
     client_notifications = list(client.notifications.all()[:30])
+    for notification in client_notifications:
+        notification.destination_url = _safe_notification_destination(
+            notification.destination_url,
+            workspace="client",
+        )
     client_unread_notifications_count = client.notifications.filter(read_at__isnull=True).count()
     if not request.user.is_staff:
         ClientMessage.objects.filter(client=client, sent_by__is_staff=True, is_read=False).update(is_read=True)
@@ -4888,56 +4746,11 @@ def portal_accept_estimate(request, pk):
     )
     if not _client_can_access_estimate(request, estimate):
         raise PermissionDenied
-    accepted = False
-    if estimate.status == Estimate.Status.SENT:
-        estimate, accepted = accept_estimate_command(
-            estimate,
-            actor=request.user,
-            request=request,
-            idempotency_key=f"estimate-accept:{estimate.pk}",
-        )
-    if accepted:
-        employee_recipients = _owner_notification_recipients()
-        if estimate.lead_id and estimate.lead.assigned_to_id:
-            employee_recipients.append(estimate.lead.assigned_to)
-        queue_employee_notifications(
-            employee_recipients,
-            kind="estimate-accepted",
-            title=f"Estimate #{estimate.number} was accepted",
-            body=f"{estimate.title} is accepted and needs project setup.",
-            destination_url=(
-                reverse("operations:dashboard-section", kwargs={"section": "estimates"})
-                + "?"
-                + urlencode({"estimate": estimate.pk})
-            ),
-            metadata={"estimate_id": str(estimate.pk)},
-            created_by=request.user,
-            estimate=estimate,
-            lead=estimate.lead,
-        )
-        queue_client_notifications(
-            [estimate.client],
-            kind="estimate-accepted",
-            title="Estimate accepted",
-            body=f"{estimate.title} was accepted. The team will prepare your project workspace.",
-            destination_url=_portal_notification_url(
-                estimate.client,
-                estimate=estimate,
-            ),
-            metadata={"estimate_id": str(estimate.pk)},
-            created_by=request.user,
-            exclude_clients=[estimate.client],
-            estimate=estimate,
-            lead=estimate.lead,
-        )
-        messages.success(
-            request,
-            "Estimate accepted. Your project team will follow up with next steps.",
-        )
-    else:
-        messages.info(request, "This estimate is not currently awaiting acceptance.")
-    portal_url = reverse("operations:portal")
-    return redirect(f"{portal_url}?estimate={estimate.pk}")
+    messages.info(
+        request,
+        "Review and accept the estimate in the linked estimate service. Grand Coast will record the outcome here after confirming it.",
+    )
+    return redirect(f"{reverse('operations:portal')}?estimate={estimate.pk}")
 
 
 @require_POST
@@ -5088,65 +4901,15 @@ def portal_decline_estimate(request, pk):
     )
     if not _client_can_access_estimate(request, estimate):
         raise PermissionDenied
-    declined = False
-    if estimate.status == Estimate.Status.SENT:
-        with transaction.atomic():
-            estimate = Estimate.objects.select_for_update().select_related(
-                "client",
-                "lead",
-                "lead__assigned_to",
-            ).get(pk=estimate.pk)
-            if estimate.status == Estimate.Status.SENT:
-                estimate.status = Estimate.Status.DECLINED
-                estimate.declined_at = timezone.now()
-                estimate.save(update_fields=["status", "declined_at", "updated_at"])
-                record_activity(
-                    "Estimate declined by client",
-                    f"Estimate #{estimate.number}",
-                    actor=request.user,
-                    estimate=estimate,
-                )
-                declined = True
-    if declined:
-        employee_recipients = _owner_notification_recipients()
-        if estimate.lead_id and estimate.lead.assigned_to_id:
-            employee_recipients.append(estimate.lead.assigned_to)
-        queue_employee_notifications(
-            employee_recipients,
-            kind="estimate-declined",
-            title=f"Estimate #{estimate.number} was declined",
-            body=f"{estimate.title} needs a follow-up conversation.",
-            destination_url=(
-                reverse("operations:dashboard-section", kwargs={"section": "estimates"})
-                + "?"
-                + urlencode({"estimate": estimate.pk})
-            ),
-            metadata={"estimate_id": str(estimate.pk)},
-            created_by=request.user,
-            estimate=estimate,
-            lead=estimate.lead,
-        )
-        queue_client_notifications(
-            [estimate.client],
-            kind="estimate-declined",
-            title="Estimate declined",
-            body=f"{estimate.title} was marked declined. Contact the team if you want to discuss a revision.",
-            destination_url=_portal_notification_url(
-                estimate.client,
-                estimate=estimate,
-            ),
-            metadata={"estimate_id": str(estimate.pk)},
-            created_by=request.user,
-            exclude_clients=[estimate.client],
-            estimate=estimate,
-            lead=estimate.lead,
-        )
-        messages.success(request, "Estimate declined. The Grand Coast team has been notified.")
-    else:
-        messages.info(request, "This estimate is not currently awaiting acceptance.")
-    portal_url = reverse("operations:portal")
-    return redirect(f"{portal_url}?estimate={estimate.pk}")
+    messages.info(
+        request,
+        "Record your response in the linked estimate service. Grand Coast will update this status after confirming it.",
+    )
+    return redirect(f"{reverse('operations:portal')}?estimate={estimate.pk}")
 
+@require_POST
+@login_required
+@transaction.atomic
 def portal_send_message(request):
     if not _is_active_client(request.user):
         raise PermissionDenied
@@ -5205,6 +4968,8 @@ def client_notifications_mark_all_read(request):
     return redirect(f"{reverse('operations:portal')}#notifications")
 
 def client_invite(request, token):
+    if request.user.is_authenticated:
+        raise PermissionDenied
     invite = find_invite(token)
     if invite is None:
         return render(request, "operations/invite_invalid.html", status=410)

@@ -251,7 +251,9 @@ def visible_estimates(user):
     if is_client(user):
         return Estimate.objects.filter(
             client__user=user,
-        ).exclude(status=Estimate.Status.DRAFT)
+        ).exclude(status=Estimate.Status.DRAFT).filter(
+            Q(external_url="") | Q(external_client_visible=True)
+        )
     if not can_manage_sales(user):
         return Estimate.objects.none()
 

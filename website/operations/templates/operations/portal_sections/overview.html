@@ -26,8 +26,9 @@
             <div class="portal-project-meta">
                 <strong>{{ portal_project.title }}</strong>
                 <span>{{ portal_project.location|default:'Southern California' }}</span>
-                <span class="status-dot"><i></i><b>{{ portal_project.get_status_display }}</b></span>
+                <span class="status-dot"><i></i><b>{% if portal_project.needs_staff_assignment %}Setup in progress{% else %}{{ portal_project.get_status_display }}{% endif %}</b></span>
             </div>
+            {% if portal_project.needs_staff_assignment %}<div class="portal-accepted-note">Grand Coast is assigning an employee to your project. Project work has not started yet; we’ll update this space when your team is assigned.</div>{% endif %}
         </div>
         <div class="portal-heading-actions">
             {% if portal_estimate %}<a class="button button-primary" href="{{ portal_nav.4.url }}">Review estimate</a>{% endif %}
@@ -35,17 +36,19 @@
         </div>
     </div>
 
-    <section class="portal-progress" aria-label="Project progress">
-        <div class="portal-progress-line"></div>
-        {% for milestone in portal_project.milestones.all %}
-            <div class="portal-progress-step {% if milestone.is_complete %}is-complete{% elif forloop.first %}is-current{% endif %}">
-                <span>{% if milestone.is_complete %}&#10003;{% else %}{{ forloop.counter }}{% endif %}</span>
-                <strong>{{ milestone.title }}</strong>
-            </div>
-        {% empty %}
-            <p class="detail-value">The project sequence will appear here soon.</p>
-        {% endfor %}
-    </section>
+    {% if not portal_project.needs_staff_assignment %}
+        <section class="portal-progress" aria-label="Project progress">
+            <div class="portal-progress-line"></div>
+            {% for milestone in portal_project.milestones.all %}
+                <div class="portal-progress-step {% if milestone.is_complete %}is-complete{% elif forloop.first %}is-current{% endif %}">
+                    <span>{% if milestone.is_complete %}&#10003;{% else %}{{ forloop.counter }}{% endif %}</span>
+                    <strong>{{ milestone.title }}</strong>
+                </div>
+            {% empty %}
+                <p class="detail-value">The project sequence will appear here soon.</p>
+            {% endfor %}
+        </section>
+    {% endif %}
 
     {% if portal_agreement or portal_selections or portal_change_orders or portal_payment_schedules %}
         <section class="portal-construction-strip" aria-labelledby="project-controls-title">

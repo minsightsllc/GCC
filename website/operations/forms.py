@@ -362,25 +362,32 @@ class ProjectForm(forms.ModelForm):
         if lead and client and lead.client_id != client.pk:
             raise ValidationError("Choose the client connected to this lead.")
         if lead:
-            has_accepted_estimate = lead.estimates.filter(status=Estimate.Status.ACCEPTED).exists()
+            has_accepted_estimate = lead.estimates.filter(
+                status=Estimate.Status.ACCEPTED,
+                external_status=Estimate.ExternalEstimateStatus.APPROVED,
+            ).exclude(external_url="").exists()
             if self.instance.pk and self.instance.estimate_id:
                 has_accepted_estimate = has_accepted_estimate or (
                     self.instance.estimate.status == Estimate.Status.ACCEPTED
+                    and self.instance.estimate.external_status == Estimate.ExternalEstimateStatus.APPROVED
+                    and bool(self.instance.estimate.external_url)
                     and self.instance.estimate.lead_id == lead.pk
                 )
             if not has_accepted_estimate:
-                self.add_error("lead", "Lead-derived projects require an accepted estimate.")
+                self.add_error("lead", "Lead-derived projects require an externally approved estimate recorded in GCC.")
         execution_statuses = {
             Project.Status.SELECTIONS,
             Project.Status.CONSTRUCTION,
             Project.Status.FINAL,
             Project.Status.COMPLETE,
         }
-        previous_status = self.instance.status if self.instance.pk else None
         if (
             cleaned.get("status") in execution_statuses
             and not cleaned.get("assigned_staff")
-            and previous_status not in execution_statuses
+            and (
+                not self.instance.pk
+                or cleaned.get("status") != self.instance.status
+            )
         ):
             self.add_error(
                 "assigned_staff",
@@ -395,11 +402,27 @@ class ProjectCreateForm(ProjectForm):
     The legacy ``lead`` relationship remains on ``Project`` for history and
     existing records, but it is not a user-selectable input once a lead has
     become a client. The create view resolves that relationship from the
-    selected client's accepted estimate when one is available.
+    externally approved estimate recorded in GCC.
     """
 
     class Meta(ProjectForm.Meta):
         fields = [field for field in ProjectForm.Meta.fields if field != "lead"]
+
+    def clean(self):
+        cleaned = super().clean()
+        client = cleaned.get("client")
+        if client:
+            approved_external_estimate = Estimate.objects.filter(
+                Q(client=client) | Q(lead__client=client),
+                status=Estimate.Status.ACCEPTED,
+                external_status=Estimate.ExternalEstimateStatus.APPROVED,
+            ).exclude(external_url="").exclude(projects__isnull=False).exists()
+            if not approved_external_estimate:
+                self.add_error(
+                    "client",
+                    "Create this project after an external estimate has been approved and recorded in GCC.",
+                )
+        return cleaned
 
 
 class ProjectUpdateForm(forms.ModelForm):

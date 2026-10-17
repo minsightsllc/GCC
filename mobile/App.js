@@ -142,7 +142,6 @@ const clientDrawerPages = [
 
 const employeeDrawerPages = [
   { label: 'Overview', icon: 'home-outline', path: EMPLOYEE_WORKSPACE_PATH, tab: 'Dashboard', countKey: 'overview', group: null },
-  { label: "Today's work", icon: 'hammer-outline', path: FIELD_TODAY_PATH, tab: 'Workspace', countKey: 'projects', group: 'Client & Job Operations' },
   { label: 'Projects', icon: 'folder-outline', path: EMPLOYEE_PROJECTS_PATH, tab: 'Workspace', countKey: 'projects', group: 'Client & Job Operations' },
   { label: 'Tasks', icon: 'checkmark-outline', path: '/team/tasks/', tab: 'Workspace', countKey: 'tasks', group: 'Client & Job Operations' },
   { label: 'Calendar', icon: 'calendar-outline', path: '/team/calendar/', tab: 'Workspace', countKey: 'calendar', group: 'Client & Job Operations' },
@@ -153,21 +152,20 @@ const employeeDrawerPages = [
 ];
 
 const adminDrawerPages = [
-  { label: 'Command center', icon: 'sparkles-outline', path: COMMAND_CENTER_PATH, tab: 'Dashboard', countKey: 'overview', group: null },
-  { label: 'Leads', icon: 'funnel-outline', path: '/dashboard/leads/', tab: 'Workspace', countKey: 'leads', group: 'Core work' },
-  { label: 'Projects', icon: 'folder-outline', path: '/dashboard/projects/', tab: 'Workspace', countKey: 'projects', group: 'Core work' },
-  { label: 'Calendar', icon: 'calendar-outline', path: '/dashboard/calendar/', tab: 'Workspace', countKey: 'calendar', group: 'Core work' },
-  { label: 'Messages', icon: 'chatbubbles-outline', path: '/dashboard/clients/?messages=1', tab: 'Workspace', countKey: 'messages', group: 'Core work' },
-  { label: 'Workspace overview', icon: 'home-outline', path: '/dashboard/overview/', tab: 'Workspace', countKey: 'overview', group: 'More workspace' },
-  { label: 'Estimates', icon: 'receipt-outline', path: '/dashboard/estimates/', tab: 'Workspace', countKey: 'estimates', group: 'More workspace' },
-  { label: 'Clients', icon: 'people-outline', path: '/dashboard/clients/', tab: 'Workspace', countKey: 'clients', group: 'More workspace' },
-  { label: 'Tasks', icon: 'checkmark-outline', path: '/dashboard/tasks/', tab: 'Workspace', countKey: 'tasks', group: 'More workspace' },
-  { label: 'Time', icon: 'time-outline', path: '/dashboard/time/', tab: 'Workspace', countKey: 'time', group: 'More workspace' },
-  { label: 'Documents', icon: 'document-text-outline', path: '/dashboard/documents/', tab: 'Workspace', countKey: 'documents', group: 'More workspace' },
-  { label: 'Media', icon: 'images-outline', path: '/dashboard/media/', tab: 'Workspace', countKey: 'media', group: 'More workspace' },
-  { label: 'Team', icon: 'people-circle-outline', path: '/dashboard/team/', tab: 'Workspace', countKey: 'team', group: 'More workspace' },
-  { label: 'Notifications', icon: 'notifications-outline', path: '/dashboard/notifications/', tab: 'Workspace', countKey: 'notifications', group: 'More workspace' },
-  { label: 'Content', icon: 'sparkles-outline', path: '/dashboard/content/', tab: 'Workspace', countKey: 'content', group: 'More workspace' },
+  { label: 'Overview', icon: 'home-outline', path: COMMAND_CENTER_PATH, tab: 'Dashboard', countKey: 'overview', group: null },
+  { label: 'Leads', icon: 'funnel-outline', path: '/dashboard/leads/', tab: 'Workspace', countKey: 'leads', group: 'Client & Job Operations' },
+  { label: 'Clients', icon: 'people-outline', path: '/dashboard/clients/', tab: 'Workspace', countKey: 'clients', group: 'Client & Job Operations' },
+  { label: 'Estimates', icon: 'receipt-outline', path: '/dashboard/estimates/', tab: 'Workspace', countKey: 'estimates', group: 'Client & Job Operations' },
+  { label: 'Projects', icon: 'folder-outline', path: '/dashboard/projects/', tab: 'Workspace', countKey: 'projects', group: 'Client & Job Operations' },
+  { label: 'Tasks', icon: 'checkmark-outline', path: '/dashboard/tasks/', tab: 'Workspace', countKey: 'tasks', group: 'Client & Job Operations' },
+  { label: 'Calendar', icon: 'calendar-outline', path: '/dashboard/calendar/', tab: 'Workspace', countKey: 'calendar', group: 'Client & Job Operations' },
+  { label: 'Time', icon: 'time-outline', path: '/dashboard/time/', tab: 'Workspace', countKey: 'time', group: 'Client & Job Operations' },
+  { label: 'Documents', icon: 'document-text-outline', path: '/dashboard/documents/', tab: 'Workspace', countKey: 'documents', group: 'Client & Job Operations' },
+  { label: 'Media', icon: 'images-outline', path: '/dashboard/media/', tab: 'Workspace', countKey: 'media', group: 'Client & Job Operations' },
+  { label: 'Team', icon: 'people-circle-outline', path: '/dashboard/team/', tab: 'Workspace', countKey: 'team', group: 'Miscellaneous' },
+  { label: 'Messages', icon: 'chatbubbles-outline', path: '/dashboard/clients/?messages=1', tab: 'Workspace', countKey: 'messages', group: 'Miscellaneous' },
+  { label: 'Notifications', icon: 'notifications-outline', path: '/dashboard/notifications/', tab: 'Workspace', countKey: 'notifications', group: 'Miscellaneous' },
+  { label: 'Content', icon: 'sparkles-outline', path: '/dashboard/content/', tab: 'Workspace', countKey: 'content', group: 'Miscellaneous' },
 ];
 
 const clientTabIcons = {

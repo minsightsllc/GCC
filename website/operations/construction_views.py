@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 import uuid
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Q
@@ -125,10 +126,17 @@ from .models import (
 
 
 def _staff_context(request, *, active_section="command-center"):
-    nav_counts = existing_views._operations_navigation_counts(request.user)
+    can_access_dashboard = existing_views._can_access_dashboard(request.user)
+    team_mode = not can_access_dashboard
+    nav_counts = existing_views._operations_navigation_counts(
+        request.user,
+        team_mode=team_mode,
+    )
     return {
         "active_section": active_section,
-        "operations_nav_role": "admin",
+        "team_mode": team_mode,
+        "can_access_dashboard": can_access_dashboard,
+        "operations_nav_role": "admin" if can_access_dashboard else "employee",
         "operations_nav_counts": nav_counts,
         "can_manage_team": existing_views._can_manage_team(request.user),
         "unread_messages_count": nav_counts["messages"],
@@ -667,7 +675,7 @@ def external_estimate_status(request, pk):
     if not form.is_valid():
         raise ValidationError("Please provide a valid estimate link and status.")
     values = form.cleaned_data
-    updated, _created = record_external_estimate_status(
+    updated, changed = record_external_estimate_status(
         estimate,
         actor=request.user,
         status=values["external_status"],
@@ -681,10 +689,18 @@ def external_estimate_status(request, pk):
             values["external_status"],
         ),
     )
+    if changed and updated.external_status == Estimate.ExternalEstimateStatus.APPROVED:
+        messages.success(request, "External approval recorded. Next: create the project from this estimate.")
+    elif changed and updated.external_status == Estimate.ExternalEstimateStatus.REJECTED:
+        messages.success(request, "External decline recorded. The estimate remains closed in GCC.")
+    elif changed:
+        messages.success(request, "Estimate link and status saved.")
+    else:
+        messages.info(request, "This estimate status was already recorded.")
     project = updated.projects.order_by("-created_at").first()
     if project is not None:
         return redirect("operations:project-operations", pk=project.pk)
-    return redirect("operations:dashboard-section", section="estimates")
+    return redirect(f"{reverse('operations:dashboard-section', kwargs={'section': 'estimates'})}?estimate={updated.pk}")
 
 
 @require_POST

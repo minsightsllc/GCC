@@ -111,7 +111,7 @@ class FullLifecycleSimulationTests(TestCase):
         self._login("owner")
         dashboard = self.http.get(reverse("operations:dashboard"))
         self.assertEqual(dashboard.status_code, 200)
-        self.assertIn(b"Command Center", dashboard.content)
+        self.assertIn(b"Overview", dashboard.content)
 
         review = self.http.get(reverse("operations:weekly-review"))
         self.assertEqual(review.status_code, 200)

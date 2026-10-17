@@ -54,6 +54,7 @@ TEST_STORAGES = {
 @override_settings(
     MEDIA_ROOT=TEST_MEDIA_ROOT,
     STORAGES=TEST_STORAGES,
+    GCC_TURNSTILE_ENABLED=False,
     CLOUDFLARE_TURNSTILE_SITE_KEY="",
     CLOUDFLARE_TURNSTILE_SECRET_KEY="",
 )
@@ -370,7 +371,7 @@ class OperationsWorkflowTests(TestCase):
         self.login_staff()
         response = self.browser.get(reverse("operations:dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, reverse("operations:portal"))
+        self.assertNotContains(response, 'href="/portal/"')
         self.assertContains(response, reverse("admin:index"))
 
     def test_admin_search_routes_operations_records_to_dashboard(self):
@@ -435,7 +436,9 @@ class OperationsWorkflowTests(TestCase):
         self.assertEqual(self.lead.status, Lead.Status.QUALIFIED)
         self.assertTrue(self.lead.priority)
 
-    def test_estimate_line_items_recalculate_on_server(self):
+    def test_legacy_estimate_update_is_read_only(self):
+        original_title = self.estimate.title
+        original_total = self.estimate.total
         self.login_staff()
         response = self.browser.post(
             reverse("operations:estimate-update", kwargs={"pk": self.estimate.pk}),
@@ -462,12 +465,13 @@ class OperationsWorkflowTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.estimate.refresh_from_db()
-        self.assertEqual(self.estimate.title, "Updated kitchen scope")
-        self.assertEqual(self.estimate.total, Decimal("275.00"))
-        self.assertEqual(self.estimate.deposit_amount, Decimal("75.00"))
-        self.assertEqual(self.estimate.line_items.count(), 2)
+        self.assertEqual(self.estimate.title, original_title)
+        self.assertEqual(self.estimate.total, original_total)
+        self.assertEqual(self.estimate.deposit_amount, Decimal("50.00"))
+        self.assertEqual(self.estimate.line_items.count(), 1)
+        self.assertEqual(self.line.description, "Cabinetry")
 
-    def test_estimate_cannot_remove_last_line_item(self):
+    def test_legacy_estimate_line_items_cannot_be_removed(self):
         self.login_staff()
         response = self.browser.post(
             reverse("operations:estimate-update", kwargs={"pk": self.estimate.pk}),
@@ -493,20 +497,18 @@ class OperationsWorkflowTests(TestCase):
                 "lines-1-sort_order": "0",
             },
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "An estimate needs at least one line item.")
+        self.assertEqual(response.status_code, 302)
         self.assertTrue(EstimateLineItem.objects.filter(pk=self.line.pk).exists())
+        self.assertEqual(self.estimate.line_items.count(), 1)
 
-    def test_estimate_status_timestamps_and_accepted_lock(self):
+    def test_legacy_estimate_cannot_be_sent_or_mutated(self):
         self.login_staff()
         response = self.browser.post(reverse("operations:estimate-send", kwargs={"pk": self.estimate.pk}))
         self.assertEqual(response.status_code, 302)
         self.estimate.refresh_from_db()
-        self.assertEqual(self.estimate.status, Estimate.Status.SENT)
-        self.assertIsNotNone(self.estimate.sent_at)
+        self.assertEqual(self.estimate.status, Estimate.Status.DRAFT)
+        self.assertIsNone(self.estimate.sent_at)
         old_title = self.estimate.title
-        self.estimate.status = Estimate.Status.ACCEPTED
-        self.estimate.save(update_fields=["status", "updated_at"])
         locked = self.browser.post(
             reverse("operations:estimate-update", kwargs={"pk": self.estimate.pk}),
             {"title": "Should not change"},
@@ -515,7 +517,7 @@ class OperationsWorkflowTests(TestCase):
         self.estimate.refresh_from_db()
         self.assertEqual(self.estimate.title, old_title)
 
-    def test_client_can_accept_assigned_estimate(self):
+    def test_client_cannot_accept_legacy_estimate_inside_gcc(self):
         self.estimate.status = Estimate.Status.SENT
         self.estimate.sent_at = timezone.now()
         self.estimate.save(update_fields=["status", "sent_at", "updated_at"])
@@ -525,11 +527,11 @@ class OperationsWorkflowTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.estimate.refresh_from_db()
-        self.assertEqual(self.estimate.status, Estimate.Status.ACCEPTED)
-        self.assertEqual(self.estimate.accepted_by_id, self.client_user.id)
-        self.assertIsNotNone(self.estimate.accepted_at)
+        self.assertEqual(self.estimate.status, Estimate.Status.SENT)
+        self.assertIsNone(self.estimate.accepted_by_id)
+        self.assertIsNone(self.estimate.accepted_at)
 
-    def test_accepted_estimate_creates_project_and_default_milestones(self):
+    def test_internal_accepted_estimate_cannot_create_project(self):
         estimate = Estimate.objects.create(
             lead=self.lead,
             client=self.client_record,
@@ -546,10 +548,50 @@ class OperationsWorkflowTests(TestCase):
         self.login_staff()
         response = self.browser.post(reverse("operations:estimate-project", kwargs={"pk": estimate.pk}))
         self.assertEqual(response.status_code, 302)
-        project = Project.objects.get(estimate=estimate)
-        self.assertEqual(project.client_id, self.client_record.id)
-        self.assertEqual(project.status, Project.Status.PLANNING)
-        self.assertEqual(project.milestones.count(), 5)
+        self.assertFalse(Project.objects.filter(estimate=estimate).exists())
+
+    def test_api_estimate_mutations_are_retired(self):
+        external_estimate = Estimate.objects.create(
+            client=self.client_record,
+            title="External estimate",
+            status=Estimate.Status.SENT,
+            external_url="https://estimates.example.com/kitchen",
+            external_status=Estimate.ExternalEstimateStatus.SENT,
+            external_client_visible=True,
+            created_by=self.staff,
+        )
+        unpublished_estimate = Estimate.objects.create(
+            client=self.client_record,
+            title="Unpublished external estimate",
+            status=Estimate.Status.SENT,
+            external_url="https://estimates.example.com/unpublished",
+            external_status=Estimate.ExternalEstimateStatus.SENT,
+            external_client_visible=False,
+            created_by=self.staff,
+        )
+        self.login_staff()
+        send_response = self.browser.post(
+            reverse("operations-api:estimate-send", kwargs={"pk": external_estimate.pk}),
+        )
+        self.assertEqual(send_response.status_code, 410)
+        self.assertIn("external estimate link", send_response.json()["error"].lower())
+        external_estimate.refresh_from_db()
+        self.assertEqual(external_estimate.status, Estimate.Status.SENT)
+
+        self.login_client()
+        accept_response = self.browser.post(
+            reverse("operations-api:estimate-accept", kwargs={"pk": external_estimate.pk}),
+        )
+        self.assertEqual(accept_response.status_code, 410)
+        self.assertIn("external estimate service", accept_response.json()["error"].lower())
+        external_estimate.refresh_from_db()
+        self.assertEqual(external_estimate.status, Estimate.Status.SENT)
+        self.assertIsNone(external_estimate.accepted_by_id)
+        list_response = self.browser.get(reverse("operations-api:estimates"))
+        self.assertEqual(list_response.status_code, 200)
+        listed_ids = {item["id"] for item in list_response.json()["results"]}
+        self.assertIn(str(external_estimate.pk), listed_ids)
+        self.assertNotIn(str(unpublished_estimate.pk), listed_ids)
 
     def test_project_milestones_and_updates_persist_with_visibility(self):
         self.login_staff()

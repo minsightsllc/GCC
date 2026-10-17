@@ -254,14 +254,38 @@ STATICFILES_BACKEND = (
     else 'django.contrib.staticfiles.storage.StaticFilesStorage'
 )
 
-# User uploads are local during development. Production can opt into the
-# Supabase S3-compatible backend without changing application code.
+# User uploads (including contact-form attachments) use MEDIA_ROOT locally
+# and Supabase in production. The only development opt-in is the isolated
+# provider-certification runner, which exercises Supabase against disposable
+# data without changing normal local development behavior.
 MEDIA_URL = '/media/'
 MEDIA_ROOT = _simulation_media_root or Path(
     _configured_media_root or (BASE_DIR / 'media')
 ).expanduser()
-USE_SUPABASE_STORAGE = os.getenv('USE_SUPABASE_STORAGE', '').lower() in {'1', 'true', 'yes'}
-USE_SUPABASE_CONTACT_STORAGE = os.getenv('USE_SUPABASE_CONTACT_STORAGE', '').lower() in {'1', 'true', 'yes'}
+
+
+def _should_use_supabase_upload_storage(
+    *, debug, simulation_mode, storage_smoke_enabled, explicit_request
+):
+    if not debug:
+        return True
+    return bool(
+        simulation_mode
+        and storage_smoke_enabled
+        and explicit_request
+    )
+
+
+_SUPABASE_STORAGE_REQUESTED = os.getenv('USE_SUPABASE_STORAGE', '').lower() in {'1', 'true', 'yes'}
+USE_SUPABASE_STORAGE = _should_use_supabase_upload_storage(
+    debug=DEBUG,
+    simulation_mode=GCC_SIMULATION_MODE,
+    storage_smoke_enabled=GCC_STORAGE_SMOKE_ENABLED,
+    explicit_request=_SUPABASE_STORAGE_REQUESTED,
+)
+# Keep the legacy setting name available, but make contact uploads use the
+# same environment-selected backend as every other user upload.
+USE_SUPABASE_CONTACT_STORAGE = USE_SUPABASE_STORAGE
 
 SUPABASE_STORAGE_ENV_VALUES = (
     os.getenv('SUPABASE_S3_ENDPOINT'),
@@ -270,7 +294,7 @@ SUPABASE_STORAGE_ENV_VALUES = (
     os.getenv('SUPABASE_STORAGE_BUCKET'),
     os.getenv('SUPABASE_S3_REGION'),
 )
-if (USE_SUPABASE_STORAGE or USE_SUPABASE_CONTACT_STORAGE) and not all(SUPABASE_STORAGE_ENV_VALUES):
+if USE_SUPABASE_STORAGE and not all(SUPABASE_STORAGE_ENV_VALUES):
     raise ImproperlyConfigured(
         'Supabase storage requires SUPABASE_S3_ENDPOINT, SUPABASE_S3_ACCESS_KEY, '
         'SUPABASE_S3_SECRET_KEY, SUPABASE_STORAGE_BUCKET, and SUPABASE_S3_REGION.'
@@ -301,13 +325,12 @@ STORAGES = {
     },
 }
 
-if USE_SUPABASE_CONTACT_STORAGE:
-    STORAGES['contact_submissions'] = {
+if USE_SUPABASE_STORAGE:
+    _SUPABASE_STORAGE_CONFIG = {
         'BACKEND': 'storages.backends.s3.S3Storage',
         'OPTIONS': SUPABASE_STORAGE_OPTIONS,
     }
-
-if USE_SUPABASE_STORAGE:
+    STORAGES['contact_submissions'] = _SUPABASE_STORAGE_CONFIG.copy()
     STORAGES['default'] = {
         'BACKEND': 'storages.backends.s3.S3Storage',
         'OPTIONS': SUPABASE_STORAGE_OPTIONS,
@@ -651,12 +674,6 @@ UNFOLD = {
                         'title': 'Public site',
                         'icon': 'open_in_new',
                         'link': '/',
-                        'permission': _superuser_permission,
-                    },
-                    {
-                        'title': 'Client portal',
-                        'icon': 'account_circle',
-                        'link': '/portal/',
                         'permission': _superuser_permission,
                     },
                 ],

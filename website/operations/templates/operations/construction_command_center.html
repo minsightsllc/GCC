@@ -1,7 +1,7 @@
 {% extends "operations/base.html" %}
 {% load static %}
 
-{% block title %}Command center | Grand Coast Construction Inc.{% endblock %}
+{% block title %}Overview | Grand Coast Construction Inc.{% endblock %}
 {% block body_class %}admin-site{% endblock %}
 
 {% block body %}
@@ -10,10 +10,10 @@
     <aside class="admin-sidebar" data-admin-sidebar>
         <div class="admin-brand"><a href="{% url 'operations:home' %}" aria-label="Return to public site"><span class="admin-logo-frame"><img src="{% static 'operations/images/gcc-logo.png' %}" alt="Grand Coast Construction Inc. logo"></span><span><strong>Grand Coast</strong><small>Construction Inc.</small></span></a></div>
         {% include "operations/sidebar_nav.html" %}
-        <div class="sidebar-footer"><div class="sidebar-user"><span class="avatar">{{ request.user.first_name|slice:':1'|default:request.user.username|slice:':1'|upper }}</span><span><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Staff account</small></span></div><a class="sidebar-back" href="{% url 'operations:portal' %}">View client portal</a><a class="sidebar-back" href="{% url 'admin:index' %}">Administration home</a><form method="post" action="{% url 'operations:logout' %}">{% csrf_token %}<button class="sidebar-reset" type="submit">Sign out</button></form></div>
+        <div class="sidebar-footer"><div class="sidebar-user"><span class="avatar">{{ request.user.first_name|slice:':1'|default:request.user.username|slice:':1'|upper }}</span><span><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Staff account</small></span></div><a class="sidebar-back" href="{% url 'admin:index' %}">Administration home</a><form method="post" action="{% url 'operations:logout' %}">{% csrf_token %}<button class="sidebar-reset" type="submit">Sign out</button></form></div>
     </aside>
     <div class="admin-main">
-        <header class="admin-topbar"><button class="admin-menu-toggle" type="button" data-admin-menu-toggle aria-expanded="false" aria-label="Open Operations navigation">Menu</button><div><span class="admin-breadcrumb">Grand Coast / Operating system</span><h1>Command center</h1></div><div class="admin-top-actions"><a class="topbar-link" href="{% url 'operations:dashboard-section' section='overview' %}">Workspace overview</a>{% if execution_loop_available %}<a class="topbar-link" href="{% url 'operations:weekly-review' %}">Weekly action list</a>{% endif %}<a class="button button-primary button-small" href="{% url 'operations:dashboard-section' section='leads' %}?new=lead">+ New lead</a></div></header>
+        <header class="admin-topbar"><button class="admin-menu-toggle" type="button" data-admin-menu-toggle aria-expanded="false" aria-label="Open Operations navigation">Menu</button><div><span class="admin-breadcrumb">Grand Coast / Operations</span><h1>Overview</h1></div><div class="admin-top-actions">{% if execution_loop_available %}<a class="topbar-link" href="{% url 'operations:weekly-review' %}">Weekly action list</a>{% endif %}<a class="button button-primary button-small" href="{% url 'operations:dashboard-section' section='leads' %}?new=lead">+ New lead</a></div></header>
         <div class="admin-workspace-notice"><span class="staging-label">OWNER WORKSPACE</span><span>Action-first operations view · {% now "l, F j" %}</span><span class="staging-spacer"></span><span class="admin-workspace-user">{{ request.user.get_full_name|default:request.user.username }}</span></div>
         {% if last_invite_url %}<div class="dashboard-alert"><strong>{% if last_invite_email_status == 'sent' %}Client invite emailed.{% elif last_invite_email_status == 'failed' %}Client invite email failed.{% else %}Client invite ready.{% endif %}</strong><span>{% if last_invite_email_status == 'sent' %}Sent to {{ last_invite_recipient }}. Copy the one-time link as a backup:{% elif last_invite_email_status == 'failed' %}Use the one-time copy link below:{% else %}Email is pending or disabled. Copy the one-time link below:{% endif %}</span><a href="{{ last_invite_url }}">{{ last_invite_url }}</a></div>{% endif %}
         <main class="admin-content construction-content">

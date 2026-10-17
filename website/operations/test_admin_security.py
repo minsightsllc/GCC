@@ -26,6 +26,7 @@ from .models import (
 from .security import client_ip, record_admin_security_event, retry_pending_admin_security_emails
 
 
+@override_settings(GCC_TURNSTILE_ENABLED=False)
 class PrivateAdminSecurityTests(TestCase):
     @classmethod
     def setUpTestData(cls):

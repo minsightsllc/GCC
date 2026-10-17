@@ -123,6 +123,11 @@ class ConstructionOperatingSystemTests(TestCase):
             title="Beachmont kitchen renovation",
             status=Estimate.Status.ACCEPTED,
             deposit_amount=Decimal("30000.00"),
+            external_url="https://estimates.example.com/beachmont-kitchen",
+            external_status=Estimate.ExternalEstimateStatus.APPROVED,
+            external_status_at=timezone.now(),
+            external_status_by=self.owner,
+            external_client_visible=True,
         )
         EstimateLineItem.objects.create(
             estimate=self.estimate,
@@ -350,6 +355,9 @@ class ConstructionOperatingSystemTests(TestCase):
         self.assertEqual(field_project_view.status_code, 200)
         self.assertContains(field_project_view, "Owner / assigned manager")
         self.assertNotContains(field_project_view, "Current contract")
+        self.assertContains(field_project_view, 'href="/team/"')
+        self.assertNotContains(field_project_view, 'href="/dashboard/"')
+        self.assertNotContains(field_project_view, "Legacy project view")
 
     @override_settings(
         GCC_OWNER_COMMAND_CENTER_ENABLED=False,
@@ -709,6 +717,18 @@ class ConstructionOperatingSystemTests(TestCase):
             self.assertEqual(review.status_code, 200)
             self.assertContains(review, "Weekly action list")
             self.assertContains(review, project.title)
+
+        self.http.force_login(self.field)
+        with self.settings(
+            GCC_EXECUTION_LOOP_ENABLED=True,
+            GCC_EXECUTION_LOOP_PROJECT_IDS="",
+            GCC_EXECUTION_LOOP_USER_IDS="",
+            GCC_OPERATING_SYSTEM_ENABLED=True,
+        ):
+            employee_review = self.http.get(reverse("operations:weekly-review"))
+            self.assertEqual(employee_review.status_code, 200)
+            self.assertContains(employee_review, 'href="/team/"')
+            self.assertNotContains(employee_review, 'href="/dashboard/"')
 
     @override_settings(
         GCC_EXECUTION_LOOP_ENABLED=True,

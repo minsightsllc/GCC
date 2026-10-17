@@ -9,9 +9,7 @@
     <span class="staging-label">CLIENT PORTAL</span>
     <span>Project updates, decisions, and next steps in one place.</span>
     <span class="staging-spacer"></span>
-    {% if request.user.is_staff %}
-        <a href="{% url 'operations:dashboard' %}">&larr; Return to Operations</a>
-    {% else %}
+    {% if not request.user.is_staff %}
         <form method="post" action="{% url 'operations:logout' %}">{% csrf_token %}<button class="portal-signout" type="submit">Sign out</button></form>
     {% endif %}
 </div>

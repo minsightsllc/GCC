@@ -19,7 +19,6 @@ from django.utils import timezone
 
 from .construction_services import (
     accept_agreement,
-    accept_estimate,
     advance_selection,
     approve_change_order,
     complete_closeout_item,
@@ -43,6 +42,7 @@ from .construction_services import (
     record_deposit,
     record_inspection_result,
     record_material_request_status,
+    record_external_estimate_status,
     record_payment,
     record_permit_status,
     record_project_task_status,
@@ -50,7 +50,6 @@ from .construction_services import (
     request_material,
     resolve_problem_report,
     resolve_warranty_item,
-    send_estimate,
     set_milestone_status,
     submit_daily_report,
     submit_problem_report,
@@ -66,7 +65,6 @@ from .models import (
     EmployeeNotification,
     EmployeeProfile,
     Estimate,
-    EstimateLineItem,
     Inspection,
     Lead,
     MaterialRequest,
@@ -241,52 +239,83 @@ def _run_inquiry(accounts, checks):
         client=client,
         title="Harbor View Whole-home Renovation",
         status=Estimate.Status.DRAFT,
-        deposit_amount=Decimal("38000.00"),
-        notes="Final scope estimate based on the completed site visit.",
-        estimate_kind=Estimate.Kind.FINAL,
-        exclusions="Owner appliances beyond allowance; temporary housing.",
-        assumptions="Normal weekday access and one consolidated finish review.",
-        timeline_summary="Twenty-four week construction sequence.",
-        warranty_terms="One-year workmanship warranty after closeout.",
-        payment_schedule=[
-            {"description": "Framing and rough-in draw", "amount": "55000.00"},
-            {"description": "Finish installation draw", "amount": "60000.00"},
-            {"description": "Final completion draw", "amount": "37000.00"},
-        ],
+        notes="Staff note: Final scope verified in the external estimate service.",
+        external_url="https://estimates.example.com/simulation/harbor-view",
+        external_total=Decimal("190000.00"),
+        external_deposit_amount=Decimal("38000.00"),
         created_by=sales,
     )
-    line_specs = [
-        ("Labor and project supervision", EstimateLineItem.Category.LABOR, "70000.00", "45000.00", False, False),
-        ("Materials and fixtures", EstimateLineItem.Category.MATERIALS, "60000.00", "40000.00", False, False),
-        ("Subcontractor scopes", EstimateLineItem.Category.SUBCONTRACTOR, "45000.00", "30000.00", False, False),
-        ("Finish allowance", EstimateLineItem.Category.ALLOWANCE, "15000.00", "10000.00", False, True),
-        ("Owner-provided appliances", EstimateLineItem.Category.OWNER_PROVIDED, "0.00", "0.00", True, False),
-    ]
-    for index, (description, category, price, cost, owner_provided, is_allowance) in enumerate(line_specs, start=1):
-        EstimateLineItem.objects.create(
-            estimate=estimate,
-            description=description,
-            quantity=Decimal("1.00"),
-            unit_price=Decimal(price),
-            estimated_cost=Decimal(cost),
-            category=category,
-            owner_provided=owner_provided,
-            is_allowance=is_allowance,
-            sort_order=index,
-        )
-    _check(checks, "estimate supports scoped pricing", estimate.total == Decimal("190000.00") and estimate.line_items.filter(category=EstimateLineItem.Category.ALLOWANCE).exists() and estimate.line_items.filter(owner_provided=True).exists())
-    estimate = send_estimate(estimate, actor=sales, idempotency_key=_key("estimate-send"))
-    send_estimate(estimate, actor=sales, idempotency_key=_key("estimate-send"))
-    estimate, accepted = accept_estimate(estimate, actor=client_user, idempotency_key=_key("estimate-accept"))
-    estimate_retry, estimate_retry_created = accept_estimate(estimate, actor=client_user, idempotency_key=_key("estimate-accept"))
-    _check(checks, "estimate acceptance is immutable and retry-safe", accepted and not estimate_retry_created and estimate.pk == estimate_retry.pk and estimate.locked_at is not None)
+    _check(checks, "estimate uses an external link without copying provider line items", bool(estimate.external_url) and estimate.line_items.count() == 0 and estimate.external_total == Decimal("190000.00"))
+    estimate, sent = record_external_estimate_status(
+        estimate,
+        actor=owner,
+        status=Estimate.ExternalEstimateStatus.SENT,
+        external_client_visible=True,
+        idempotency_key=_key("estimate-send"),
+    )
+    estimate_retry, sent_retry = record_external_estimate_status(
+        estimate,
+        actor=owner,
+        status=Estimate.ExternalEstimateStatus.SENT,
+        external_client_visible=True,
+        idempotency_key=_key("estimate-send"),
+    )
+    _check(checks, "external estimate delivery is published and retry-safe", sent and not sent_retry and estimate.pk == estimate_retry.pk and estimate.external_client_visible)
+    estimate, approved = record_external_estimate_status(
+        estimate,
+        actor=owner,
+        status=Estimate.ExternalEstimateStatus.APPROVED,
+        idempotency_key=_key("estimate-approval"),
+    )
+    estimate_retry, approval_retry = record_external_estimate_status(
+        estimate,
+        actor=owner,
+        status=Estimate.ExternalEstimateStatus.APPROVED,
+        idempotency_key=_key("estimate-approval"),
+    )
+    _check(checks, "external approval is staff-recorded and retry-safe", approved and not approval_retry and estimate.pk == estimate_retry.pk and estimate.locked_at is not None and estimate.accepted_by_id is None and estimate.external_status_by_id == owner.pk)
 
     project, project_created = create_project_from_estimate(estimate, actor=owner, idempotency_key=_key("estimate-to-project"))
     project_retry, project_retry_created = create_project_from_estimate(estimate, actor=owner, idempotency_key=_key("estimate-to-project"))
     project.assigned_staff.add(manager, accounts["office"], field)
+    for description, category, amount in (
+        ("Project labor and supervision", BudgetLine.Category.LABOR, "70000.00"),
+        ("Project materials and fixtures", BudgetLine.Category.MATERIALS, "60000.00"),
+        ("Project subcontractor scopes", BudgetLine.Category.SUBCONTRACTOR, "45000.00"),
+        ("Project permits and allowances", BudgetLine.Category.PERMITS, "15000.00"),
+    ):
+        BudgetLine.objects.create(
+            project=project,
+            description=description,
+            category=category,
+            original_budget=Decimal(amount),
+            created_by=owner,
+        )
+    PaymentSchedule.objects.get_or_create(
+        project=project,
+        sequence=2,
+        defaults={
+            "description": "Selections milestone draw",
+            "amount": Decimal("55000.00"),
+            "status": PaymentSchedule.Status.PENDING,
+            "milestone": project.milestones.get(sort_order=3),
+            "created_by": owner,
+        },
+    )
+    PaymentSchedule.objects.get_or_create(
+        project=project,
+        sequence=3,
+        defaults={
+            "description": "Final completion draw",
+            "amount": Decimal("97000.00"),
+            "status": PaymentSchedule.Status.PENDING,
+            "milestone": project.milestones.get(sort_order=5),
+            "created_by": owner,
+        },
+    )
     project.target_date = timezone.localdate() + timedelta(days=180)
     project.save(update_fields=["target_date", "updated_at"])
-    _check(checks, "estimate creates one project and carries scope", project_created and not project_retry_created and project.pk == project_retry.pk and Project.objects.filter(estimate=estimate).count() == 1 and project.budget_lines.count() == estimate.line_items.count() and project.site_visits.filter(pk=visit.pk).exists())
+    _check(checks, "approved external estimate creates one setup project", project_created and not project_retry_created and project.pk == project_retry.pk and Project.objects.filter(estimate=estimate).count() == 1 and project.budget_lines.count() == 4 and project.site_visits.filter(pk=visit.pk).exists())
 
     agreement = Agreement.objects.get(project=project)
     agreement.signed_pdf = _pdf_file("signed-agreement.pdf")
@@ -580,7 +609,7 @@ def _run_financials_and_reporting(context, checks):
     _check(checks, "notifications and email outbox stay local", len(employee_alerts) == 3 and len(client_alerts) == 1 and EmployeeNotification.objects.filter(project=project).count() >= 3 and ClientNotification.objects.filter(project=project).count() >= 1 and outbox.status == EmailOutbox.Status.FAILED)
 
     financials = project_financial_summary(project)
-    _check(checks, "financial summary calculates contract, margin, and forecast", financials["original_contract"] == Decimal("190000.00") and financials["approved_changes"] == Decimal("12000.00") and financials["current_contract"] == Decimal("202000.00") and financials["payments_received"] == Decimal("93000.00") and financials["actual_costs"] == Decimal("20000.00") and financials["committed_costs"] == Decimal("30000.00") and financials["gross_margin"] > Decimal("0.00") and financials["forecast_profit"] == Decimal("152000.00"))
+    _check(checks, "financial summary uses external contract total and project budgets", financials["original_contract"] == Decimal("190000.00") and financials["approved_changes"] == Decimal("12000.00") and financials["current_contract"] == Decimal("202000.00") and financials["payments_received"] == Decimal("93000.00") and financials["actual_costs"] == Decimal("20000.00") and financials["committed_costs"] == Decimal("30000.00") and financials["gross_margin"] > Decimal("0.00") and financials["forecast_profit"] == Decimal("152000.00"))
 
     from .construction_services import attention_feed, company_metrics, weekly_project_review
 

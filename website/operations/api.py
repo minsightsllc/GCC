@@ -51,7 +51,6 @@ from .construction_policies import (
 )
 from .construction_services import (
     accept_agreement,
-    accept_estimate,
     advance_selection,
     approve_change_order,
     complete_closeout_item,
@@ -72,7 +71,6 @@ from .construction_services import (
     request_material,
     resolve_problem_report,
     resolve_warranty_item,
-    send_estimate,
     submit_problem_report,
     submit_daily_report,
     weekly_project_review,
@@ -1144,15 +1142,13 @@ def api_v1_estimates(request):
 @_api_access
 def api_v1_estimate_send(request, pk):
     try:
-        payload = _body(request)
-        key = _required_idempotency_key(request, payload)
-        estimate = get_object_or_404(_visible_estimates(request.user), pk=pk)
-        estimate = send_estimate(estimate, actor=request.user, idempotency_key=key)
-        return JsonResponse({"estimate": {"id": str(estimate.pk), "status": estimate.status}})
+        get_object_or_404(_visible_estimates(request.user), pk=pk)
+        return _error(
+            "GCC no longer sends internal estimates. Send the saved external estimate link from the Owner workspace.",
+            410,
+        )
     except PermissionDenied as exc:
         return _error(exc, 403)
-    except ValidationError as exc:
-        return _error(exc, 400)
 
 
 @never_cache
@@ -1160,20 +1156,13 @@ def api_v1_estimate_send(request, pk):
 @_api_access
 def api_v1_estimate_accept(request, pk):
     try:
-        payload = _body(request)
-        key = _required_idempotency_key(request, payload)
-        estimate = get_object_or_404(_visible_estimates(request.user), pk=pk)
-        estimate, accepted = accept_estimate(
-            estimate,
-            actor=request.user,
-            request=request,
-            idempotency_key=key,
+        get_object_or_404(_visible_estimates(request.user), pk=pk)
+        return _error(
+            "Estimate responses are completed in the external estimate service. GCC records the result after staff verification.",
+            410,
         )
-        return JsonResponse({"accepted": accepted, "status": estimate.status})
     except PermissionDenied as exc:
         return _error(exc, 403)
-    except ValidationError as exc:
-        return _error(exc, 400)
 
 
 @never_cache
