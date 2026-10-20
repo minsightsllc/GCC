@@ -123,6 +123,7 @@ from .security import (
     admin_user_block,
     confirmed_totp_device,
     is_active_admin,
+    gate_is_valid,
     mark_mobile_owner_session,
     mobile_owner_factor_locked,
     pending_mobile_owner_user,
@@ -619,6 +620,7 @@ def staff_required(view_func):
     def wrapped(request, *args, **kwargs):
         if not _can_access_dashboard(request.user):
             raise PermissionDenied
+        gate_is_valid(request, request.user)
         return view_func(request, *args, **kwargs)
 
     return wrapped
@@ -635,12 +637,21 @@ def team_required(view_func):
     return wrapped
 
 
-def staff_or_field_required(view_func):
+def workspace_staff_required(view_func):
     @wraps(view_func)
     @login_required
     def wrapped(request, *args, **kwargs):
-        if not _can_access_team(request.user):
+        # These handlers are shared by the Owner dashboard and employee
+        # workspace. Authorize according to the URL's workspace.
+        allowed = (
+            _can_access_team(request.user)
+            if request.path.startswith("/team/")
+            else _can_access_dashboard(request.user)
+        )
+        if not allowed:
             raise PermissionDenied
+        if not request.path.startswith("/team/"):
+            gate_is_valid(request, request.user)
         return view_func(request, *args, **kwargs)
 
     return wrapped
@@ -1116,7 +1127,11 @@ def _dashboard_context(request, section, form_overrides=None):
         "project_update_form": ProjectUpdateForm(),
         "media_upload_form": MediaUploadForm(project_queryset=Project.objects.all()),
         "content_form": _content_form(site_settings, services, process_steps),
-        "lead_note_form": LeadNoteForm(instance=selected_lead, prefix="note") if selected_lead else LeadNoteForm(prefix="note"),
+        "lead_note_form": (
+            LeadNoteForm(instance=selected_lead, prefix="admin-note")
+            if selected_lead
+            else LeadNoteForm(prefix="admin-note")
+        ),
         "lead_assignment_form": LeadAssignmentForm(instance=selected_lead, staff_queryset=_staff_users()) if selected_lead else LeadAssignmentForm(staff_queryset=_staff_users()),
         "follow_up_form": QuickTaskForm(prefix="followup", staff_queryset=_staff_users()),
         "external_estimate_status_form": (
@@ -1173,6 +1188,9 @@ def _dashboard_context(request, section, form_overrides=None):
         "estimates": estimates,
         "selected_estimate": selected_estimate,
         "text_client_href": text_client_href,
+        "estimate_delivery_prompt": request.GET.get("delivery_prompt") == "1",
+        "estimate_sms_followup": request.GET.get("sms_followup") == "1",
+        "estimate_sms_after_other_channels": request.GET.get("sms_after_other_channels") == "1",
         "external_estimate_enabled": external_estimate_enabled,
         "can_manage_external_estimate_status": bool(
             external_estimate_enabled
@@ -2277,13 +2295,30 @@ def lead_convert_client(request, pk):
         actor=request.user,
         idempotency_key=f"lead-client:{lead.pk}",
     )
+    if client is None:
+        messages.error(
+            request,
+            "The client record could not be linked to this lead. Please try again or contact support.",
+        )
+        return _workspace_redirect(request, "leads", lead=lead.pk)
     if client.user_id:
-        next_step = "Client portal access is active; you can now add and send an external estimate link."
+        confirmation = (
+            f"You have now converted {lead.name} to a client. Their dashboard access is already active; "
+            "they can sign in with their existing account. Contact them if they are having trouble."
+        )
     elif client.email:
-        next_step = "Next: create a portal invitation from the client record, then add an external estimate link."
+        confirmation = (
+            f"You have now converted {lead.name} to a client. Next, send a sign-in invitation link "
+            "to their email from the client record. They must use that link to access their dashboard. "
+            "Contact them if they are having trouble."
+        )
     else:
-        next_step = "Next: add the client’s email, then create a portal invitation before sending an estimate link."
-    messages.success(request, f"{lead.name} is now a client record. {next_step}")
+        confirmation = (
+            f"You have now converted {lead.name} to a client. Add their email address, then send a "
+            "sign-in invitation link so they can access their dashboard. Contact them if they are "
+            "having trouble."
+        )
+    messages.success(request, confirmation)
     return _workspace_redirect(request, "clients", client=client.pk)
 
 
@@ -2417,13 +2452,84 @@ def _project_notification_url(project, *, team=False):
     )
 
 
-def _portal_notification_url(client, *, project=None, estimate=None):
+def _task_notification_url(task, *, team=False):
+    route = "operations:team-section" if team else "operations:dashboard-section"
+    return (
+        reverse(route, kwargs={"section": "tasks"})
+        + "?"
+        + urlencode({"task": task.pk})
+    )
+
+
+def _queue_employee_notifications_by_workspace(
+    recipients,
+    *,
+    owner_destination_url,
+    employee_destination_url,
+    **notification_kwargs,
+):
+    """Queue one notification per recipient with a link for their workspace."""
+    unique_recipients = {}
+    for recipient in recipients:
+        recipient_id = getattr(recipient, "pk", None)
+        if recipient_id is not None:
+            unique_recipients.setdefault(recipient_id, recipient)
+
+    owners = [user for user in unique_recipients.values() if user.is_superuser]
+    employees = [user for user in unique_recipients.values() if not user.is_superuser]
+    queued = []
+    if owners:
+        queued.extend(
+            queue_employee_notifications(
+                owners,
+                destination_url=owner_destination_url,
+                **notification_kwargs,
+            )
+        )
+    if employees:
+        queued.extend(
+            queue_employee_notifications(
+                employees,
+                destination_url=employee_destination_url,
+                **notification_kwargs,
+            )
+        )
+    return queued
+
+
+def _portal_notification_url(client, *, project=None, estimate=None, section=None):
     query = {"client": client.pk}
     if project is not None:
         query["project"] = project.pk
     if estimate is not None:
         query["estimate"] = estimate.pk
-    return f"{reverse('operations:portal')}?{urlencode(query)}"
+    if section:
+        destination = reverse("operations:portal-section", kwargs={"section": section})
+    else:
+        destination = reverse("operations:portal")
+    return f"{destination}?{urlencode(query)}"
+
+
+def _client_notification_requires_message_open(notification):
+    message = notification.message if notification.message_id else None
+    return bool(
+        message
+        and message.client_id == notification.client_id
+        and not message.is_read
+        and (
+            notification.kind == "employee-reply"
+            or (message.sent_by_id and message.sent_by.is_staff)
+        )
+    )
+
+
+def _client_message_notification_url(client, notification):
+    project = notification.project
+    if project is None and notification.message_id:
+        project = notification.message.project
+    if project is not None and project.client_id != client.pk:
+        project = None
+    return _portal_notification_url(client, project=project, section="messages")
 
 
 def _notify_project_staff(
@@ -2446,12 +2552,13 @@ def _notify_project_staff(
         recipients += list(additional_recipients)
     if notify_owners:
         recipients += _owner_notification_recipients()
-    return queue_employee_notifications(
+    return _queue_employee_notifications_by_workspace(
         recipients,
+        owner_destination_url=_project_notification_url(project),
+        employee_destination_url=_project_notification_url(project, team=True),
         kind=kind,
         title=title,
         body=body,
-        destination_url=_project_notification_url(project, team=True),
         metadata=metadata,
         created_by=created_by,
         exclude_users=[created_by] if created_by else None,
@@ -2519,16 +2626,13 @@ def _notify_task_participants(
     created_by=None,
     notify_owners=True,
 ):
-    return queue_employee_notifications(
+    return _queue_employee_notifications_by_workspace(
         _task_notification_recipients(task, notify_owners=notify_owners),
+        owner_destination_url=_task_notification_url(task),
+        employee_destination_url=_task_notification_url(task, team=True),
         kind=kind,
         title=title,
         body=body,
-        destination_url=(
-            _project_notification_url(task.project, team=True)
-            if task.project_id
-            else reverse("operations:team-section", kwargs={"section": "tasks"})
-        ),
         metadata={"task_id": str(task.pk)},
         created_by=created_by,
         exclude_users=[created_by] if created_by else None,
@@ -2758,7 +2862,7 @@ def calendar_day_update(request):
 
 
 @require_POST
-@team_required
+@staff_required
 def schedule_create(request):
     if not _can_manage_schedule(request.user):
         raise PermissionDenied
@@ -2797,7 +2901,7 @@ def schedule_create(request):
 
 
 @require_POST
-@team_required
+@staff_required
 def schedule_update(request, pk):
     if not _can_manage_schedule(request.user):
         raise PermissionDenied
@@ -2868,7 +2972,7 @@ def schedule_update(request, pk):
 
 
 @require_POST
-@team_required
+@staff_required
 def schedule_delete(request, pk):
     if not _can_manage_schedule(request.user):
         raise PermissionDenied
@@ -2902,7 +3006,7 @@ def schedule_delete(request, pk):
 
 
 @require_POST
-@team_required
+@staff_required
 def weekly_schedule_update(request):
     if not _can_manage_schedule(request.user):
         raise PermissionDenied
@@ -2995,7 +3099,7 @@ def weekly_schedule_update(request):
 
 
 @require_POST
-@team_required
+@staff_required
 def employee_day_schedule_update(request):
     if not _can_manage_schedule(request.user):
         raise PermissionDenied
@@ -3490,7 +3594,7 @@ def agreement_file(request, pk):
 
 
 @require_POST
-@team_required
+@workspace_staff_required
 @transaction.atomic
 def staff_message_reply(request, client_pk):
     team_mode = request.path.startswith("/team/")
@@ -3521,7 +3625,7 @@ def staff_message_reply(request, client_pk):
             kind="employee-reply",
             title="Grand Coast replied to your message",
             body="A member of the Grand Coast team replied in your client portal.",
-            destination_url=_portal_notification_url(client, project=project),
+            destination_url=_portal_notification_url(client, project=project, section="messages"),
             metadata={"client_id": str(client.pk)},
             created_by=request.user,
             project=project,
@@ -3762,13 +3866,13 @@ def lead_toggle_priority(request, pk):
 @staff_required
 def lead_update_note(request, pk):
     lead = _active_lead_or_404(pk)
-    form = LeadNoteForm(request.POST, instance=lead, prefix="note")
+    form = LeadNoteForm(request.POST, instance=lead, prefix="admin-note")
     if form.is_valid():
         lead = form.save()
-        record_activity("Lead note updated", f"{lead.name} · Lead record", actor=request.user, lead=lead)
-        messages.success(request, "Lead note saved.")
+        record_activity("Internal admin note updated", f"{lead.name} · Lead record", actor=request.user, lead=lead)
+        messages.success(request, "Admin note saved. It is visible only to staff.")
     else:
-        messages.error(request, "Please correct the lead note and try again.")
+        messages.error(request, "Please correct the admin note and try again.")
         return _render_dashboard_form_error(
             request,
             "leads",
@@ -3854,7 +3958,7 @@ def estimate_create(request):
                 estimate=estimate,
             )
         messages.success(request, f"Estimate #{estimate.number} created.")
-        return _dashboard_redirect("estimates", estimate=estimate.pk)
+        return _dashboard_redirect("estimates", estimate=estimate.pk, delivery_prompt="1")
     messages.error(request, "Choose a client and provide a secure external estimate link.")
     return _render_dashboard_form_error(
         request,
@@ -3867,7 +3971,7 @@ def estimate_create(request):
 @require_POST
 @staff_required
 def external_estimate_send(request, pk):
-    """Email the saved estimate link and publish it to the client portal."""
+    """Deliver an external estimate through the explicitly selected channels."""
     estimate = get_object_or_404(
         Estimate.objects.select_related("client"),
         pk=pk,
@@ -3875,80 +3979,172 @@ def external_estimate_send(request, pk):
     if not can_manage_external_estimate(request.user, estimate=estimate):
         raise PermissionDenied
     client = estimate.client
-    if not estimate.external_url or not client or not client.email:
-        messages.error(request, "Add an estimate link and a client email before sending.")
+    if not estimate.external_url or not client:
+        messages.error(request, "Add an estimate link and client before sending.")
         return _dashboard_redirect("estimates", estimate=estimate.pk)
+
+    submitted_modes = {
+        str(mode).strip().lower()
+        for mode in request.POST.getlist("delivery_mode")
+        if str(mode).strip()
+    }
+    valid_modes = {"sms", "email", "portal", "all", "email_portal"}
+    if submitted_modes - valid_modes:
+        messages.error(request, "Choose valid estimate delivery methods.")
+        return _dashboard_redirect("estimates", estimate=estimate.pk, delivery_prompt="1")
+
+    selected_channels = submitted_modes & {"sms", "email", "portal"}
+    if request.POST.get("delivery_all") == "1" or submitted_modes & {"all"}:
+        selected_channels = {"sms", "email", "portal"}
+    elif "email_portal" in submitted_modes:
+        selected_channels.update({"email", "portal"})
+    if not selected_channels:
+        messages.error(request, "Select at least one estimate delivery method.")
+        return _dashboard_redirect("estimates", estimate=estimate.pk, delivery_prompt="1")
+
+    send_sms = "sms" in selected_channels
+    send_email = "email" in selected_channels
+    publish_to_portal = "portal" in selected_channels
+    if send_sms and not any(character.isdigit() for character in str(client.phone or "")):
+        messages.error(request, "Add a client phone number before choosing text message delivery.")
+        return _dashboard_redirect("estimates", estimate=estimate.pk, delivery_prompt="1")
+    if send_email and not client.email:
+        messages.error(request, "Add a client email address before choosing email delivery.")
+        return _dashboard_redirect("estimates", estimate=estimate.pk, delivery_prompt="1")
+
+    if selected_channels == {"sms"}:
+        messages.info(
+            request,
+            "Open the text message draft and tap Send. After sending it, record the estimate as Sent in Update estimate.",
+        )
+        return _dashboard_redirect("estimates", estimate=estimate.pk, sms_followup="1")
 
     idempotency_key = str(request.POST.get("idempotency_key") or "").strip()
     if not idempotency_key:
         idempotency_key = f"external-estimate-email:{estimate.pk}:{uuid.uuid4().hex}"
     idempotency_key = idempotency_key[:100]
+
     with transaction.atomic():
         locked = Estimate.objects.select_for_update().select_related("client").get(pk=estimate.pk)
-        if locked.external_status == Estimate.ExternalEstimateStatus.NOT_STARTED:
+        if locked.external_status == Estimate.ExternalEstimateStatus.REJECTED:
+            messages.error(request, "This estimate is closed. Create a new estimate if the scope has changed.")
+            return _dashboard_redirect("estimates", estimate=estimate.pk)
+        target_status = (
+            Estimate.ExternalEstimateStatus.SENT
+            if publish_to_portal and locked.external_status == Estimate.ExternalEstimateStatus.NOT_STARTED
+            else locked.external_status
+        )
+        target_visibility = True if publish_to_portal else locked.external_client_visible
+        if target_visibility != locked.external_client_visible or (
+            publish_to_portal and target_status != locked.external_status
+        ):
             locked, _created = record_external_estimate_status(
                 locked,
                 actor=request.user,
-                status=Estimate.ExternalEstimateStatus.SENT,
+                status=target_status,
                 external_url=locked.external_url,
-                external_client_visible=True,
+                external_client_visible=target_visibility,
                 idempotency_key=f"{idempotency_key}:status",
             )
-        elif not locked.external_client_visible:
-            locked, _created = record_external_estimate_status(
-                locked,
-                actor=request.user,
-                status=locked.external_status,
-                external_url=locked.external_url,
-                external_client_visible=True,
-                idempotency_key=f"{idempotency_key}:portal",
-            )
-        outbox = queue_email(
-            recipient=client.email,
-            subject="Your Grand Coast estimate is ready",
-            body=(
-                f"Hello {client.name},\n\n"
-                "Your Grand Coast Construction estimate is ready to review. "
-                "Open it here:\n\n"
-                f"{locked.external_url}\n\n"
-                + (
-                    "The same link is available in your Grand Coast client portal.\n\n"
+        outbox = None
+        if send_email:
+            portal_copy = (
+                (
+                    "The same link is also available in your Grand Coast client portal.\n\n"
                     if client.user_id
-                    else "This link is saved for your Grand Coast client portal. Portal access is separate and will be available after your invitation is accepted.\n\n"
+                    else "The link will be available in your Grand Coast client portal after you accept your invitation.\n\n"
                 )
-                + "Grand Coast Construction"
-            ),
-            actor=request.user,
-            client=client,
-            idempotency_key=idempotency_key,
-        )
+                if publish_to_portal
+                else ""
+            )
+            outbox = queue_email(
+                recipient=client.email,
+                subject="Your Grand Coast estimate is ready",
+                body=(
+                    f"Hello {client.name},\n\n"
+                    "Your Grand Coast Construction estimate is ready to review. "
+                    "Open it here:\n\n"
+                    f"{locked.external_url}\n\n"
+                    f"{portal_copy}"
+                    "Grand Coast Construction"
+                ),
+                actor=request.user,
+                client=client,
+                idempotency_key=idempotency_key,
+            )
+
+    delivery_redirect = {"estimate": estimate.pk}
+    if send_sms:
+        delivery_redirect["sms_followup"] = "1"
+        if send_email or publish_to_portal:
+            delivery_redirect["sms_after_other_channels"] = "1"
+
+    if not send_email:
+        if client.user_id:
+            messages.success(request, f"Estimate link published to {client.name}'s client portal.")
+        else:
+            messages.success(
+                request,
+                "Estimate link is saved for the client portal. The client can open it after accepting a portal invitation.",
+            )
+        if send_sms:
+            messages.info(request, "Open the text message draft and tap Send to finish text delivery.")
+            return _dashboard_redirect("estimates", **delivery_redirect)
+        return _dashboard_redirect("estimates", estimate=estimate.pk)
+
     outbox = deliver_email_outbox(outbox)
+    if (
+        not publish_to_portal
+        and outbox
+        and outbox.status != EmailOutbox.Status.FAILED
+    ):
+        with transaction.atomic():
+            locked = Estimate.objects.select_for_update().select_related("client").get(pk=estimate.pk)
+            if locked.external_status == Estimate.ExternalEstimateStatus.NOT_STARTED:
+                record_external_estimate_status(
+                    locked,
+                    actor=request.user,
+                    status=Estimate.ExternalEstimateStatus.SENT,
+                    external_url=locked.external_url,
+                    external_client_visible=locked.external_client_visible,
+                    idempotency_key=f"{idempotency_key}:status",
+                )
     if outbox and outbox.status == EmailOutbox.Status.SENT:
         messages.success(
             request,
-            (
-                f"Estimate link emailed to {client.email} and added to the active client portal."
-                if client.user_id
-                else f"Estimate link emailed to {client.email}. Portal access is not active yet; create an invitation from the client record."
+            f"Estimate link emailed to {client.email}."
+            + (
+                " It is also published in the client portal."
+                if publish_to_portal and client.user_id
+                else " It is saved for the portal after the client accepts an invitation."
+                if publish_to_portal
+                else " It was not published to the client portal."
             ),
         )
     elif outbox and outbox.status == EmailOutbox.Status.FAILED:
         messages.warning(
             request,
             (
-                "Email delivery failed. The estimate remains available in the active client portal; you can copy the link and send it manually."
-                if client.user_id
-                else "Email delivery failed and portal access is not active. Create a portal invitation and send the estimate link manually."
+                "Email delivery failed. The estimate remains published in the client portal."
+                if publish_to_portal and client.user_id
+                else "Email delivery failed. The link is saved for the portal after the client accepts an invitation."
+                if publish_to_portal
+                else "Email delivery failed. The estimate was not published to the client portal. You can retry or send the link manually."
             ),
         )
     else:
         messages.info(
             request,
-            "Estimate email queued. Portal access is active."
-            if client.user_id
-            else "Estimate email queued; portal access is still separate. Create an invitation from the client record if needed.",
+            f"Estimate email queued for {client.email}."
+            + (
+                " The link is also published in the client portal."
+                if publish_to_portal and client.user_id
+                else " The link will be available in the portal after the client accepts an invitation."
+                if publish_to_portal
+                else " The link was not published to the client portal."
+            ),
         )
-    return _dashboard_redirect("estimates", estimate=estimate.pk)
+    return _dashboard_redirect("estimates", **delivery_redirect)
 
 
 @require_POST
@@ -3968,7 +4164,7 @@ def estimate_send(request, pk):
     estimate = get_object_or_404(Estimate, pk=pk)
     messages.info(
         request,
-        "Use ‘Send link to client’ on the external estimate record. Existing internal estimates are read-only history.",
+        "Use ‘Send estimate to client’ on the external estimate record. Existing internal estimates are read-only history.",
     )
     return _dashboard_redirect("estimates", estimate=estimate.pk)
 
@@ -4200,7 +4396,7 @@ def milestone_toggle(request, pk):
 
 
 @require_POST
-@staff_or_field_required
+@workspace_staff_required
 def project_add_update(request, pk):
     team_mode = request.path.startswith("/team/")
     if not team_mode and not _can_access_dashboard(request.user):
@@ -4292,7 +4488,7 @@ def project_create_invite(request, pk):
 
 
 @require_POST
-@staff_or_field_required
+@workspace_staff_required
 @transaction.atomic
 def media_upload(request):
     team_mode = request.path.startswith("/team/")
@@ -4338,7 +4534,7 @@ def media_upload(request):
 
 
 @require_POST
-@staff_or_field_required
+@workspace_staff_required
 @transaction.atomic
 def media_edit(request, pk):
     team_mode = request.path.startswith("/team/")
@@ -4571,6 +4767,48 @@ def _portal_navigation(request, client, project=None, estimate=None):
     return navigation
 
 
+def _unread_client_team_messages(client):
+    return (
+        ClientMessage.objects.filter(client=client, is_read=False)
+        .filter(
+            Q(sent_by__is_staff=True)
+            | Q(client_notifications__kind="employee-reply", client_notifications__client=client)
+        )
+        .distinct()
+    )
+
+
+def _client_navigation_counts(client):
+    if client is None:
+        return {"estimates": 0, "messages": 0, "notifications": 0}
+    unread_team_messages_count = _unread_client_team_messages(client).count()
+    unread_non_message_notifications_count = (
+        ClientNotification.objects.filter(
+            client=client,
+            read_at__isnull=True,
+            dismissed_at__isnull=True,
+        )
+        .exclude(
+            Q(message__sent_by__is_staff=True)
+            | Q(kind="employee-reply", message__isnull=False)
+        )
+        .count()
+    )
+    return {
+        "estimates": Estimate.objects.filter(
+            client=client,
+            external_url__gt="",
+            external_client_visible=True,
+            external_status__in=[
+                Estimate.ExternalEstimateStatus.SENT,
+                Estimate.ExternalEstimateStatus.PENDING,
+            ],
+        ).exclude(status=Estimate.Status.DRAFT).count(),
+        "messages": unread_team_messages_count,
+        "notifications": unread_team_messages_count + unread_non_message_notifications_count,
+    }
+
+
 def _safe_notification_destination(destination_url, *, workspace):
     """Only show notification links that stay inside the viewer's workspace."""
     allowed_prefix = {
@@ -4606,11 +4844,29 @@ def portal(request, section="overview"):
             "portal_estimates": [],
             "portal_messages": [],
             "client_notifications": [],
+            "client_estimate_review_count": 0,
+            "client_unread_team_messages_count": 0,
             "client_unread_notifications_count": 0,
             "portal_nav": [],
             "portal_section": section,
             "portal_section_title": section_title,
         })
+    if section == "messages" and not request.user.is_staff:
+        unread_team_message_ids = list(
+            _unread_client_team_messages(client).values_list("pk", flat=True)
+        )
+        if unread_team_message_ids:
+            now = timezone.now()
+            with transaction.atomic():
+                ClientMessage.objects.filter(
+                    client=client,
+                    pk__in=unread_team_message_ids,
+                ).update(is_read=True)
+                ClientNotification.objects.filter(
+                    client=client,
+                    message_id__in=unread_team_message_ids,
+                    read_at__isnull=True,
+                ).update(read_at=now, updated_at=now)
     projects = list(
         Project.objects.filter(client=client)
         .select_related("estimate", "agreement")
@@ -4633,6 +4889,8 @@ def portal(request, section="overview"):
         .prefetch_related("projects")
     )
     portal_estimates = list(portal_estimate_queryset)
+    client_navigation_counts = _client_navigation_counts(client)
+    client_estimate_review_count = client_navigation_counts["estimates"]
     for estimate in portal_estimates:
         estimate.portal_project = estimate.projects.order_by("-created_at").first()
     requested_estimate = next(
@@ -4695,15 +4953,22 @@ def portal(request, section="overview"):
         client.messages.select_related("project", "sent_by").order_by("-created_at")[:30]
     )
     portal_messages.sort(key=lambda message: message.created_at)
-    client_notifications = list(client.notifications.all()[:30])
+    visible_client_notifications = client.notifications.filter(dismissed_at__isnull=True).select_related(
+        "project",
+        "message",
+        "message__project",
+        "message__sent_by",
+    )
+    client_notifications = list(visible_client_notifications[:30])
     for notification in client_notifications:
+        if notification.message_id or notification.kind == "employee-reply":
+            notification.destination_url = _client_message_notification_url(client, notification)
+        notification.requires_messages_tab = _client_notification_requires_message_open(notification)
         notification.destination_url = _safe_notification_destination(
             notification.destination_url,
             workspace="client",
         )
-    client_unread_notifications_count = client.notifications.filter(read_at__isnull=True).count()
-    if not request.user.is_staff:
-        ClientMessage.objects.filter(client=client, sent_by__is_staff=True, is_read=False).update(is_read=True)
+    client_unread_notifications_count = client_navigation_counts["notifications"]
     return render(request, "operations/portal.html", {
         "portal_client": client,
         "portal_projects": projects,
@@ -4720,6 +4985,8 @@ def portal(request, section="overview"):
         "portal_change_orders": portal_change_orders,
         "portal_payment_schedules": portal_payment_schedules,
         "portal_messages": portal_messages,
+        "client_estimate_review_count": client_estimate_review_count,
+        "client_unread_team_messages_count": client_navigation_counts["messages"],
         "client_notifications": client_notifications,
         "client_unread_notifications_count": client_unread_notifications_count,
         "google_review_url": _site_settings().google_review_url,
@@ -4728,6 +4995,14 @@ def portal(request, section="overview"):
         "portal_section": section,
         "portal_section_title": section_title,
     })
+
+
+@never_cache
+@require_GET
+@client_required
+def client_mobile_navigation_counts(request):
+    """Return only the signed-in client's counts used by the native drawer."""
+    return JsonResponse(_client_navigation_counts(_portal_client(request)))
 
 
 def _client_can_access_estimate(request, estimate):
@@ -4946,14 +5221,43 @@ def client_notification_mark_read(request, pk):
     if not _is_active_client(request.user):
         raise PermissionDenied
     notification = get_object_or_404(
-        ClientNotification,
+        ClientNotification.objects.filter(dismissed_at__isnull=True).select_related(
+            "client",
+            "project",
+            "message",
+            "message__project",
+            "message__sent_by",
+        ),
         pk=pk,
         client__user=request.user,
     )
+    if _client_notification_requires_message_open(notification):
+        return redirect(_client_message_notification_url(notification.client, notification))
     if notification.read_at is None:
         notification.read_at = timezone.now()
         notification.save(update_fields=["read_at", "updated_at"])
-    return redirect(f"{reverse('operations:portal')}#notifications")
+    return redirect(reverse("operations:portal-section", kwargs={"section": "notifications"}))
+
+
+@require_POST
+@login_required
+def client_notification_clear(request, pk):
+    if not _is_active_client(request.user):
+        raise PermissionDenied
+    now = timezone.now()
+    with transaction.atomic():
+        notification = get_object_or_404(
+            ClientNotification.objects.select_for_update(),
+            pk=pk,
+            client__user=request.user,
+        )
+        update_fields = ["dismissed_at", "updated_at"]
+        notification.dismissed_at = notification.dismissed_at or now
+        if notification.read_at is None:
+            notification.read_at = now
+            update_fields.append("read_at")
+        notification.save(update_fields=update_fields)
+    return redirect(reverse("operations:portal-section", kwargs={"section": "notifications"}))
 
 
 @require_POST
@@ -4964,8 +5268,12 @@ def client_notifications_mark_all_read(request):
     ClientNotification.objects.filter(
         client__user=request.user,
         read_at__isnull=True,
+        dismissed_at__isnull=True,
+    ).exclude(
+        Q(message__sent_by__is_staff=True, message__is_read=False)
+        | Q(kind="employee-reply", message__isnull=False, message__is_read=False)
     ).update(read_at=timezone.now(), updated_at=timezone.now())
-    return redirect(f"{reverse('operations:portal')}#notifications")
+    return redirect(reverse("operations:portal-section", kwargs={"section": "notifications"}))
 
 def client_invite(request, token):
     if request.user.is_authenticated:
@@ -4974,7 +5282,7 @@ def client_invite(request, token):
     if invite is None:
         return render(request, "operations/invite_invalid.html", status=410)
     form = ClientInviteAcceptForm(request.POST or None, initial={
-        "username": invite.client.email,
+        "email": invite.client.email,
         "first_name": invite.client.name.split(" ")[0],
         "last_name": " ".join(invite.client.name.split(" ")[1:]),
     })

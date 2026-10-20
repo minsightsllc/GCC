@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import shutil
 import tempfile
 from datetime import date, datetime, time, timedelta, timezone as datetime_timezone
@@ -302,12 +303,19 @@ class PlatformWorkflowTests(TestCase):
             timezone.get_current_timezone(),
         )
 
-    def assert_operations_badges(self, response, role, keys, expected_badge_count):
+    def assert_operations_badges(self, response, role, keys):
         self.assertEqual(response.context['operations_nav_role'], role)
         counts = response.context['operations_nav_counts']
         markup = response.content.decode()
         self.assertIn(f'data-workspace-kind="{role}"', markup)
-        self.assertEqual(markup.count('class="nav-count"'), expected_badge_count)
+        nav_start = markup.index('<nav class="admin-nav grouped-admin-nav"')
+        nav_markup = markup[nav_start:markup.index('</nav>', nav_start)]
+        actual_badge_values = re.findall(
+            r'<span class="(?:nav-count|notification-nav-count)"[^>]*>(\d+)</span>',
+            nav_markup,
+        )
+        expected_badge_values = [str(counts[key]) for key in keys if counts[key] > 0]
+        self.assertEqual(actual_badge_values, expected_badge_values)
         for key in keys:
             self.assertIsInstance(counts[key], int)
             self.assertIn(f'data-count-{key}="{counts[key]}"', markup)
@@ -319,7 +327,7 @@ class PlatformWorkflowTests(TestCase):
         positions = [sidebar.index(token) for token in tokens]
         self.assertEqual(positions, sorted(positions))
 
-    def test_admin_operations_sidebar_always_renders_category_counts(self):
+    def test_admin_operations_sidebar_hides_zero_counts_and_keeps_positive_counts(self):
         self.login(self.owner)
 
         dashboard_response = self.browser.get(reverse('operations:dashboard'))
@@ -328,7 +336,7 @@ class PlatformWorkflowTests(TestCase):
             'calendar', 'time', 'documents', 'media', 'team', 'messages',
             'notifications', 'content',
         )
-        self.assert_operations_badges(dashboard_response, 'admin', admin_keys, 14)
+        self.assert_operations_badges(dashboard_response, 'admin', admin_keys)
         self.assert_sidebar_sequence(
             dashboard_response,
             (
@@ -342,18 +350,18 @@ class PlatformWorkflowTests(TestCase):
         workspace_response = self.browser.get(
             reverse('operations:dashboard-section', kwargs={'section': 'tasks'})
         )
-        self.assert_operations_badges(workspace_response, 'admin', admin_keys, 14)
+        self.assert_operations_badges(workspace_response, 'admin', admin_keys)
         self.assert_sidebar_sequence(
             workspace_response,
             ('>Overview<', 'Client &amp; Job Operations', '>Leads<', '>Clients<', '>Estimates<', '>Projects<', '>Tasks<', '>Calendar<', '>Time<', '>Documents<', '>Media<', 'Miscellaneous', '>Team<', '>Messages<', '>Notifications<', '>Content<'),
         )
 
-    def test_employee_operations_sidebar_always_renders_visible_category_counts(self):
+    def test_employee_operations_sidebar_hides_zero_counts_and_keeps_positive_counts(self):
         self.login(self.field)
 
         response = self.browser.get(reverse('operations:team'))
         employee_keys = ('overview', 'projects', 'tasks', 'calendar', 'time', 'media', 'notifications', 'profile')
-        self.assert_operations_badges(response, 'employee', employee_keys, 7)
+        self.assert_operations_badges(response, 'employee', employee_keys)
         self.assert_sidebar_sequence(
             response,
             ('>Overview<', 'Client &amp; Job Operations', '>Projects<', '>Tasks<', '>Calendar<', '>Time<', '>Media<', 'Miscellaneous', '>Notifications<', '>Profile<'),
@@ -366,6 +374,139 @@ class PlatformWorkflowTests(TestCase):
             .count(),
         )
         self.assertEqual(response.context['operations_nav_counts']['leads'], 0)
+
+    def test_client_portal_navigation_hides_zero_and_shows_positive_unread_count(self):
+        self.login(self.client_user)
+        overview_url = reverse('operations:portal-section', kwargs={'section': 'overview'})
+
+        response = self.browser.get(overview_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Notifications')
+        self.assertNotContains(response, 'Notifications (0)')
+        self.assertContains(response, 'data-count-estimates="0"')
+        self.assertContains(response, 'data-count-messages="0"')
+        self.assertContains(response, 'data-count-notifications="0"')
+        counts_url = reverse('operations:client-mobile-navigation-counts')
+        self.assertEqual(self.browser.get(counts_url).json(), {'estimates': 0, 'messages': 0, 'notifications': 0})
+
+        pending_estimate = Estimate.objects.create(
+            number=9901,
+            client=self.client_record,
+            title='Portal estimate ready for review',
+            status=Estimate.Status.SENT,
+            external_url='https://estimates.example.com/portal-review',
+            external_status=Estimate.ExternalEstimateStatus.SENT,
+            external_client_visible=True,
+            created_by=self.owner,
+        )
+
+        ClientNotification.objects.create(
+            client=self.client_record,
+            kind='test',
+            title='Estimate update',
+            body='An estimate is ready to review.',
+            destination_url='/portal/notifications/',
+            created_by=self.owner,
+            estimate=pending_estimate,
+        )
+        response = self.browser.get(overview_url)
+        self.assertContains(response, 'Notifications (1)')
+        self.assertContains(response, 'data-count-estimates="1"')
+        self.assertContains(response, 'data-count-messages="0"')
+        self.assertContains(response, 'data-count-notifications="1"')
+        Estimate.objects.create(
+            number=9902,
+            client=self.other_client_record,
+            title='Another client portal estimate',
+            status=Estimate.Status.SENT,
+            external_url='https://estimates.example.com/other-client-review',
+            external_status=Estimate.ExternalEstimateStatus.SENT,
+            external_client_visible=True,
+            created_by=self.owner,
+        )
+        self.assertEqual(self.browser.get(counts_url).json(), {'estimates': 1, 'messages': 0, 'notifications': 1})
+        self.assertEqual(
+            self.browser.get(counts_url, {'client': self.other_client_record.pk}).json(),
+            {'estimates': 1, 'messages': 0, 'notifications': 1},
+        )
+
+        ClientNotification.objects.filter(client=self.client_record).update(read_at=timezone.now())
+        response = self.browser.get(overview_url)
+        self.assertContains(response, 'data-count-estimates="1"')
+        self.assertContains(response, 'data-count-messages="0"')
+        self.assertContains(response, 'data-count-notifications="0"')
+        self.assertEqual(self.browser.get(counts_url).json(), {'estimates': 1, 'messages': 0, 'notifications': 0})
+
+        pending_estimate.external_status = Estimate.ExternalEstimateStatus.APPROVED
+        pending_estimate.save(update_fields=['external_status', 'updated_at'])
+        response = self.browser.get(overview_url)
+        self.assertContains(response, 'data-count-estimates="0"')
+        self.assertContains(response, 'data-count-messages="0"')
+        self.assertContains(response, 'data-count-notifications="0"')
+        self.assertEqual(self.browser.get(counts_url).json(), {'estimates': 0, 'messages': 0, 'notifications': 0})
+
+    def test_client_team_message_count_clears_only_after_messages_tab_opens(self):
+        message = ClientMessage.objects.create(
+            client=self.client_record,
+            project=self.project,
+            body='The team has a schedule update.',
+            sent_by=self.owner,
+        )
+        notification = ClientNotification.objects.create(
+            client=self.client_record,
+            project=self.project,
+            message=message,
+            kind='employee-reply',
+            title='Grand Coast replied to your message',
+            body='A member of the Grand Coast team replied in your client portal.',
+            destination_url=f"{reverse('operations:portal')}?client={self.client_record.pk}",
+            created_by=self.owner,
+        )
+        self.login(self.client_user)
+        notifications_url = reverse('operations:portal-section', kwargs={'section': 'notifications'})
+        messages_url = reverse('operations:portal-section', kwargs={'section': 'messages'})
+        counts_url = reverse('operations:client-mobile-navigation-counts')
+        expected_message_url = f'{messages_url}?client={self.client_record.pk}&project={self.project.pk}'
+
+        # Visiting other portal pages and the notification inbox does not mark the message read.
+        self.assertEqual(self.browser.get(reverse('operations:portal')).status_code, 200)
+        inbox_response = self.browser.get(notifications_url)
+        self.assertContains(inbox_response, 'class="notification-card is-unread"')
+        self.assertContains(inbox_response, 'data-count-messages="1"')
+        self.assertContains(inbox_response, 'Open related work')
+        self.assertNotContains(inbox_response, '>Mark read<')
+        self.assertEqual(
+            inbox_response.context['client_notifications'][0].destination_url,
+            expected_message_url,
+        )
+        message.refresh_from_db()
+        notification.refresh_from_db()
+        self.assertFalse(message.is_read)
+        self.assertIsNone(notification.read_at)
+        self.assertEqual(self.browser.get(counts_url).json(), {'estimates': 0, 'messages': 1, 'notifications': 1})
+
+        # Bulk notification reading must leave the underlying message unread.
+        self.browser.post(reverse('operations:client-notifications-mark-all-read'))
+        message.refresh_from_db()
+        notification.refresh_from_db()
+        self.assertFalse(message.is_read)
+        self.assertIsNone(notification.read_at)
+        self.assertEqual(self.browser.get(counts_url).json(), {'estimates': 0, 'messages': 1, 'notifications': 1})
+
+        # The message notification's explicit read action leads to the actual conversation.
+        mark_read_response = self.browser.post(
+            reverse('operations:client-notification-mark-read', kwargs={'pk': notification.pk}),
+        )
+        self.assertEqual(mark_read_response.status_code, 302)
+        self.assertEqual(mark_read_response.url, expected_message_url)
+        messages_response = self.browser.get(mark_read_response.url)
+        self.assertEqual(messages_response.status_code, 200)
+        self.assertContains(messages_response, 'data-count-messages="0"')
+        message.refresh_from_db()
+        notification.refresh_from_db()
+        self.assertTrue(message.is_read)
+        self.assertIsNotNone(notification.read_at)
+        self.assertEqual(self.browser.get(counts_url).json(), {'estimates': 0, 'messages': 0, 'notifications': 0})
 
     def test_owner_can_clear_one_notification_without_deleting_history(self):
         first = EmployeeNotification.objects.create(
@@ -792,6 +933,7 @@ class PlatformWorkflowTests(TestCase):
             reverse('operations:portal'),
             reverse('operations:portal-section', kwargs={'section': 'overview'}),
             reverse('operations:portal-section', kwargs={'section': 'messages'}),
+            reverse('operations:client-mobile-navigation-counts'),
         ):
             self.assertEqual(self.browser.get(path, {'client': self.other_client_record.pk}).status_code, 403)
 
@@ -1259,6 +1401,33 @@ class PlatformWorkflowTests(TestCase):
             ).exists()
         )
 
+    def test_retrying_lead_conversion_restores_a_deleted_client_record(self):
+        lead = Lead.objects.create(
+            name="Retry Conversion Lead",
+            email="retry-conversion@example.com",
+            service="Renovation",
+            location="Ventura, CA",
+        )
+        self.login(self.owner)
+        convert_url = reverse('operations:lead-convert-client', kwargs={'pk': lead.pk})
+
+        first_response = self.browser.post(convert_url)
+        self.assertEqual(first_response.status_code, 302)
+        lead.refresh_from_db()
+        first_client_id = lead.client_id
+        self.assertIsNotNone(first_client_id)
+
+        ClientRecord.objects.get(pk=first_client_id).delete()
+        lead.refresh_from_db()
+        self.assertIsNone(lead.client_id)
+
+        retry_response = self.browser.post(convert_url)
+        self.assertEqual(retry_response.status_code, 302)
+        lead.refresh_from_db()
+        self.assertIsNotNone(lead.client_id)
+        self.assertEqual(lead.client.email, lead.email)
+        self.assertNotEqual(lead.client_id, first_client_id)
+
     def test_lead_derived_project_requires_accepted_external_estimate(self):
         lead = Lead.objects.create(
             name='Needs approval',
@@ -1415,15 +1584,18 @@ class PlatformWorkflowTests(TestCase):
 
     def test_lead_note_save_returns_to_notes_and_tasks(self):
         self.login(self.owner)
+        self.lead.note = 'Original client inquiry; keep this unchanged.'
+        self.lead.save(update_fields=['note', 'updated_at'])
         response = self.browser.post(
             reverse('operations:lead-note', kwargs={'pk': self.lead.pk}),
-            {'note-note': 'Confirm the site walkthrough date.'},
+            {'admin-note-internal_note': 'Confirm the site walkthrough date.'},
         )
         self.assertEqual(response.status_code, 302)
         self.assertIn(f'lead={self.lead.pk}', response.url)
         self.assertIn('lead_tab=notes', response.url)
         self.lead.refresh_from_db()
-        self.assertEqual(self.lead.note, 'Confirm the site walkthrough date.')
+        self.assertEqual(self.lead.note, 'Original client inquiry; keep this unchanged.')
+        self.assertEqual(self.lead.internal_note, 'Confirm the site walkthrough date.')
 
     def test_invalid_lead_task_keeps_notes_and_tasks_selected(self):
         self.login(self.owner)
@@ -2105,7 +2277,15 @@ class PlatformWorkflowTests(TestCase):
         self.assertEqual(staff_response.status_code, 302)
         staff_message = ClientMessage.objects.get(body='Yes, the team will share it today.')
         self.assertTrue(staff_message.sent_by.is_staff)
+        staff_notification = ClientNotification.objects.get(kind='employee-reply', message=staff_message)
+        self.assertIn(
+            reverse('operations:portal-section', kwargs={'section': 'messages'}),
+            staff_notification.destination_url,
+        )
         self.login(self.client_user)
+        self.browser.get(reverse('operations:portal-section', kwargs={'section': 'overview'}))
+        staff_message.refresh_from_db()
+        self.assertFalse(staff_message.is_read)
         self.browser.get(reverse('operations:portal-section', kwargs={'section': 'messages'}))
         staff_message.refresh_from_db()
         self.assertTrue(staff_message.is_read)
@@ -2194,12 +2374,22 @@ class PlatformWorkflowTests(TestCase):
             },
         )
         self.assertEqual(create_response.status_code, 302)
+        self.assertIn('delivery_prompt=1', create_response.url)
+        prompt_response = self.browser.get(create_response.url)
+        self.assertContains(prompt_response, 'data-auto-open="delivery"')
+        self.assertContains(prompt_response, 'All three')
+        self.assertContains(prompt_response, 'type="checkbox" name="delivery_mode" value="sms"')
+        self.assertContains(prompt_response, 'type="checkbox" name="delivery_mode" value="email"')
+        self.assertContains(prompt_response, 'type="checkbox" name="delivery_mode" value="portal"')
+        self.assertContains(prompt_response, 'data-estimate-delivery-all')
+        self.assertContains(prompt_response, 'Not yet')
         estimate = Estimate.objects.get(client=preproject_client)
         self.assertEqual(estimate.client_id, preproject_client.pk)
         self.assertEqual(estimate.external_url, 'https://estimates.example.com/preproject-bathroom')
 
         ready_response = self.browser.post(
             reverse('operations:external-estimate-send', kwargs={'pk': estimate.pk}),
+            {'delivery_mode': 'email_portal'},
         )
         self.assertEqual(ready_response.status_code, 302)
         estimate.refresh_from_db()
@@ -2217,6 +2407,202 @@ class PlatformWorkflowTests(TestCase):
         self.assertContains(portal_response, 'Open estimate link')
         self.assertContains(portal_response, 'Review and respond in the external estimate service.')
         self.assertNotContains(portal_response, 'Accept estimate')
+
+    @override_settings(GCC_EMAIL_DELIVERY_ENABLED=False)
+    def test_email_only_estimate_delivery_does_not_publish_to_portal(self):
+        estimate = Estimate.objects.create(
+            client=self.client_record,
+            title='Email-only delivery',
+            external_url='https://estimates.example.com/email-only',
+            created_by=self.owner,
+        )
+        self.login(self.owner)
+        response = self.browser.post(
+            reverse('operations:external-estimate-send', kwargs={'pk': estimate.pk}),
+            {'delivery_mode': 'email', 'idempotency_key': 'email-only-delivery'},
+        )
+        self.assertEqual(response.status_code, 302)
+        estimate.refresh_from_db()
+        self.assertEqual(estimate.external_status, Estimate.ExternalEstimateStatus.SENT)
+        self.assertFalse(estimate.external_client_visible)
+
+    def test_portal_only_estimate_delivery_publishes_without_email(self):
+        from .models import EmailOutbox
+
+        estimate = Estimate.objects.create(
+            client=self.client_record,
+            title='Portal-only delivery',
+            external_url='https://estimates.example.com/portal-only',
+            created_by=self.owner,
+        )
+        idempotency_key = 'portal-only-delivery'
+        self.login(self.owner)
+        response = self.browser.post(
+            reverse('operations:external-estimate-send', kwargs={'pk': estimate.pk}),
+            {'delivery_mode': 'portal', 'idempotency_key': idempotency_key},
+        )
+        self.assertEqual(response.status_code, 302)
+        estimate.refresh_from_db()
+        self.assertEqual(estimate.external_status, Estimate.ExternalEstimateStatus.SENT)
+        self.assertTrue(estimate.external_client_visible)
+        self.assertFalse(EmailOutbox.objects.filter(idempotency_key=idempotency_key).exists())
+
+    @override_settings(GCC_EMAIL_DELIVERY_ENABLED=False)
+    def test_email_and_portal_can_be_selected_together(self):
+        from .models import EmailOutbox
+
+        estimate = Estimate.objects.create(
+            client=self.client_record,
+            title='Email and portal delivery',
+            external_url='https://estimates.example.com/email-portal',
+            created_by=self.owner,
+        )
+        self.login(self.owner)
+        response = self.browser.post(
+            reverse('operations:external-estimate-send', kwargs={'pk': estimate.pk}),
+            {'delivery_mode': ['email', 'portal'], 'idempotency_key': 'email-portal-delivery'},
+        )
+        self.assertEqual(response.status_code, 302)
+        estimate.refresh_from_db()
+        self.assertEqual(estimate.external_status, Estimate.ExternalEstimateStatus.SENT)
+        self.assertTrue(estimate.external_client_visible)
+        self.assertTrue(
+            EmailOutbox.objects.filter(
+                client=self.client_record,
+                idempotency_key='email-portal-delivery',
+            ).exists()
+        )
+
+    @override_settings(GCC_EMAIL_DELIVERY_ENABLED=False)
+    def test_email_and_text_can_be_selected_together(self):
+        from .models import EmailOutbox
+
+        self.client_record.phone = '805-555-0142'
+        self.client_record.save(update_fields=['phone'])
+        estimate = Estimate.objects.create(
+            client=self.client_record,
+            title='Email and text delivery',
+            external_url='https://estimates.example.com/email-text',
+            created_by=self.owner,
+        )
+        self.login(self.owner)
+        response = self.browser.post(
+            reverse('operations:external-estimate-send', kwargs={'pk': estimate.pk}),
+            {'delivery_mode': ['email', 'sms'], 'idempotency_key': 'email-text-delivery'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('sms_followup=1', response.url)
+        self.assertIn('sms_after_other_channels=1', response.url)
+        estimate.refresh_from_db()
+        self.assertEqual(estimate.external_status, Estimate.ExternalEstimateStatus.SENT)
+        self.assertFalse(estimate.external_client_visible)
+        self.assertTrue(
+            EmailOutbox.objects.filter(
+                client=self.client_record,
+                idempotency_key='email-text-delivery',
+            ).exists()
+        )
+
+    def test_portal_and_text_can_be_selected_together(self):
+        from .models import EmailOutbox
+
+        self.client_record.phone = '805-555-0142'
+        self.client_record.save(update_fields=['phone'])
+        estimate = Estimate.objects.create(
+            client=self.client_record,
+            title='Portal and text delivery',
+            external_url='https://estimates.example.com/portal-text',
+            created_by=self.owner,
+        )
+        self.login(self.owner)
+        response = self.browser.post(
+            reverse('operations:external-estimate-send', kwargs={'pk': estimate.pk}),
+            {'delivery_mode': ['portal', 'sms'], 'idempotency_key': 'portal-text-delivery'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('sms_followup=1', response.url)
+        self.assertIn('sms_after_other_channels=1', response.url)
+        estimate.refresh_from_db()
+        self.assertEqual(estimate.external_status, Estimate.ExternalEstimateStatus.SENT)
+        self.assertTrue(estimate.external_client_visible)
+        self.assertFalse(EmailOutbox.objects.filter(idempotency_key='portal-text-delivery').exists())
+
+    def test_text_delivery_does_not_claim_sent_until_admin_records_it(self):
+        estimate = Estimate.objects.create(
+            client=self.client_record,
+            title='Text-only delivery',
+            external_url='https://estimates.example.com/text-only',
+            created_by=self.owner,
+        )
+        self.client_record.phone = '805-555-0142'
+        self.client_record.save(update_fields=['phone'])
+        self.login(self.owner)
+        response = self.browser.post(
+            reverse('operations:external-estimate-send', kwargs={'pk': estimate.pk}),
+            {'delivery_mode': 'sms'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('sms_followup=1', response.url)
+        estimate.refresh_from_db()
+        self.assertEqual(estimate.external_status, Estimate.ExternalEstimateStatus.NOT_STARTED)
+        self.assertFalse(estimate.external_client_visible)
+
+    def test_estimate_delivery_requires_at_least_one_selected_channel(self):
+        estimate = Estimate.objects.create(
+            client=self.client_record,
+            title='No delivery selected',
+            external_url='https://estimates.example.com/no-channel',
+            created_by=self.owner,
+        )
+        self.login(self.owner)
+        response = self.browser.post(
+            reverse('operations:external-estimate-send', kwargs={'pk': estimate.pk}),
+            {},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('delivery_prompt=1', response.url)
+        prompt_response = self.browser.get(response.url)
+        self.assertContains(prompt_response, 'Select at least one estimate delivery method.')
+        self.assertContains(prompt_response, 'data-auto-open="delivery"')
+        estimate.refresh_from_db()
+        self.assertEqual(estimate.external_status, Estimate.ExternalEstimateStatus.NOT_STARTED)
+        self.assertFalse(estimate.external_client_visible)
+
+    @override_settings(GCC_EMAIL_DELIVERY_ENABLED=False)
+    def test_all_estimate_delivery_publishes_emails_and_offers_sms_followup(self):
+        from .models import EmailOutbox
+
+        self.client_record.phone = '805-555-0142'
+        self.client_record.save(update_fields=['phone'])
+        estimate = Estimate.objects.create(
+            client=self.client_record,
+            title='All-channel delivery',
+            external_url='https://estimates.example.com/all-channels',
+            created_by=self.owner,
+        )
+        self.login(self.owner)
+        response = self.browser.post(
+            reverse('operations:external-estimate-send', kwargs={'pk': estimate.pk}),
+            {
+                'delivery_mode': ['sms', 'email', 'portal'],
+                'idempotency_key': 'all-channel-delivery',
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('sms_followup=1', response.url)
+        self.assertIn('sms_after_other_channels=1', response.url)
+        estimate.refresh_from_db()
+        self.assertEqual(estimate.external_status, Estimate.ExternalEstimateStatus.SENT)
+        self.assertTrue(estimate.external_client_visible)
+        self.assertTrue(
+            EmailOutbox.objects.filter(
+                client=self.client_record,
+                idempotency_key='all-channel-delivery',
+            ).exists()
+        )
+        followup_response = self.browser.get(response.url)
+        self.assertContains(followup_response, 'data-auto-open="sms"')
+        self.assertContains(followup_response, 'Finish text delivery')
 
     def test_legacy_internal_estimate_remains_read_only_history(self):
         draft = Estimate.objects.create(

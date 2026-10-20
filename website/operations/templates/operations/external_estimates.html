@@ -2,7 +2,7 @@
     <div>
         <span class="section-kicker">Estimate tracking</span>
         <h2>Estimates</h2>
-        <p class="admin-intro">Create and send the estimate in your external estimate service, then save its secure link here. GCC records delivery and the staff-confirmed outcome; it does not create line items or accept on the client’s behalf.</p>
+        <p class="admin-intro">Create the detailed estimate in your estimate service, paste its secure link here, then choose how to share that link. GCC records delivery and the staff-confirmed outcome; it does not store the estimate details or accept on the client’s behalf.</p>
     </div>
     <a class="button button-primary" href="?new=estimate">+ Add estimate link</a>
 </div>
@@ -23,7 +23,7 @@
                 {% endfor %}
             </div>
             <div>
-                <p class="detail-value">Choose the converted client and paste the HTTPS link from the estimate service. Saving does not send it; use “Send link to client” after checking the portal-access state.</p>
+                <p class="detail-value">Choose the converted client and paste the HTTPS link from the estimate service. Saving creates the GCC record; choose a delivery method in the next step.</p>
                 <div class="detail-actions">
                     <button class="button button-primary" type="submit">Save estimate link</button>
                     <a class="button button-quiet" href="{% url 'operations:dashboard-section' section='estimates' %}">Cancel</a>
@@ -104,10 +104,11 @@
                         <span class="detail-value">Record what happened after checking the estimate service. GCC stores the recorder and timestamp.</span>
                     </div>
                     <label class="form-field">{{ external_estimate_status_form.external_url.label }}{{ external_estimate_status_form.external_url }}{{ external_estimate_status_form.external_url.errors }}</label>
-                    <div class="detail-columns">
+                    <div class="detail-columns external-estimate-status-fields">
                         <label class="form-field">{{ external_estimate_status_form.external_status.label }}{{ external_estimate_status_form.external_status }}{{ external_estimate_status_form.external_status.errors }}</label>
                         <label class="form-check">{{ external_estimate_status_form.external_client_visible }} {{ external_estimate_status_form.external_client_visible.label }}</label>
                     </div>
+                    <p class="detail-value estimate-portal-visibility-note">This controls only whether the link appears in the client portal. If unchecked, the estimate stays hidden there; it does not prevent email or text delivery.</p>
                     <div class="estimate-editor-footer">
                         <span class="detail-value">Grand Coast does not store third-party credentials or detailed estimate contents.</span>
                         <button class="button button-primary" type="submit">Save estimate status</button>
@@ -115,32 +116,59 @@
                 </form>
             {% endif %}
 
-            {% if selected_estimate.external_url and can_manage_external_estimate_status %}
+            {% if selected_estimate.external_url and can_manage_external_estimate_status and selected_estimate.external_status != 'rejected' %}
                 <div class="estimate-editor-footer">
                     <div>
                         <span class="section-kicker">GCC delivery</span>
-                        {% if selected_estimate.client.email %}
-                        <p class="detail-value"><strong>Send link to client</strong> emails the saved estimate link to {{ selected_estimate.client.email }}. {% if selected_estimate.client.user_id %}Portal access is active, so the link will also appear there.{% else %}Portal access is separate; create an invitation from the client record and have the client accept it before expecting portal access.{% endif %}</p>
-                        {% else %}
-                            <p class="detail-value">Add a client email to enable GCC email and portal delivery. You can still keep sending the saved link yourself.</p>
-                        {% endif %}
+                        <p class="detail-value">Choose one or more ways to share the link. Select all three channels individually or use All three.</p>
                     </div>
                     <div class="detail-actions">
-                        {% if selected_estimate.client.email %}
-                            <form method="post" action="{% url 'operations:external-estimate-send' pk=selected_estimate.pk %}">
-                                {% csrf_token %}
-                                <input type="hidden" name="idempotency_key" value="{{ external_email_idempotency_key }}">
-                            <button class="button button-outline" type="submit" aria-label="Email the external estimate link to the client">Send link to client</button>
-                            </form>
-                        {% endif %}
-                        {% if text_client_href %}
-                            <a class="button button-outline" href="{{ text_client_href }}">Text client</a>
-                        {% endif %}
+                        <button class="button button-outline" type="button" data-open-estimate-delivery>Send estimate to client</button>
                     </div>
                 </div>
-                {% if text_client_href %}
-                    <p class="detail-value">Text client opens the device's Messages app with the number and estimate link filled in. Review it and tap Send.</p>
-                {% endif %}
+                <dialog class="estimate-delivery-dialog" data-estimate-delivery-dialog data-auto-open="{% if estimate_sms_followup %}sms{% elif estimate_delivery_prompt %}delivery{% endif %}" aria-labelledby="estimate-delivery-title" aria-describedby="estimate-delivery-description">
+                    <div data-estimate-delivery-options>
+                        <span class="section-kicker">GCC delivery</span>
+                        <h2 id="estimate-delivery-title">Send estimate to client</h2>
+                        <p id="estimate-delivery-description">Choose one or more delivery methods for {{ selected_estimate.client.name }}.</p>
+                        <form method="post" action="{% url 'operations:external-estimate-send' pk=selected_estimate.pk %}" data-estimate-delivery-form novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="idempotency_key" value="{{ external_email_idempotency_key }}">
+                            <fieldset class="estimate-delivery-options" aria-describedby="estimate-delivery-choice-error">
+                                <legend class="sr-only">Choose how to deliver the estimate</legend>
+                                <label class="estimate-delivery-option{% if not text_client_href %} is-unavailable{% endif %}">
+                                    <input type="checkbox" name="delivery_mode" value="sms" {% if not text_client_href %}disabled{% endif %}>
+                                    <span><strong>Mobile — text message (SMS)</strong><small>Opens a message draft. Review it and tap Send in your messaging app.</small></span>
+                                </label>
+                                <label class="estimate-delivery-option{% if not selected_estimate.client.email %} is-unavailable{% endif %}">
+                                    <input type="checkbox" name="delivery_mode" value="email" {% if not selected_estimate.client.email %}disabled{% endif %}>
+                                    <span><strong>Email</strong><small>{% if selected_estimate.client.email %}Sends the estimate link to {{ selected_estimate.client.email }}; portal visibility stays as it is.{% else %}Add an email address to enable email delivery.{% endif %}</small></span>
+                                </label>
+                                <label class="estimate-delivery-option">
+                                    <input type="checkbox" name="delivery_mode" value="portal">
+                                    <span><strong>Client portal</strong><small>{% if selected_estimate.client.user_id %}Publishes the link in the client portal; the client needs active portal access to open it.{% else %}Saves the link for the portal; the client can open it after accepting an invitation.{% endif %}</small></span>
+                                </label>
+                                <label class="estimate-delivery-option estimate-delivery-all-option{% if not selected_estimate.client.email or not text_client_href %} is-unavailable{% endif %}">
+                                    <input type="checkbox" name="delivery_all" value="1" data-estimate-delivery-all aria-describedby="estimate-delivery-all-help" {% if not selected_estimate.client.email or not text_client_href %}disabled{% endif %}>
+                                    <span><strong>All three</strong><small id="estimate-delivery-all-help">Select all three channels. This is also selected automatically when you check Mobile, Email, and Client portal separately.</small></span>
+                                </label>
+                            </fieldset>
+                            <p class="estimate-delivery-error" id="estimate-delivery-choice-error" data-estimate-delivery-error role="alert" tabindex="-1" hidden>Select at least one delivery method to continue.</p>
+                            <p class="estimate-delivery-guidance"><strong>Not yet?</strong> The estimate stays saved. Reopen “Send estimate to client” when you're ready. After you send a text manually, set Status to “Sent” in Update estimate and save. Changing the status alone does not send an email or text; the portal checkbox separately controls portal visibility.</p>
+                            <div class="estimate-delivery-actions">
+                                <button class="button button-primary" type="submit">Continue</button>
+                                <button class="button button-quiet" type="button" data-close-estimate-delivery>Not yet</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div data-estimate-sms-followup hidden>
+                        <span class="section-kicker">Text message</span>
+                        <h2 id="estimate-sms-followup-title">{% if estimate_sms_after_other_channels %}Finish text delivery{% else %}Send estimate by text{% endif %}</h2>
+                        <p id="estimate-sms-followup-description">{% if estimate_sms_after_other_channels %}The other selected delivery methods have been processed. Open the text draft and tap Send to finish text delivery. If an email attempt failed, retry email after returning to the estimate.{% else %}The estimate has not been sent by text yet. Open the text draft and tap Send in your messaging app.{% endif %}</p>
+                        {% if text_client_href %}<a class="button button-primary" href="{{ text_client_href }}" data-estimate-sms-link>Open text message draft</a>{% else %}<p class="detail-value">Add a client phone number before sending by text.</p>{% endif %}
+                        <button class="button button-quiet" type="button" data-close-estimate-delivery>Return to estimate</button>
+                    </div>
+                </dialog>
             {% endif %}
 
             {% if selected_estimate.external_url and selected_estimate.external_status == 'approved' and selected_estimate.status == 'accepted' %}

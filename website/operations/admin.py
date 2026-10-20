@@ -157,6 +157,12 @@ class LeadAdmin(GrandCoastModelAdmin):
     )
     inlines = []
 
+    def get_readonly_fields(self, request, obj=None):
+        readonly_fields = super().get_readonly_fields(request, obj)
+        if obj and "note" not in readonly_fields:
+            return (*readonly_fields, "note")
+        return readonly_fields
+
 
 class LeadAttachmentInline(admin.TabularInline):
     model = LeadAttachment

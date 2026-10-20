@@ -242,6 +242,7 @@ class Lead(TimeStampedModel):
     timeline = models.CharField(max_length=120, blank=True)
     source = models.CharField(max_length=120, default="Website form")
     note = models.TextField(blank=True)
+    internal_note = models.TextField(blank=True, default="", verbose_name="Internal admin note")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)
     workflow_stage = models.CharField(
         max_length=24,
@@ -1344,6 +1345,7 @@ class ClientNotification(TimeStampedModel):
     destination_url = models.CharField(max_length=500, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     read_at = models.DateTimeField(null=True, blank=True)
+    dismissed_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -1356,6 +1358,7 @@ class ClientNotification(TimeStampedModel):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["client", "read_at", "created_at"], name="ops_clientnotif_read_idx"),
+            models.Index(fields=["client", "dismissed_at", "created_at"], name="ops_clientnotif_dismissed_idx"),
         ]
 
     @property

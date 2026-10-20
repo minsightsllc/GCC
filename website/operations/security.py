@@ -454,14 +454,19 @@ def gate_is_valid(request, user=None):
     expires_at = request.session.get(ADMIN_GATE_EXPIRES_AT)
     if not stored_user or not expires_at:
         return False
+    now = timezone.now()
     try:
-        active = float(expires_at) > timezone.now().timestamp()
+        active = float(expires_at) > now.timestamp()
     except (TypeError, ValueError):
         active = False
     if not active:
         clear_gate(request)
         return False
-    return user is None or str(stored_user) == str(user.pk)
+    matches_user = user is None or str(stored_user) == str(user.pk)
+    if matches_user:
+        request.session[ADMIN_GATE_EXPIRES_AT] = (now + ADMIN_GATE_TTL).timestamp()
+        request.session.modified = True
+    return matches_user
 
 
 def gate_next(request):

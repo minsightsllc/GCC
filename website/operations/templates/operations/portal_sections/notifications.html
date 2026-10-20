@@ -3,10 +3,13 @@
     <div class="portal-panel-heading"><div><span class="section-kicker">Your inbox</span><h2>{{ client_unread_notifications_count }} unread</h2></div><form method="post" action="{% url 'operations:client-notifications-mark-all-read' %}">{% csrf_token %}<button class="button button-outline" type="submit">Mark all read</button></form></div>
     <div class="notification-inbox">
         {% for notification in client_notifications %}
-            <article class="notification-card{% if not notification.is_read %} is-unread{% endif %}">
+            <article class="notification-card{% if not notification.is_read or notification.requires_messages_tab %} is-unread{% endif %}">
                 <div class="notification-card-dot" aria-hidden="true"></div>
-                <div><span class="section-kicker">{{ notification.created_at|date:'M j, Y &middot; g:i A' }}</span><h3>{{ notification.title }}</h3><p>{{ notification.body }}</p>{% if notification.destination_url %}<a class="text-link-button" href="{{ notification.destination_url }}">Open related work &rarr;</a>{% endif %}</div>
-                {% if not notification.is_read %}<form method="post" action="{% url 'operations:client-notification-mark-read' pk=notification.pk %}">{% csrf_token %}<button class="text-link-button" type="submit">Mark read</button></form>{% endif %}
+                <div><span class="section-kicker">{{ notification.created_at|date:'M j, Y' }} &middot; {{ notification.created_at|date:'g:i A' }}</span><h3>{{ notification.title }}</h3><p>{{ notification.body }}</p>{% if notification.destination_url %}<a class="text-link-button" href="{{ notification.destination_url }}">Open related work &rarr;</a>{% endif %}</div>
+                <div class="notification-card-actions">
+                    {% if not notification.is_read and not notification.requires_messages_tab %}<form method="post" action="{% url 'operations:client-notification-mark-read' pk=notification.pk %}">{% csrf_token %}<button class="text-link-button" type="submit">Mark read</button></form>{% endif %}
+                    <form method="post" action="{% url 'operations:client-notification-clear' pk=notification.pk %}">{% csrf_token %}<button class="text-link-button" type="submit" aria-label="Clear notification: {{ notification.title }}">Clear</button></form>
+                </div>
             </article>
         {% empty %}
             <div class="empty-detail">You&rsquo;re all caught up. New project updates and decisions will appear here.</div>

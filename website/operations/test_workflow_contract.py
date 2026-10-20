@@ -30,6 +30,7 @@ from .models import (
     Task,
 )
 from .services import ensure_role_groups
+from .views import _notify_task_participants
 from django.core.files.uploadedfile import SimpleUploadedFile
 from .construction_services import record_external_estimate_status
 
@@ -203,7 +204,7 @@ class WorkflowContractTests(TestCase):
         )
         links = []
         for href, body in re.findall(r'<a class="[^"]*"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', sidebar, re.DOTALL):
-            label = re.search(r'<span>([^<]+)</span>\s*<span class="(?:nav-count|notification-nav-count)"', body)
+            label = re.search(r'<span class="nav-icon">.*?</span>\s*<span>([^<]+)</span>', body, re.DOTALL)
             if label:
                 links.append((href, unescape(label.group(1)).strip()))
         return groups, tuple(links)
@@ -325,6 +326,7 @@ class WorkflowContractTests(TestCase):
         self.assertIn("function ClientMoreScreen", mobile_source)
         self.assertIn("workspaceKind === 'employee' || workspaceKind === 'client' ? 'Open profile'", mobile_source)
         self.assertIn("key={`${page.group || 'overview'}:${page.label}`}", mobile_source)
+        self.assertIn("if (numericCount === 0)", mobile_source)
         self.assertIn(".admin-sidebar, .staging-bar", mobile_source)
         self.assertIn(".admin-main { margin-left: 0 !important; }", mobile_source)
         self.assertIn("const CLIENT_PUSH_REGISTER_PATH = '/portal/notifications/devices/'", mobile_source)
@@ -360,6 +362,13 @@ class WorkflowContractTests(TestCase):
         self.assertFalse(ClientNotification.objects.filter(kind="estimate-accepted", estimate=estimate).exists())
         self.assertFalse(EmployeeNotification.objects.filter(kind="estimate-accepted", estimate=estimate).exists())
 
+        owner_peer = get_user_model().objects.create_user(
+            username="contract-owner-peer",
+            password="owner-pass-123",
+            email="contract-owner-peer@gcc.example.com",
+            is_staff=True,
+            is_superuser=True,
+        )
         self.login_as(self.owner)
         estimate, changed = record_external_estimate_status(
             estimate,
@@ -373,7 +382,18 @@ class WorkflowContractTests(TestCase):
         self.assertIsNone(estimate.accepted_by_id)
         self.assertEqual(estimate.external_status_by_id, self.owner.pk)
         self.assertTrue(ClientNotification.objects.filter(kind="estimate-accepted", estimate=estimate).exists())
-        self.assertTrue(EmployeeNotification.objects.filter(kind="estimate-accepted", estimate=estimate, employee=self.manager).exists())
+        owner_notice = EmployeeNotification.objects.get(
+            kind="estimate-accepted",
+            estimate=estimate,
+            employee=owner_peer,
+        )
+        self.assertEqual(
+            owner_notice.destination_url,
+            reverse("operations:dashboard-section", kwargs={"section": "estimates"})
+            + f"?estimate={estimate.pk}",
+        )
+        self.assertFalse(EmployeeNotification.objects.filter(kind="estimate-accepted", estimate=estimate, employee=self.manager).exists())
+        self.assertFalse(EmployeeNotification.objects.filter(kind="estimate-accepted", estimate=estimate, employee=self.owner).exists())
 
         response = self.http.post(reverse("operations:estimate-project", kwargs={"pk": estimate.pk}))
         self.assertEqual(response.status_code, 302)
@@ -398,6 +418,146 @@ class WorkflowContractTests(TestCase):
         self.assertFalse(project.needs_staff_assignment)
         self.assertTrue(EmployeeNotification.objects.filter(kind="project-assignment", project=project, employee=self.manager).exists())
         self.assertTrue(ClientNotification.objects.filter(kind="project-staff-assigned", project=project).exists())
+
+    def test_external_estimate_decline_notifies_owners_but_not_lead_employee(self):
+        estimate = self.make_estimate()
+        owner_peer = get_user_model().objects.create_user(
+            username="contract-decline-owner-peer",
+            password="owner-pass-123",
+            email="contract-decline-owner-peer@gcc.example.com",
+            is_staff=True,
+            is_superuser=True,
+        )
+
+        estimate, changed = record_external_estimate_status(
+            estimate,
+            actor=self.owner,
+            status=Estimate.ExternalEstimateStatus.REJECTED,
+            idempotency_key="contract-confirm-external-decline",
+        )
+
+        self.assertTrue(changed)
+        owner_notice = EmployeeNotification.objects.get(
+            kind="estimate-declined",
+            estimate=estimate,
+            employee=owner_peer,
+        )
+        self.assertEqual(
+            owner_notice.destination_url,
+            reverse("operations:dashboard-section", kwargs={"section": "estimates"})
+            + f"?estimate={estimate.pk}",
+        )
+        self.assertFalse(EmployeeNotification.objects.filter(kind="estimate-declined", estimate=estimate, employee=self.manager).exists())
+        self.assertFalse(EmployeeNotification.objects.filter(kind="estimate-declined", estimate=estimate, employee=self.owner).exists())
+
+    def test_project_and_task_notifications_use_recipient_workspace_links(self):
+        owner_peer = get_user_model().objects.create_user(
+            username="contract-routing-owner-peer",
+            password="owner-pass-123",
+            email="contract-routing-owner-peer@gcc.example.com",
+            is_staff=True,
+            is_superuser=True,
+        )
+        project = self.make_project(
+            estimate=self.make_estimate(status=Estimate.Status.ACCEPTED),
+            assigned=[self.manager],
+        )
+        self.login_as(self.owner)
+        self.assertEqual(
+            self.http.post(
+                reverse("operations:project-update", kwargs={"pk": project.pk}),
+                self.project_payload(project, staff=[self.manager, owner_peer]),
+            ).status_code,
+            302,
+        )
+
+        owner_project_notice = EmployeeNotification.objects.get(
+            kind="project-assignment",
+            project=project,
+            employee=owner_peer,
+        )
+        employee_project_notice = EmployeeNotification.objects.get(
+            kind="project-assignment",
+            project=project,
+            employee=self.manager,
+        )
+        owner_project_url = (
+            reverse("operations:dashboard-section", kwargs={"section": "projects"})
+            + f"?project={project.pk}"
+        )
+        employee_project_url = (
+            reverse("operations:team-section", kwargs={"section": "projects"})
+            + f"?project={project.pk}"
+        )
+        self.assertEqual(owner_project_notice.destination_url, owner_project_url)
+        self.assertEqual(employee_project_notice.destination_url, employee_project_url)
+        self.assertEqual(
+            EmployeeNotification.objects.filter(
+                kind="project-assignment",
+                project=project,
+                employee=owner_peer,
+            ).count(),
+            1,
+        )
+
+        task = Task.objects.create(
+            title="Route-specific task",
+            project=project,
+            lead=self.lead,
+            assigned_to=self.manager,
+            created_by=self.owner,
+        )
+        _notify_task_participants(
+            task,
+            kind="task-assignment",
+            title="New task assigned",
+            body=f"{task.title} was added to your work queue.",
+            created_by=self.owner,
+        )
+        owner_task_notice = EmployeeNotification.objects.get(
+            kind="task-assignment",
+            task=task,
+            employee=owner_peer,
+        )
+        employee_task_notice = EmployeeNotification.objects.get(
+            kind="task-assignment",
+            task=task,
+            employee=self.manager,
+        )
+        owner_task_url = (
+            reverse("operations:dashboard-section", kwargs={"section": "tasks"})
+            + f"?task={task.pk}"
+        )
+        employee_task_url = (
+            reverse("operations:team-section", kwargs={"section": "tasks"})
+            + f"?task={task.pk}"
+        )
+        self.assertEqual(owner_task_notice.destination_url, owner_task_url)
+        self.assertEqual(employee_task_notice.destination_url, employee_task_url)
+        self.assertEqual(
+            EmployeeNotification.objects.filter(
+                kind="task-assignment",
+                task=task,
+                employee=owner_peer,
+            ).count(),
+            1,
+        )
+
+        self.login_as(owner_peer)
+        owner_inbox = self.http.get(
+            reverse("operations:dashboard-section", kwargs={"section": "notifications"})
+        )
+        self.assertContains(owner_inbox, f'href="{owner_task_url}"')
+        self.assertEqual(self.http.get(owner_task_url).status_code, 200)
+        self.assertNotContains(owner_inbox, employee_task_url)
+
+        self.login_as(self.manager)
+        employee_inbox = self.http.get(
+            reverse("operations:team-section", kwargs={"section": "notifications"})
+        )
+        self.assertContains(employee_inbox, f'href="{employee_task_url}"')
+        self.assertEqual(self.http.get(employee_task_url).status_code, 200)
+        self.assertNotContains(employee_inbox, owner_task_url)
 
     def test_required_publication_alerts_and_read_states_are_durable(self):
         estimate = self.make_estimate(status=Estimate.Status.ACCEPTED)
@@ -452,20 +612,68 @@ class WorkflowContractTests(TestCase):
         )
         self.assertContains(portal_response, "Notifications")
         self.assertContains(portal_response, client_alert.title)
-        self.assertEqual(
-            self.http.post(reverse("operations:client-notification-mark-read", kwargs={"pk": client_alert.pk})).status_code,
-            302,
+        mark_read_response = self.http.post(
+            reverse("operations:client-notification-mark-read", kwargs={"pk": client_alert.pk}),
         )
+        self.assertEqual(mark_read_response.status_code, 302)
+        self.assertEqual(mark_read_response.url, reverse("operations:portal-section", kwargs={"section": "notifications"}))
         client_alert.refresh_from_db()
         self.assertIsNotNone(client_alert.read_at)
-        self.assertEqual(
-            self.http.post(reverse("operations:client-notifications-mark-all-read")).status_code,
-            302,
-        )
+        mark_all_read_response = self.http.post(reverse("operations:client-notifications-mark-all-read"))
+        self.assertEqual(mark_all_read_response.status_code, 302)
+        self.assertEqual(mark_all_read_response.url, reverse("operations:portal-section", kwargs={"section": "notifications"}))
 
         self.login_as(self.manager)
         employee_alert = EmployeeNotification.objects.filter(employee=self.manager, task=task).order_by("-created_at").first()
         self.assertContains(self.http.get(reverse("operations:team-section", kwargs={"section": "notifications"})), employee_alert.title)
+
+    def test_client_can_clear_own_notification_without_deleting_estimate(self):
+        estimate = self.make_estimate(status=Estimate.Status.SENT)
+        notification = ClientNotification.objects.create(
+            client=self.client_record,
+            estimate=estimate,
+            kind="estimate-sent",
+            title="Estimate ready to review",
+            body="Grand Coast shared an estimate link.",
+        )
+        other_notification = ClientNotification.objects.create(
+            client=self.other_client_record,
+            kind="estimate-sent",
+            title="Another client estimate",
+            body="This notification belongs to another client.",
+        )
+
+        self.login_as(self.client_user)
+        inbox_url = reverse("operations:portal-section", kwargs={"section": "notifications"})
+        response = self.http.get(inbox_url)
+        self.assertContains(response, notification.title)
+        self.assertContains(response, f'aria-label="Clear notification: {notification.title}"')
+
+        # A client cannot dismiss another client's notification by guessing its ID.
+        cross_client_response = self.http.post(
+            reverse("operations:client-notification-clear", kwargs={"pk": other_notification.pk}),
+        )
+        self.assertEqual(cross_client_response.status_code, 404)
+        other_notification.refresh_from_db()
+        self.assertIsNone(other_notification.dismissed_at)
+
+        clear_response = self.http.post(
+            reverse("operations:client-notification-clear", kwargs={"pk": notification.pk}),
+        )
+        self.assertEqual(clear_response.status_code, 302)
+        self.assertEqual(clear_response.url, inbox_url)
+        notification.refresh_from_db()
+        self.assertIsNotNone(notification.dismissed_at)
+        self.assertIsNotNone(notification.read_at)
+        self.assertTrue(Estimate.objects.filter(pk=estimate.pk).exists())
+
+        inbox_response = self.http.get(inbox_url)
+        self.assertNotContains(inbox_response, notification.title)
+        self.assertContains(inbox_response, "0 unread")
+
+        self.login_as(self.other_client_user)
+        self.assertContains(self.http.get(inbox_url), other_notification.title)
+
     def test_client_messages_are_project_scoped_for_employees_and_owner_visible_globally(self):
         estimate = self.make_estimate(status=Estimate.Status.ACCEPTED)
         project = self.make_project(estimate=estimate, assigned=[self.manager])

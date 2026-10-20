@@ -104,6 +104,48 @@ class PrivateAdminSecurityTests(TestCase):
         self.assertRedirects(login_response, reverse("admin:index"))
         self.assertEqual(self.browser.session.get("_auth_user_id"), str(self.admin_user.pk))
 
+    def test_admin_pin_gate_slides_with_dashboard_activity_and_expires_after_idle(self):
+        from .security import ADMIN_GATE_EXPIRES_AT
+
+        self.profile.pin_enabled = True
+        self.profile.pin_hash = make_password("123456")
+        self.profile.save(update_fields=["pin_enabled", "pin_hash", "updated_at"])
+
+        self.browser.post(
+            reverse("admin:access"),
+            {"identifier": self.admin_user.username},
+        )
+        pin_response = self.browser.post(
+            reverse("admin:access"),
+            {"pin": "123456"},
+        )
+        self.assertRedirects(pin_response, reverse("admin:login"))
+        login_response = self.browser.post(
+            reverse("admin:login"),
+            {
+                "username": self.admin_user.username,
+                "password": "security-owner-pass",
+            },
+        )
+        self.assertRedirects(login_response, reverse("admin:index"))
+
+        session = self.browser.session
+        near_expiry = (timezone.now() + timedelta(seconds=30)).timestamp()
+        session[ADMIN_GATE_EXPIRES_AT] = near_expiry
+        session.save()
+
+        dashboard_response = self.browser.get(reverse("operations:dashboard"))
+        self.assertEqual(dashboard_response.status_code, 200)
+        refreshed_expiry = float(self.browser.session[ADMIN_GATE_EXPIRES_AT])
+        self.assertGreater(refreshed_expiry, near_expiry + 500)
+        self.assertEqual(self.browser.get(reverse("admin:index")).status_code, 200)
+
+        session = self.browser.session
+        session[ADMIN_GATE_EXPIRES_AT] = (timezone.now() - timedelta(seconds=1)).timestamp()
+        session.save()
+        expired_response = self.browser.get(reverse("admin:index"), follow=True)
+        self.assertContains(expired_response, "Enter your PIN.")
+
     def test_gccad_entry_opens_branded_login_without_pin(self):
         response = self.browser.get(reverse('admin:index'), follow=True)
 

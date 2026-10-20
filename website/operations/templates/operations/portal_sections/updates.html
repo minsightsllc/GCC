@@ -15,7 +15,7 @@
             {% if portal_latest_update %}
                 <h2>{{ portal_latest_update.title }}</h2>
                 <p>{{ portal_latest_update.body }}</p>
-                <span class="update-time">Updated {{ portal_latest_update.created_at|date:'M d, Y &middot; g:i A' }}</span>
+                <span class="update-time">Updated {{ portal_latest_update.created_at|date:'M d, Y' }} &middot; {{ portal_latest_update.created_at|date:'g:i A' }}</span>
             {% else %}
                 <h2>Your project is underway.</h2>
                 <p>The Grand Coast team will post the next client-visible update here.</p>
@@ -28,7 +28,7 @@
         <div class="portal-panel-heading"><div><span class="section-kicker">Project history</span><h2>Previous updates</h2></div></div>
         {% for update in portal_updates %}
             {% if not forloop.first %}
-                <article><div><span class="section-kicker">{{ update.created_at|date:'M d, Y &middot; g:i A' }}</span><h3>{{ update.title }}</h3><p>{{ update.body }}</p></div></article>
+                <article><div><span class="section-kicker">{{ update.created_at|date:'M d, Y' }} &middot; {{ update.created_at|date:'g:i A' }}</span><h3>{{ update.title }}</h3><p>{{ update.body }}</p></div></article>
             {% endif %}
         {% empty %}
             <p class="detail-value">More updates will appear as work progresses.</p>

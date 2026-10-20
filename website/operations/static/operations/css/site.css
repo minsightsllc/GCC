@@ -497,7 +497,10 @@ p { color: var(--muted); }
 
 /* Shared overlays */
 .toast-region { position: fixed; z-index: 100; right: 22px; bottom: 22px; display: flex; align-items: flex-end; flex-direction: column; gap: 9px; pointer-events: none; }
-.toast { max-width: 330px; padding: 13px 16px; color: var(--white); background: var(--brand-navy); border-left: 3px solid var(--brand-gold); box-shadow: var(--shadow); font-size: .68rem; animation: toast-in .25s ease both; }
+.toast { position: relative; max-width: 330px; padding: 13px 38px 13px 16px; color: var(--white); background: var(--brand-navy); border-left: 3px solid var(--brand-gold); box-shadow: var(--shadow); font-size: .68rem; animation: toast-in .25s ease both; pointer-events: auto; transition: opacity .2s ease, transform .2s ease; }
+.toast-dismiss { position: absolute; top: 5px; right: 5px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; color: var(--white); background: transparent; border: 0; border-radius: 3px; font: inherit; font-size: 1rem; line-height: 1; cursor: pointer; }
+.toast-dismiss:hover, .toast-dismiss:focus-visible { background: rgba(255, 255, 255, .15); outline: 2px solid var(--brand-gold); outline-offset: 1px; }
+.toast.is-dismissing { animation: none; opacity: 0; transform: translateY(9px); pointer-events: none; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
 .modal-backdrop { position: fixed; z-index: 110; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(20, 36, 63, .58); }
 .modal-backdrop[hidden] { display: none; }
@@ -511,6 +514,24 @@ p { color: var(--muted); }
 .modal-kv { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .modal-kv span { color: var(--muted); font-size: .68rem; }
 .modal-kv strong { color: var(--brand-navy); font-size: .7rem; text-align: right; }
+.estimate-delivery-dialog { width: min(560px, calc(100vw - 32px)); max-height: min(780px, calc(100vh - 32px)); padding: 30px; color: var(--ink); background: var(--white); border: 0; border-top: 4px solid var(--brand-gold); box-shadow: var(--shadow); }
+.estimate-delivery-dialog::backdrop { background: rgba(20, 36, 63, .62); }
+.estimate-delivery-dialog h2 { margin: 7px 32px 8px 0; color: var(--brand-navy); font-family: var(--font-display, Georgia, serif); font-size: 1.65rem; }
+.estimate-delivery-dialog p { margin: 0 0 17px; font-size: .72rem; line-height: 1.6; }
+.estimate-delivery-options { display: grid; gap: 9px; padding: 0; margin: 18px 0 14px; border: 0; }
+.estimate-delivery-option { display: flex; align-items: flex-start; gap: 11px; padding: 12px; color: var(--brand-navy); background: var(--soft); border: 1px solid var(--line-blue); cursor: pointer; }
+.estimate-delivery-option:focus-within { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
+.estimate-delivery-option:has(input:checked) { background: #f3f6fb; border-color: var(--brand-blue); }
+.estimate-delivery-option input[type="checkbox"] { flex: 0 0 18px; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--brand-blue); }
+.estimate-delivery-option > span { display: grid; gap: 4px; }
+.estimate-delivery-option strong { font-size: .69rem; }
+.estimate-delivery-option small { color: var(--muted); font-size: .62rem; line-height: 1.5; }
+.estimate-delivery-option.is-unavailable { cursor: not-allowed; opacity: .62; }
+.estimate-delivery-error { padding: 9px 11px; color: var(--danger); background: #fff6f5; border-left: 3px solid var(--danger); font-size: .66rem !important; font-weight: 700; }
+.estimate-delivery-guidance { padding: 11px 12px; color: var(--brand-navy); background: #fbf8ee; border-left: 3px solid var(--brand-gold); }
+.estimate-delivery-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.estimate-delivery-actions .button { min-height: 42px; }
+.estimate-portal-visibility-note { margin: -5px 0 4px; }
 
 @media (max-width: 1100px) {
     .site-nav { gap: 18px; }
@@ -1612,4 +1633,41 @@ body.native-media-enabled .native-media-actions {
     .execution-loop-section summary small {
         margin-left: 0;
     }
+}
+
+/* Keep native checkboxes compact inside forms that size text inputs broadly. */
+.admin-app input[type="checkbox"] {
+    display: inline-block;
+    flex: 0 0 20px;
+    width: 20px;
+    min-width: 20px;
+    height: 20px;
+    min-height: 20px;
+    padding: 0;
+    margin: 0;
+    accent-color: var(--brand-blue);
+    cursor: pointer;
+}
+
+.admin-app input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--brand-blue);
+    outline-offset: 2px;
+}
+
+.admin-app input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+    opacity: .65;
+}
+
+.admin-app .form-check {
+    min-height: 24px;
+    cursor: pointer;
+}
+
+.admin-app .external-estimate-status-fields > .form-check {
+    display: flex;
+    align-self: end;
+    align-items: center;
+    min-height: 38px;
+    margin-bottom: 15px;
 }

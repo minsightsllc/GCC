@@ -104,6 +104,9 @@
                 var url = new URL(window.location.href);
                 if (tabKey === "details") {
                     url.searchParams.delete("lead_tab");
+                    if (url.hash === "#follow-up") {
+                        url.hash = "";
+                    }
                 } else {
                     url.searchParams.set("lead_tab", tabKey);
                 }
@@ -127,8 +130,17 @@
             }
 
             var requestedTab = new URLSearchParams(window.location.search).get("lead_tab");
+            if (requestedTab !== "notes" && requestedTab !== "details") {
+                requestedTab = "";
+            }
             if (!requestedTab && document.body) {
-                requestedTab = document.body.getAttribute("data-lead-detail-tab");
+                var serverRequestedTab = document.body.getAttribute("data-lead-detail-tab");
+                if (serverRequestedTab === "notes" || serverRequestedTab === "details") {
+                    requestedTab = serverRequestedTab;
+                }
+            }
+            if (!requestedTab && window.location.hash === "#follow-up") {
+                requestedTab = "notes";
             }
             activateTab(requestedTab === "notes" ? "notes" : "details", false, false);
 
@@ -1459,6 +1471,123 @@
         document.body.classList.remove("modal-open");
     }
 
+    function initEstimateDeliveryDialog() {
+        each("[data-estimate-delivery-dialog]", function (dialog) {
+            var optionsPanel = dialog.querySelector("[data-estimate-delivery-options]");
+            var smsPanel = dialog.querySelector("[data-estimate-sms-followup]");
+            var form = dialog.querySelector("[data-estimate-delivery-form]");
+            var deliveryError = dialog.querySelector("[data-estimate-delivery-error]");
+            var smsLink = dialog.querySelector("[data-estimate-sms-link]");
+            var channelChoices = form ? Array.prototype.slice.call(form.querySelectorAll('input[name="delivery_mode"]')) : [];
+            var allThreeChoice = form ? form.querySelector("[data-estimate-delivery-all]") : null;
+
+            function clearDeliveryQuery() {
+                var url = new URL(window.location.href);
+                url.searchParams.delete("delivery_prompt");
+                url.searchParams.delete("sms_followup");
+                url.searchParams.delete("sms_after_all");
+                url.searchParams.delete("sms_after_other_channels");
+                window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+            }
+
+            function syncAllThreeChoice(selectAllChannels) {
+                if (!allThreeChoice) return;
+                if (selectAllChannels) {
+                    channelChoices.forEach(function (choice) {
+                        if (!choice.disabled) choice.checked = allThreeChoice.checked;
+                    });
+                    return;
+                }
+                allThreeChoice.checked = channelChoices.length > 0 && channelChoices.every(function (choice) {
+                    return choice.checked;
+                });
+            }
+
+            function openDeliveryState(state) {
+                var showingSms = state === "sms";
+                optionsPanel.hidden = showingSms;
+                smsPanel.hidden = !showingSms;
+                dialog.setAttribute(
+                    "aria-labelledby",
+                    showingSms ? "estimate-sms-followup-title" : "estimate-delivery-title"
+                );
+                dialog.setAttribute(
+                    "aria-describedby",
+                    showingSms ? "estimate-sms-followup-description" : "estimate-delivery-description"
+                );
+                if (!dialog.open) {
+                    dialog.showModal();
+                }
+                if (!showingSms) {
+                    var firstAvailableChoice = dialog.querySelector('input[name="delivery_mode"]:not(:disabled)');
+                    if (firstAvailableChoice) firstAvailableChoice.focus();
+                } else {
+                    var smsAction = smsPanel.querySelector("a[href]");
+                    if (smsAction) smsAction.focus();
+                }
+            }
+
+            each("[data-open-estimate-delivery]", function (trigger) {
+                trigger.addEventListener("click", function () {
+                    openDeliveryState("delivery");
+                });
+            });
+            each("[data-close-estimate-delivery]", function (button) {
+                button.addEventListener("click", function () {
+                    clearDeliveryQuery();
+                    dialog.close();
+                });
+            });
+            if (form) {
+                if (allThreeChoice) {
+                    allThreeChoice.addEventListener("change", function () {
+                        syncAllThreeChoice(true);
+                        if (deliveryError) deliveryError.hidden = true;
+                    });
+                }
+                form.addEventListener("submit", function (event) {
+                    var selected = form.querySelectorAll('input[name="delivery_mode"]:checked');
+                    var allSelected = allThreeChoice && allThreeChoice.checked;
+                    if (!selected.length && !allSelected) {
+                        event.preventDefault();
+                        if (deliveryError) {
+                            deliveryError.hidden = false;
+                            deliveryError.focus();
+                        }
+                        return;
+                    }
+                    if (deliveryError) deliveryError.hidden = true;
+                    if (selected.length !== 1 || selected[0].value !== "sms") return;
+                    event.preventDefault();
+                    if (!smsLink) return;
+                    var smsHref = smsLink.href;
+                    clearDeliveryQuery();
+                    dialog.close();
+                    window.location.assign(smsHref);
+                });
+                form.addEventListener("change", function (event) {
+                    if (event.target.matches('input[name="delivery_mode"]')) {
+                        syncAllThreeChoice(false);
+                        if (deliveryError) deliveryError.hidden = true;
+                    }
+                });
+            }
+            if (smsLink) {
+                smsLink.addEventListener("click", function () {
+                    clearDeliveryQuery();
+                    dialog.close();
+                });
+            }
+            dialog.addEventListener("close", clearDeliveryQuery);
+
+            if (dialog.dataset.autoOpen === "sms") {
+                openDeliveryState("sms");
+            } else if (dialog.dataset.autoOpen === "delivery") {
+                openDeliveryState("delivery");
+            }
+        });
+    }
+
     function initModal() {
         each(".js-lightbox", function (source) {
             source.addEventListener("click", function () {
@@ -1484,12 +1613,19 @@
     }
 
     function initToastDismissal() {
-        window.setTimeout(function () {
-            each(".toast", function (toast) {
-                toast.style.opacity = "0";
-                toast.style.transform = "translateY(9px)";
-            });
-        }, 7000);
+        each(".toast", function (toast) {
+            const dismiss = function () {
+                if (toast.dataset.dismissed === "true") return;
+                toast.dataset.dismissed = "true";
+                toast.classList.add("is-dismissing");
+                window.setTimeout(function () { toast.remove(); }, 220);
+            };
+            const dismissButton = toast.querySelector("[data-toast-dismiss]");
+            if (dismissButton) dismissButton.addEventListener("click", dismiss);
+            if (toast.dataset.persistent !== "true") {
+                window.setTimeout(dismiss, 7000);
+            }
+        });
     }
 
     function init() {
@@ -1505,6 +1641,7 @@
         initWorkerSelectors();
         initNotificationActions();
         initEstimateEditors();
+        initEstimateDeliveryDialog();
         initModal();
         initToastDismissal();
         initNativeMediaBridge();

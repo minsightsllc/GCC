@@ -219,6 +219,8 @@ class OperationsWorkflowTests(TestCase):
         lead = Lead.objects.get(email="new.homeowner@example.com")
         self.assertEqual(lead.name, "New Homeowner")
         self.assertEqual(lead.status, Lead.Status.NEW)
+        self.assertEqual(lead.note, "Please help us plan the first phase.")
+        self.assertEqual(lead.internal_note, "")
         self.assertTrue(Activity.objects.filter(lead=lead, message="New lead received").exists())
 
     def test_contact_form_attachment_uses_contact_form_storage_prefix(self):
@@ -308,11 +310,39 @@ class OperationsWorkflowTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, lead.note)
+        self.assertNotContains(response, 'name="note"')
+        self.assertContains(response, 'name="internal_note"')
         self.assertContains(response, "admin-site-plan.png")
         self.assertContains(
             response,
             reverse("operations:lead-attachment-file", kwargs={"pk": attachment.pk}),
         )
+
+    def test_lead_dashboard_labels_inquiry_and_admin_note_separately(self):
+        lead = Lead.objects.create(
+            name="Inquiry Separation Lead",
+            email="inquiry.separation@example.com",
+            service="Planning",
+            location="Ojai, CA",
+            note="Please call me about the original project inquiry.",
+            internal_note="PRIVATE: confirm preferred call time.",
+        )
+        self.login_staff()
+
+        response = self.browser.get(
+            reverse("operations:dashboard-section", kwargs={"section": "leads"}),
+            {"lead": lead.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Original client inquiry (read-only)")
+        self.assertContains(response, lead.note)
+        self.assertContains(response, "Admin note (internal)")
+        self.assertContains(
+            response,
+            "Private to Grand Coast staff; not shown in the client portal.",
+        )
+        self.assertContains(response, lead.internal_note)
 
     def test_contact_upload_rejects_spoofed_file_content(self):
         form = ContactLeadForm(
@@ -469,6 +499,7 @@ class OperationsWorkflowTests(TestCase):
         self.assertEqual(self.estimate.total, original_total)
         self.assertEqual(self.estimate.deposit_amount, Decimal("50.00"))
         self.assertEqual(self.estimate.line_items.count(), 1)
+        self.line.refresh_from_db()
         self.assertEqual(self.line.description, "Cabinetry")
 
     def test_legacy_estimate_line_items_cannot_be_removed(self):
@@ -610,6 +641,8 @@ class OperationsWorkflowTests(TestCase):
         self.assertEqual(update.visibility, ProjectUpdate.Visibility.CLIENT)
 
     def test_client_portal_only_shows_assigned_project(self):
+        self.lead.internal_note = "PRIVATE admin-only follow-up detail"
+        self.lead.save(update_fields=["internal_note", "updated_at"])
         self.login_client()
         response = self.browser.get(
             reverse("operations:portal"),
@@ -618,6 +651,40 @@ class OperationsWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.project.title)
         self.assertNotContains(response, self.other_project.title)
+        self.assertNotContains(response, self.lead.internal_note)
+
+    def test_edit_client_control_opens_cancels_and_saves_client_form(self):
+        self.login_staff()
+        clients_url = reverse("operations:dashboard-section", kwargs={"section": "clients"})
+
+        view_response = self.browser.get(clients_url, {"client": self.client_record.pk})
+        self.assertEqual(view_response.status_code, 200)
+        self.assertContains(view_response, "Edit client")
+        self.assertNotContains(view_response, 'id="client-edit-form"')
+
+        edit_response = self.browser.get(
+            clients_url,
+            {"client": self.client_record.pk, "edit": "client"},
+        )
+        self.assertEqual(edit_response.status_code, 200)
+        self.assertContains(edit_response, "Cancel edit")
+        self.assertContains(edit_response, 'id="client-edit-form"')
+
+        update_response = self.browser.post(
+            reverse("operations:client-update", kwargs={"pk": self.client_record.pk}),
+            {
+                "name": "Maya Thompson Updated",
+                "company": "Coastal Home",
+                "email": "maya.updated@example.com",
+                "phone": "805-555-0111",
+            },
+        )
+        self.assertEqual(update_response.status_code, 302)
+        self.client_record.refresh_from_db()
+        self.assertEqual(self.client_record.name, "Maya Thompson Updated")
+        self.assertEqual(self.client_record.company, "Coastal Home")
+        self.assertEqual(self.client_record.email, "maya.updated@example.com")
+        self.assertEqual(self.client_record.phone, "805-555-0111")
 
     def test_private_media_requires_correct_authenticated_client(self):
         self.public_media.file.save("public-reference.jpg", ContentFile(b"public bytes"), save=True)
@@ -681,6 +748,16 @@ class OperationsWorkflowTests(TestCase):
         invite, raw_token = create_client_invite(invite_client, actor=self.staff)
         invite_response = self.browser.get(reverse("operations:client-invite", kwargs={"token": raw_token}))
         self.assertEqual(invite_response.status_code, 200)
+        invite_form = invite_response.context["form"]
+        self.assertEqual(invite_form["email"].value(), "invite@example.com")
+        self.assertTrue(invite_form["email"].field.disabled)
+        self.assertFalse(invite_form["username"].value())
+        self.assertEqual(
+            invite_form["username"].field.widget.attrs["placeholder"],
+            "Create a unique username",
+        )
+        self.assertEqual(invite_form["password1"].label, "Password")
+        self.assertEqual(invite_form["password2"].label, "Confirm Password")
         accept_response = self.browser.post(
             reverse("operations:client-invite", kwargs={"token": raw_token}),
             {
@@ -692,6 +769,9 @@ class OperationsWorkflowTests(TestCase):
             },
         )
         self.assertEqual(accept_response.status_code, 302)
+        invite_client.refresh_from_db()
+        self.assertEqual(invite_client.user.username, "jordan.portal")
+        self.assertEqual(invite_client.user.email, "invite@example.com")
         invite.refresh_from_db()
         self.assertIsNotNone(invite.accepted_at)
         self.assertEqual(self.browser.get(reverse("operations:client-invite", kwargs={"token": raw_token})).status_code, 410)

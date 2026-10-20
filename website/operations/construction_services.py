@@ -256,9 +256,21 @@ def convert_lead(lead, *, actor, idempotency_key=None):
         if idempotency_key
         else None
     )
-    if event_key and WorkflowEvent.objects.filter(idempotency_key=event_key).exists():
+    conversion_was_recorded = bool(
+        event_key and WorkflowEvent.objects.filter(idempotency_key=event_key).exists()
+    )
+    if conversion_was_recorded:
         locked.refresh_from_db()
-        return locked.client, False
+        existing_client = locked.client or Client.objects.filter(email__iexact=locked.email).first()
+        if existing_client:
+            if locked.client_id != existing_client.pk:
+                locked.client = existing_client
+                locked.save(update_fields=["client", "updated_at"])
+            return existing_client, False
+
+    # A prior conversion event can outlive its Client record (for example, if
+    # that record was deleted). Repair the lead/client link instead of letting
+    # an idempotent retry return None to the caller.
     existing = locked.client or Client.objects.filter(email__iexact=locked.email).first()
     client_was_created = existing is None
     client = get_or_create_client_for_lead(locked, actor=actor)
@@ -267,25 +279,33 @@ def convert_lead(lead, *, actor, idempotency_key=None):
         locked.workflow_stage = Lead.WorkflowStage.CONTACTED
         locked.next_action = locked.next_action or "Prepare estimate"
         locked.save(update_fields=["workflow_stage", "next_action", "updated_at"])
-    record_workflow_event(
-        "lead_converted_to_client",
-        actor=actor,
-        related=locked,
-        lead=locked,
-        after_state={
-            **state_snapshot(locked, ["client_id", "workflow_stage", "next_action"]),
-            "client_created": client_was_created,
-            "client_id": str(client.pk),
-        },
-        before_state=before,
-        idempotency_key=idempotency_key,
-    )
-    record_activity(
-        "Lead converted to client",
-        f"{locked.name} · {client.email}",
-        actor=actor,
-        lead=locked,
-    )
+    if conversion_was_recorded:
+        record_activity(
+            "Client record restored for converted lead",
+            f"{locked.name} · {client.email}",
+            actor=actor,
+            lead=locked,
+        )
+    else:
+        record_workflow_event(
+            "lead_converted_to_client",
+            actor=actor,
+            related=locked,
+            lead=locked,
+            after_state={
+                **state_snapshot(locked, ["client_id", "workflow_stage", "next_action"]),
+                "client_created": client_was_created,
+                "client_id": str(client.pk),
+            },
+            before_state=before,
+            idempotency_key=idempotency_key,
+        )
+        record_activity(
+            "Lead converted to client",
+            f"{locked.name} · {client.email}",
+            actor=actor,
+            lead=locked,
+        )
     return client, client_was_created
 
 
@@ -891,14 +911,12 @@ def record_external_estimate_status(
         Estimate.ExternalEstimateStatus.REJECTED,
     }:
         user_model = get_user_model()
-        employee_recipients = list(
+        owner_recipients = list(
             user_model.objects.filter(is_active=True, is_staff=True, is_superuser=True)
         )
-        if locked.lead_id and locked.lead.assigned_to_id:
-            employee_recipients.append(locked.lead.assigned_to)
         outcome = "approved" if status == Estimate.ExternalEstimateStatus.APPROVED else "declined"
         queue_employee_notifications(
-            employee_recipients,
+            owner_recipients,
             kind="estimate-accepted" if status == Estimate.ExternalEstimateStatus.APPROVED else "estimate-declined",
             title=f"External estimate {outcome}",
             body=(

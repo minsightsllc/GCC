@@ -1477,6 +1477,7 @@ def api_v1_notifications(request):
     if is_client(request.user):
         notifications = ClientNotification.objects.filter(
             client__user=request.user,
+            dismissed_at__isnull=True,
         )
     elif is_staff_user(request.user):
         notifications = EmployeeNotification.objects.filter(employee=request.user)
@@ -1505,7 +1506,10 @@ def api_v1_notifications(request):
 def api_v1_notification_read(request, pk):
     if is_client(request.user):
         notification = get_object_or_404(
-            ClientNotification.objects.filter(client__user=request.user),
+            ClientNotification.objects.filter(
+                client__user=request.user,
+                dismissed_at__isnull=True,
+            ),
             pk=pk,
         )
     elif is_staff_user(request.user):

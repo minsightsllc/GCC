@@ -13,6 +13,16 @@
         <form method="post" action="{% url 'operations:logout' %}">{% csrf_token %}<button class="portal-signout" type="submit">Sign out</button></form>
     {% endif %}
 </div>
+{% if portal_client %}
+    <div
+        aria-hidden="true"
+        data-client-navigation-counts
+        data-count-estimates="{{ client_estimate_review_count }}"
+        data-count-messages="{{ client_unread_team_messages_count }}"
+        data-count-notifications="{{ client_unread_notifications_count }}"
+        style="display:none"
+    ></div>
+{% endif %}
 <header class="portal-header">
     <div class="container portal-header-inner">
         <a class="portal-brand" href="{% url 'operations:home' %}">

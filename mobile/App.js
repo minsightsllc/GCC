@@ -25,6 +25,7 @@ import {
   DrawerContentScrollView,
   DrawerItem,
   createDrawerNavigator,
+  useDrawerStatus,
 } from '@react-navigation/drawer';
 import {
   DefaultTheme,
@@ -68,8 +69,35 @@ const CLIENT_WORKSPACE_PATH = '/portal/';
 const CLIENT_OVERVIEW_PATH = '/portal/overview/';
 const CLIENT_PROFILE_PATH = '/portal/profile/';
 const CLIENT_NOTIFICATIONS_PATH = '/portal/notifications/';
+const CLIENT_NAVIGATION_COUNTS_PATH = '/portal/mobile-navigation-counts/';
 const CLIENT_PUSH_REGISTER_PATH = '/portal/notifications/devices/';
 const CLIENT_PUSH_DEACTIVATE_PATH = '/portal/notifications/devices/deactivate/';
+const CLIENT_NAVIGATION_COUNTS_REFRESH_SCRIPT = [
+  '(function () {',
+  '  try {',
+  '    if (!window.ReactNativeWebView || typeof window.fetch !== \'function\') { return true; }',
+  '    if (window.__gccClientNavigationCountsController) {',
+  '      window.__gccClientNavigationCountsController.abort();',
+  '    }',
+  '    var controller = new AbortController();',
+  '    window.__gccClientNavigationCountsController = controller;',
+  `    fetch(${JSON.stringify(CLIENT_NAVIGATION_COUNTS_PATH)}, { credentials: 'same-origin', signal: controller.signal })`,
+  '      .then(function (response) { return response.ok ? response.json() : null; })',
+  '      .then(function (counts) {',
+  '        if (!counts || !window.ReactNativeWebView) { return; }',
+  '        window.ReactNativeWebView.postMessage(JSON.stringify({',
+  "          type: 'client-navigation-counts',",
+  "          workspaceKind: 'client',",
+  '          counts: counts,',
+  '        }));',
+  '      })',
+  '      .catch(function () {});',
+  '  } catch (error) {',
+  '    // Keep the last known counts if a refresh is unavailable.',
+  '  }',
+  '  true;',
+  '})();',
+].join('\n');
 const PRIVATE_ROUTE_PREFIXES = ['/dashboard', '/team', '/portal'];
 const LAUNCH_SPLASH_HOLD_MS = 1000;
 const LAUNCH_SPLASH_FADE_MS = 600;
@@ -134,9 +162,30 @@ const clientDrawerPages = [
   { label: 'Project overview', icon: 'home-outline', path: '/portal/overview/', tab: 'Workspace' },
   { label: 'Updates', icon: 'megaphone-outline', path: '/portal/updates/', tab: 'Workspace' },
   { label: 'Photos & videos', icon: 'images-outline', path: '/portal/photos/', tab: 'Workspace' },
-  { label: 'Messages', icon: 'chatbubbles-outline', path: '/portal/messages/', tab: 'Workspace' },
-  { label: 'Estimate & files', icon: 'receipt-outline', path: '/portal/estimate-files/', tab: 'Workspace' },
-  { label: 'Notifications', icon: 'notifications-outline', path: '/portal/notifications/', tab: 'Workspace' },
+  {
+    label: 'Messages',
+    icon: 'chatbubbles-outline',
+    path: '/portal/messages/',
+    tab: 'Workspace',
+    countKey: 'messages',
+    countAccessibilityLabel: (count) => `${count} unread message${count === 1 ? '' : 's'}`,
+  },
+  {
+    label: 'Estimate & files',
+    icon: 'receipt-outline',
+    path: '/portal/estimate-files/',
+    tab: 'Workspace',
+    countKey: 'estimates',
+    countAccessibilityLabel: (count) => `${count} estimate${count === 1 ? '' : 's'} to review`,
+  },
+  {
+    label: 'Notifications',
+    icon: 'notifications-outline',
+    path: '/portal/notifications/',
+    tab: 'Workspace',
+    countKey: 'notifications',
+    countAccessibilityLabel: (count) => `${count} unread notification${count === 1 ? '' : 's'}`,
+  },
   { label: 'Profile', icon: 'person-circle-outline', path: CLIENT_PROFILE_PATH, tab: 'Overview' },
 ];
 
@@ -264,6 +313,23 @@ const MOBILE_CHROME_SCRIPT = [
   '    }',
   '  } catch (error) {',
   '    // Count metadata is optional on public pages and must never block navigation.',
+  '  }',
+  '',
+  '  try {',
+  "    var clientNavData = document.querySelector('[data-client-navigation-counts]');",
+  '    if (clientNavData && window.ReactNativeWebView) {',
+  '      window.ReactNativeWebView.postMessage(JSON.stringify({',
+  "        type: 'client-navigation-counts',",
+  "        workspaceKind: 'client',",
+  '        counts: {',
+  "          estimates: Number(clientNavData.getAttribute('data-count-estimates')) || 0,",
+  "          messages: Number(clientNavData.getAttribute('data-count-messages')) || 0,",
+  "          notifications: Number(clientNavData.getAttribute('data-count-notifications')) || 0,",
+  '        },',
+  '      }));',
+  '    }',
+  '  } catch (error) {',
+  '    // Client count metadata is optional and must never block portal navigation.',
   '  }',
   '',
   '  try {',
@@ -552,12 +618,28 @@ function AppHeader({ navigation }) {
   );
 }
 
-function NativeNotificationBadge({ count }) {
+function NativeNotificationBadge({ count, page, lightSurface = false }) {
   const numericCount = Number.isFinite(Number(count)) ? Math.max(0, Math.floor(Number(count))) : 0;
 
+  if (numericCount === 0) {
+    return null;
+  }
+
+  const displayedCount = numericCount > 99 ? '99+' : String(numericCount);
+  const accessibilityLabel = typeof page?.countAccessibilityLabel === 'function'
+    ? page.countAccessibilityLabel(numericCount)
+    : `${page?.label || 'Navigation item'}, ${numericCount}`;
+
   return (
-    <View accessibilityLabel={`${numericCount} notifications`} style={styles.nativeNavCount}>
-      <Text style={styles.nativeNavCountText}>{numericCount}</Text>
+    <View
+      accessible
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="text"
+      style={[styles.nativeNavCount, lightSurface && styles.clientNativeNavCount]}
+    >
+      <Text style={[styles.nativeNavCountText, lightSurface && styles.clientNativeNavCountText]}>
+        {displayedCount}
+      </Text>
     </View>
   );
 }
@@ -579,7 +661,9 @@ function NativeDrawerItem({ navigation, notificationCount, page, isEmployee }) {
           <Text style={[isEmployee ? styles.employeeDrawerItemLabel : styles.drawerItemLabel, styles.drawerItemLabelText]}>
             {page.label}
           </Text>
-          {page.countKey ? <NativeNotificationBadge count={notificationCount} /> : null}
+          {page.countKey ? (
+            <NativeNotificationBadge count={notificationCount} lightSurface={!isEmployee} page={page} />
+          ) : null}
         </View>
       )}
       onPress={() => {
@@ -620,11 +704,19 @@ function NativeDrawerAction({ action, isAdmin, navigation }) {
 
 function AppDrawerContent({ navigation, ...props }) {
   const { isAuthenticated, navigationCounts, workspaceKind, workspacePath } = useSession();
+  const { webViewRef } = useContext(SharedWebViewContext);
+  const drawerStatus = useDrawerStatus();
   const isAdmin = workspaceKind === 'admin';
   const isEmployee = workspaceKind === 'employee';
   const isClient = workspaceKind === 'client';
   const isOperations = isAdmin || isEmployee;
   const pages = isAdmin ? adminDrawerPages : isEmployee ? employeeDrawerPages : clientDrawerPages;
+
+  useEffect(() => {
+    if (isAuthenticated && isClient && drawerStatus === 'open') {
+      webViewRef?.current?.injectJavaScript(CLIENT_NAVIGATION_COUNTS_REFRESH_SCRIPT);
+    }
+  }, [drawerStatus, isAuthenticated, isClient, webViewRef]);
 
   const accountPages = useMemo(
     () => [{
@@ -683,7 +775,12 @@ function AppDrawerContent({ navigation, ...props }) {
 
           <Text style={styles.drawerSectionLabel}>{isClient ? 'Client portal' : 'Explore'}</Text>
           {pages.map((page) => (
-            <NativeDrawerItem key={page.path} navigation={navigation} page={page} />
+            <NativeDrawerItem
+              key={page.path}
+              navigation={navigation}
+              notificationCount={navigationCounts?.[page.countKey] ?? 0}
+              page={page}
+            />
           ))}
 
           <Text style={[styles.drawerSectionLabel, styles.drawerSectionLabelSpaced]}>Account</Text>
@@ -1175,6 +1272,13 @@ function SignInGate({ onWebViewLoadEnd, webViewRef }) {
       if (
         message.type === 'operations-navigation-counts'
         && (message.workspaceKind === 'admin' || message.workspaceKind === 'employee')
+        && message.counts
+      ) {
+        updateNavigationCounts(message.workspaceKind, message.counts);
+      }
+      if (
+        message.type === 'client-navigation-counts'
+        && message.workspaceKind === 'client'
         && message.counts
       ) {
         updateNavigationCounts(message.workspaceKind, message.counts);
@@ -1999,27 +2103,29 @@ export default function App() {
   }, []);
 
   const updateNavigationCounts = useCallback((workspaceKind, counts) => {
-    if (workspaceKind !== 'admin' && workspaceKind !== 'employee') {
+    if (workspaceKind !== 'admin' && workspaceKind !== 'employee' && workspaceKind !== 'client') {
       return;
     }
 
-    const countKeys = [
-      'overview',
-      'clients',
-      'tasks',
-      'calendar',
-      'time',
-      'documents',
-      'leads',
-      'estimates',
-      'projects',
-      'media',
-      'content',
-      'team',
-      'messages',
-      'notifications',
-      'profile',
-    ];
+    const countKeys = workspaceKind === 'client'
+      ? ['estimates', 'messages', 'notifications']
+      : [
+        'overview',
+        'clients',
+        'tasks',
+        'calendar',
+        'time',
+        'documents',
+        'leads',
+        'estimates',
+        'projects',
+        'media',
+        'content',
+        'team',
+        'messages',
+        'notifications',
+        'profile',
+      ];
     const sanitizedCounts = countKeys.reduce((result, key) => {
       const value = Number(counts[key]);
       result[key] = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
@@ -2222,11 +2328,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
+  clientNativeNavCount: {
+    backgroundColor: '#EDF2F8',
+    borderColor: '#D9E1EF',
+    borderWidth: 1,
+  },
   nativeNavCountText: {
     color: '#F7E8BB',
     fontSize: 11,
     fontWeight: '800',
     textAlign: 'center',
+  },
+  clientNativeNavCountText: {
+    color: colors.blue,
   },
   employeeDrawerSectionLabel: {
     color: '#AFC4E2',

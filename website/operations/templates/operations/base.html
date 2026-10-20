@@ -10,12 +10,12 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="description" content="Grand Coast Construction Inc. — thoughtful construction and clear communication across Southern California.">
     <title>{% block title %}Grand Coast Construction Inc.{% endblock %}</title>
-    <link rel="stylesheet" href="{% static 'operations/css/site.css' %}?v=20261017-lead-tabs-1">
+    <link rel="stylesheet" href="{% static 'operations/css/site.css' %}?v=20261019-estimate-delivery-1">
     <link rel="icon" type="image/png" href="{% static 'operations/images/gcc-logo.png' %}">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="{% static 'operations/images/gcc-logo.png' %}">
     {% block extra_head %}{% endblock %}
-    <script defer src="{% static 'operations/js/operations.js' %}?v=20261017-lead-tabs-1"></script>
+    <script defer src="{% static 'operations/js/operations.js' %}?v=20261019-estimate-delivery-1"></script>
     <script defer src="{% static 'operations/js/pwa-register.js' %}"></script>
 </head>
 <body class="{% block body_class %}{% endblock %}" data-asset-root="{% static 'operations/' %}" data-lead-detail-tab="{{ lead_detail_tab|default:'' }}">
@@ -23,7 +23,10 @@
 
     <div class="toast-region" aria-live="polite" aria-atomic="true">
         {% for message in messages %}
-            <div class="toast {% if message.tags %}toast-{{ message.tags }}{% endif %}">{{ message }}</div>
+            <div class="toast {% if message.tags %}toast-{{ message.tags }}{% endif %}"{% if operations_nav_role == "admin" %} data-persistent="true"{% endif %}>
+                <span class="toast-content">{{ message }}</span>
+                <button class="toast-dismiss" type="button" data-toast-dismiss aria-label="Dismiss notification" title="Dismiss">×</button>
+            </div>
         {% endfor %}
     </div>
     <div class="modal-backdrop" data-modal hidden>

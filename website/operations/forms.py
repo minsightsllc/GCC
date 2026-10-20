@@ -126,6 +126,12 @@ class LeadForm(forms.ModelForm):
         widgets = {
             "note": forms.Textarea(attrs={"rows": 4}),
         }
+        labels = {"note": "Client inquiry"}
+        help_texts = {
+            "note": (
+                "The client's original message. This is read-only after the lead is created."
+            )
+        }
 
     def __init__(self, *args, staff_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -142,8 +148,14 @@ class LeadStatusForm(forms.ModelForm):
 class LeadNoteForm(forms.ModelForm):
     class Meta:
         model = Lead
-        fields = ["note"]
-        widgets = {"note": forms.Textarea(attrs={"rows": 3})}
+        fields = ["internal_note"]
+        labels = {"internal_note": "Admin note (internal)"}
+        help_texts = {
+            "internal_note": (
+                "Private to Grand Coast staff. This note is not shown in the client portal."
+            )
+        }
+        widgets = {"internal_note": forms.Textarea(attrs={"rows": 3})}
 
 
 class QuickTaskForm(forms.ModelForm):
@@ -771,11 +783,37 @@ class EmployeeInviteAcceptForm(forms.Form):
 
 
 class ClientInviteAcceptForm(forms.Form):
-    username = forms.CharField(max_length=150)
-    first_name = forms.CharField(max_length=80)
-    last_name = forms.CharField(max_length=80)
-    password1 = forms.CharField(widget=forms.PasswordInput)
-    password2 = forms.CharField(widget=forms.PasswordInput)
+    email = forms.EmailField(
+        label="Email",
+        disabled=True,
+        widget=forms.EmailInput(attrs={"autocomplete": "email"}),
+    )
+    username = forms.CharField(
+        max_length=150,
+        label="Username",
+        widget=forms.TextInput(
+            attrs={
+                "autocomplete": "username",
+                "placeholder": "Create a unique username or use your email address",
+            }
+        ),
+    )
+    first_name = forms.CharField(
+        max_length=80,
+        widget=forms.TextInput(attrs={"autocomplete": "given-name"}),
+    )
+    last_name = forms.CharField(
+        max_length=80,
+        widget=forms.TextInput(attrs={"autocomplete": "family-name"}),
+    )
+    password1 = forms.CharField(
+        label="Password",
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+    )
+    password2 = forms.CharField(
+        label="Confirm Password",
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+    )
 
     def clean_username(self):
         username = self.cleaned_data["username"].strip()
@@ -883,7 +921,7 @@ class AdminGateIdentifierForm(forms.Form):
 
 class AdminPinForm(forms.Form):
     pin = forms.CharField(
-        label="Six-digit admin PIN",
+        label="Admin PIN",
         max_length=6,
         min_length=6,
         widget=forms.PasswordInput(attrs={"inputmode": "numeric", "autocomplete": "one-time-code"}),
