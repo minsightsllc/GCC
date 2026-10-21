@@ -16,13 +16,16 @@
                 <h2>{{ portal_latest_update.title }}</h2>
                 <p>{{ portal_latest_update.body }}</p>
                 <span class="update-time">Updated {{ portal_latest_update.created_at|date:'M d, Y' }} &middot; {{ portal_latest_update.created_at|date:'g:i A' }}</span>
+            {% elif portal_project.needs_staff_assignment %}
+                <h2>Your project is being set up.</h2>
+                <p>Grand Coast is assigning an employee. Client-ready progress updates will appear here once your team is assigned.</p>
+                <span class="update-time">Updates will appear after setup is complete.</span>
             {% else %}
                 <h2>Your project is underway.</h2>
                 <p>The Grand Coast team will post the next client-visible update here.</p>
                 <span class="update-time">Updates will appear as work progresses.</span>
             {% endif %}
         </div>
-        <img src="{{ portal_project.display_image }}" alt="{{ portal_project.title }}" class="update-image">
     </section>
     <section class="portal-update-list" aria-label="Previous project updates">
         <div class="portal-panel-heading"><div><span class="section-kicker">Project history</span><h2>Previous updates</h2></div></div>

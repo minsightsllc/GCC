@@ -158,9 +158,9 @@
                 <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">Add project task</button></div>
             </form>{% endif %}
             {% for row in execution_task_rows %}
-            {% if can_edit_operations or row.task.assigned_to_id == request.user.pk %}<form class="execution-record-card" method="post" action="{% url 'operations:project-task-status' pk=row.task.pk %}">
+            {% if row.can_update %}<form class="execution-record-card" method="post" action="{% url 'operations:project-task-status' pk=row.task.pk %}">
                 {% csrf_token %}
-                <strong>{{ row.task.title }}</strong><small>{% if row.task.assigned_to %}{{ row.task.assigned_to.get_full_name|default:row.task.assigned_to.username }}{% endif %}{% if row.task.due_date %} · Due {{ row.task.due_date }}{% endif %}</small>
+                <strong>{{ row.task.title }}</strong><small>{% for person in row.task.assigned_to.all %}{% if not forloop.first %}, {% endif %}{{ person.get_full_name|default:person.username }}{% empty %}Unassigned{% endfor %}{% if row.task.due_date %} · Due {{ row.task.due_date }}{% endif %}</small>
                 {{ row.form.as_p }}
                 <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">Save task status</button></div>
             </form>{% else %}<div class="execution-record-card"><strong>{{ row.task.title }}</strong><small>Assigned work · status {{ row.task.get_status_display }}</small></div>{% endif %}

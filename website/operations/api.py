@@ -1018,11 +1018,15 @@ def _project_data(project, user, *, include_detail=False):
                 "status": task.status,
                 "priority": task.priority,
                 "due_date": task.due_date.isoformat() if task.due_date else None,
-                "assigned_to": task.assigned_to.get_full_name() if task.assigned_to_id else None,
+                "assigned_to": ", ".join(
+                    person.get_full_name() or person.get_username()
+                    for person in task.assigned_to.all()
+                ) or None,
+                "assigned_to_ids": [str(person.pk) for person in task.assigned_to.all()],
             }
-            for task in project.tasks.select_related("assigned_to").all()
+            for task in project.tasks.prefetch_related("assigned_to", "watchers").all()
             if not is_field(user)
-            or task.assigned_to_id == user.pk
+            or task.assigned_to.filter(pk=user.pk).exists()
             or task.watchers.filter(pk=user.pk).exists()
         ]
     return data
@@ -1260,7 +1264,7 @@ def api_v1_project_tasks(request, pk):
     if not is_staff_user(request.user):
         return _error("Task access denied.", 403)
     project = get_object_or_404(visible_projects(request.user), pk=pk)
-    tasks = project.tasks.select_related("assigned_to")
+    tasks = project.tasks.prefetch_related("assigned_to", "watchers")
     if is_field(request.user):
         tasks = tasks.filter(
             Q(assigned_to=request.user) | Q(watchers=request.user)
@@ -1274,7 +1278,11 @@ def api_v1_project_tasks(request, pk):
                 "status": task.status,
                 "priority": task.priority,
                 "due_date": task.due_date.isoformat() if task.due_date else None,
-                "assigned_to": task.assigned_to.get_full_name() if task.assigned_to_id else None,
+                "assigned_to": ", ".join(
+                    person.get_full_name() or person.get_username()
+                    for person in task.assigned_to.all()
+                ) or None,
+                "assigned_to_ids": [str(person.pk) for person in task.assigned_to.all()],
             }
             for task in tasks[:300]
         ]

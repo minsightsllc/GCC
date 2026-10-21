@@ -104,7 +104,7 @@ def _search_leads(term: str) -> list[SearchResult]:
 
 def _search_tasks(term: str) -> list[SearchResult]:
     tasks = (
-        Task.objects.select_related('lead', 'lead__client', 'project', 'project__client', 'assigned_to')
+        Task.objects.select_related('lead', 'lead__client', 'project', 'project__client').prefetch_related('assigned_to')
         .filter(
             Q(lead__isnull=True) | Q(lead__deleted_at__isnull=True),
         )

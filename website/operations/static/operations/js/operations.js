@@ -37,6 +37,233 @@
         }
     }
 
+    function initTaskAssociationSelectors() {
+        each("[data-task-association-form]", function (form) {
+            var lead = form.querySelector("[data-task-lead-select]");
+            var client = form.querySelector("[data-task-client-select]");
+            var project = form.querySelector("[data-task-project-select]");
+            var milestone = form.querySelector("[data-task-milestone-select]");
+            var projectField = form.querySelector("[data-task-project-field]");
+            if (!lead || !client || !project || !projectField) return;
+
+            var projectClientMap = {};
+            try {
+                projectClientMap = JSON.parse(project.dataset.projectClientMap || "{}");
+            } catch (error) {
+                projectClientMap = {};
+            }
+            var availableProjects = Array.prototype.slice.call(project.options)
+                .filter(function (option) { return option.value !== ""; })
+                .map(function (option) { return option.cloneNode(true); });
+
+            function updateProjectChoices(clientId, leadSelected, keepSelection) {
+                var previousValue = keepSelection ? project.value : "";
+                while (project.options.length) project.remove(0);
+
+                var placeholder = document.createElement("option");
+                placeholder.value = "";
+                placeholder.selected = true;
+
+                if (leadSelected) {
+                    placeholder.textContent = "Lead selected";
+                    placeholder.disabled = true;
+                    project.appendChild(placeholder);
+                    project.disabled = true;
+                    return;
+                }
+
+                if (!clientId) {
+                    placeholder.textContent = "Select a client first";
+                    placeholder.disabled = true;
+                    project.appendChild(placeholder);
+                    project.disabled = true;
+                    return;
+                }
+
+                var matchingProjects = availableProjects.filter(function (option) {
+                    return projectClientMap[option.value] === clientId;
+                });
+                if (!matchingProjects.length) {
+                    placeholder.textContent = "Project not yet created";
+                    project.appendChild(placeholder);
+                    project.disabled = false;
+                    return;
+                }
+
+                placeholder.textContent = "Select a project (optional)";
+                project.appendChild(placeholder);
+                matchingProjects.forEach(function (option) {
+                    project.appendChild(option.cloneNode(true));
+                });
+                project.disabled = false;
+                if (previousValue && matchingProjects.some(function (option) {
+                    return option.value === previousValue;
+                })) {
+                    project.value = previousValue;
+                }
+            }
+
+            function sync() {
+                var leadSelected = Boolean(lead.value);
+                if (leadSelected) {
+                    client.value = "";
+                    if (milestone) milestone.value = "";
+                    projectField.hidden = false;
+                } else {
+                    projectField.hidden = !client.value;
+                }
+                lead.disabled = Boolean(client.value);
+                client.disabled = leadSelected;
+                updateProjectChoices(client.value, leadSelected, !leadSelected);
+                if (milestone) {
+                    milestone.disabled = leadSelected || !project.value;
+                    if (milestone.disabled) milestone.value = "";
+                }
+            }
+
+            lead.addEventListener("change", sync);
+            client.addEventListener("change", sync);
+            project.addEventListener("change", function () {
+                if (milestone) milestone.value = "";
+                sync();
+            });
+            sync();
+        });
+    }
+
+    function initTaskSearch() {
+        each("[data-task-filter-form]", function (form) {
+            var input = form.querySelector("[data-task-search]");
+            var clearButton = form.querySelector("[data-task-search-clear]");
+            if (!input || !clearButton) return;
+
+            function syncClearButton() {
+                clearButton.hidden = !input.value;
+            }
+
+            input.addEventListener("input", syncClearButton);
+            clearButton.addEventListener("click", function () {
+                input.value = "";
+                syncClearButton();
+
+                var focusMarker = document.createElement("input");
+                focusMarker.type = "hidden";
+                focusMarker.name = "focus_search";
+                focusMarker.value = "1";
+                form.appendChild(focusMarker);
+
+                if (typeof form.requestSubmit === "function") {
+                    form.requestSubmit();
+                } else {
+                    form.submit();
+                }
+            });
+
+            var url = new URL(window.location.href);
+            if (url.searchParams.get("focus_search") === "1") {
+                url.searchParams.delete("focus_search");
+                window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+                input.focus();
+            }
+
+            syncClearButton();
+        });
+    }
+
+    function initTaskFilterDropdowns() {
+        each("[data-task-filter-form]", function (form) {
+            var dropdowns = Array.prototype.slice.call(form.querySelectorAll("[data-task-filter-select]"));
+            if (!dropdowns.length) return;
+
+            function closeDropdown(dropdown) {
+                dropdown.open = false;
+            }
+
+            function positionDropdown(dropdown) {
+                var summary = dropdown.querySelector("summary");
+                var options = dropdown.querySelector(".task-filter-options");
+                if (!summary || !options) return;
+
+                var rect = summary.getBoundingClientRect();
+                var edgeGap = 12;
+                var maxHeight = 320;
+                var spaceBelow = Math.max(0, window.innerHeight - rect.bottom - edgeGap);
+                var spaceAbove = Math.max(0, rect.top - edgeGap);
+                var openAbove = spaceBelow < Math.min(maxHeight, 220) && spaceAbove > spaceBelow;
+                var availableSpace = openAbove ? spaceAbove : spaceBelow;
+
+                dropdown.classList.toggle("is-open-upward", openAbove);
+                options.style.maxHeight = Math.max(72, Math.min(maxHeight, availableSpace)) + "px";
+            }
+
+            dropdowns.forEach(function (dropdown) {
+                var options = dropdown.querySelector(".task-filter-options");
+                var selectedValue = dropdown.querySelector("[data-task-filter-value]");
+
+                dropdown.addEventListener("toggle", function () {
+                    if (dropdown.open) {
+                        dropdowns.forEach(function (otherDropdown) {
+                            if (otherDropdown !== dropdown && otherDropdown.open) {
+                                closeDropdown(otherDropdown);
+                            }
+                        });
+                        positionDropdown(dropdown);
+                    } else {
+                        dropdown.classList.remove("is-open-upward");
+                        if (options) options.style.removeProperty("max-height");
+                    }
+                });
+
+                dropdown.addEventListener("change", function (event) {
+                    var radio = event.target;
+                    if (!radio.matches || !radio.matches(".task-filter-radio") || !radio.checked) return;
+                    var option = radio.closest(".task-filter-option");
+                    var optionText = option && option.querySelector(".task-filter-option-text");
+                    if (selectedValue && optionText) selectedValue.textContent = optionText.textContent.trim();
+                    dropdown.querySelectorAll(".task-filter-option.is-selected").forEach(function (selectedOption) {
+                        selectedOption.classList.remove("is-selected");
+                    });
+                    if (option) option.classList.add("is-selected");
+                    positionDropdown(dropdown);
+                });
+
+                dropdown.addEventListener("focusout", function (event) {
+                    if (event.relatedTarget && !dropdown.contains(event.relatedTarget)) {
+                        closeDropdown(dropdown);
+                    }
+                });
+            });
+
+            document.addEventListener("click", function (event) {
+                dropdowns.forEach(function (dropdown) {
+                    if (dropdown.open && !dropdown.contains(event.target)) closeDropdown(dropdown);
+                });
+            });
+
+            document.addEventListener("keydown", function (event) {
+                if (event.key !== "Escape") return;
+                var openDropdown = dropdowns.find(function (dropdown) {
+                    return dropdown.open && dropdown.contains(document.activeElement);
+                }) || dropdowns.find(function (dropdown) { return dropdown.open; });
+                if (!openDropdown) return;
+
+                event.preventDefault();
+                closeDropdown(openDropdown);
+                var summary = openDropdown.querySelector("summary");
+                if (summary) summary.focus();
+            });
+
+            function repositionOpenDropdowns() {
+                dropdowns.forEach(function (dropdown) {
+                    if (dropdown.open) positionDropdown(dropdown);
+                });
+            }
+
+            window.addEventListener("resize", repositionOpenDropdowns);
+            window.addEventListener("scroll", repositionOpenDropdowns, true);
+        });
+    }
+
     function initLeadDetailTabs() {
         each(".leads-split .record-detail", function (record, recordIndex) {
             var tabList = record.querySelector(".detail-tabs");
@@ -1223,6 +1450,236 @@
         post({type: "native-media-page-ready"});
     }
 
+    function initProjectUpdateDrafts() {
+        var dialog = document.querySelector("[data-project-update-draft-dialog]");
+        var form = dialog && dialog.querySelector("[data-project-update-draft-form]");
+        var titleField = form && form.querySelector('[name="project-update-draft-title"]');
+        var bodyField = form && form.querySelector('[name="project-update-draft-body"]');
+        var actionField = form && form.querySelector("[data-project-update-draft-action]");
+        var state = dialog && dialog.querySelector("[data-project-update-draft-state]");
+        var validation = dialog && dialog.querySelector("[data-project-update-draft-validation]");
+        var actionBar = dialog && dialog.querySelector("[data-project-update-draft-actions]");
+        var deleteConfirmation = dialog && dialog.querySelector("[data-project-update-draft-delete-confirm]");
+        var deleteButton = dialog && dialog.querySelector("[data-delete-project-update-draft]");
+        var cancelDeleteButton = dialog && dialog.querySelector("[data-cancel-project-update-draft-delete]");
+        var closeButton = dialog && dialog.querySelector("[data-close-project-update-draft]");
+        var activeTrigger = null;
+        var savedDraft = false;
+
+        if (!dialog || !form || !titleField || !bodyField || !actionField || !dialog.showModal) {
+            return;
+        }
+
+        function resetDeleteConfirmation() {
+            if (actionBar) actionBar.hidden = false;
+            if (deleteConfirmation) deleteConfirmation.hidden = true;
+        }
+
+        function openDraft(trigger, preserveValues) {
+            var row = trigger.closest("[data-project-update-entry]");
+            var sourceTitle = row && row.querySelector(".project-update-entry-heading strong");
+            var sourceBody = row && row.querySelector(".project-update-entry-content > p");
+            var savedTemplate = row && row.querySelector("template[data-saved-client-draft]");
+            var savedTitle = savedTemplate && savedTemplate.content.querySelector("[data-saved-draft-title]");
+            var savedBody = savedTemplate && savedTemplate.content.querySelector("[data-saved-draft-body]");
+            var actionUrl = trigger.dataset.projectUpdateDraftUrl;
+
+            if (!row || !sourceTitle || !sourceBody || !actionUrl) return;
+
+            activeTrigger = trigger;
+            form.action = actionUrl;
+            savedDraft = trigger.dataset.projectUpdateDraftSaved === "true";
+            actionField.value = "keep";
+            resetDeleteConfirmation();
+            if (validation) validation.hidden = true;
+
+            if (!preserveValues) {
+                titleField.value = savedDraft && savedTitle ? savedTitle.textContent.trim() : sourceTitle.textContent.trim();
+                bodyField.value = savedDraft && savedBody ? savedBody.textContent : sourceBody.textContent;
+                titleField.removeAttribute("aria-invalid");
+                bodyField.removeAttribute("aria-invalid");
+                titleField.removeAttribute("aria-describedby");
+                bodyField.removeAttribute("aria-describedby");
+                each(".project-update-draft-error[id]", function (error) { error.hidden = true; });
+            }
+
+            if (deleteButton) {
+                deleteButton.textContent = savedDraft ? "Delete draft" : "Discard draft";
+            }
+            if (state) {
+                state.textContent = savedDraft
+                    ? "Saved draft · private until sent"
+                    : "Not saved yet · only visible to admin";
+            }
+            var description = dialog.querySelector("[data-project-update-draft-description]");
+            if (description) {
+                description.textContent = savedDraft
+                    ? "Review or edit this saved copy. Sending publishes it in the client portal and notifies the client."
+                    : "This separate copy is not saved yet. Sending publishes it in the client portal and notifies the client.";
+            }
+            if (!preserveValues) dialog.showModal();
+            else if (!dialog.open) dialog.showModal();
+
+            var invalidField = form.querySelector('[aria-invalid="true"]');
+            (preserveValues && invalidField ? invalidField : titleField).focus();
+        }
+
+        each("[data-project-update-draft-trigger]", function (trigger) {
+            trigger.addEventListener("click", function () {
+                openDraft(trigger, false);
+            });
+        });
+
+        if (dialog.dataset.autoOpen === "true" && dialog.dataset.sourceUpdateId) {
+            var escapedSourceId = window.CSS && window.CSS.escape
+                ? window.CSS.escape(dialog.dataset.sourceUpdateId)
+                : dialog.dataset.sourceUpdateId;
+            var retryTrigger = document.querySelector('[data-project-update-source-id="' + escapedSourceId + '"]');
+            if (retryTrigger) openDraft(retryTrigger, true);
+        }
+
+        if (deleteButton) {
+            deleteButton.addEventListener("click", function () {
+                if (!savedDraft) {
+                    dialog.close();
+                    return;
+                }
+                if (actionBar) actionBar.hidden = true;
+                if (deleteConfirmation) deleteConfirmation.hidden = false;
+                if (cancelDeleteButton) cancelDeleteButton.focus();
+            });
+        }
+        if (cancelDeleteButton) {
+            cancelDeleteButton.addEventListener("click", function () {
+                resetDeleteConfirmation();
+                if (deleteButton) deleteButton.focus();
+            });
+        }
+        if (closeButton) closeButton.addEventListener("click", function () { dialog.close(); });
+
+        each("[data-project-update-draft-submit]", function (button) {
+            button.addEventListener("click", function () {
+                actionField.value = button.dataset.projectUpdateDraftSubmit;
+            });
+        });
+
+        form.addEventListener("input", function (event) {
+            var field = event.target;
+            if (field === titleField || field === bodyField) {
+                field.removeAttribute("aria-invalid");
+                if (field.getAttribute("aria-describedby") === "project-update-draft-validation") {
+                    field.removeAttribute("aria-describedby");
+                }
+                if (validation && titleField.value.trim() && bodyField.value.trim()) validation.hidden = true;
+            }
+        });
+
+        form.addEventListener("submit", function (event) {
+            var action = actionField.value;
+            if (action !== "delete" && !form.checkValidity()) {
+                event.preventDefault();
+                if (validation) validation.hidden = false;
+                var invalid = form.querySelector(":invalid");
+                if (invalid) {
+                    invalid.setAttribute("aria-invalid", "true");
+                    invalid.setAttribute("aria-describedby", "project-update-draft-validation");
+                    invalid.focus();
+                }
+                actionField.value = "keep";
+                return;
+            }
+            Array.prototype.forEach.call(form.querySelectorAll("button"), function (button) {
+                button.disabled = true;
+                button.setAttribute("aria-busy", "true");
+            });
+        });
+
+        dialog.addEventListener("close", function () {
+            resetDeleteConfirmation();
+            if (activeTrigger && activeTrigger.isConnected) activeTrigger.focus();
+            activeTrigger = null;
+        });
+    }
+
+    function initProjectSequenceConfirmation() {
+        var dialog = document.querySelector("[data-project-sequence-confirmation]");
+        var dialogForm = dialog && dialog.querySelector("[data-project-sequence-confirmation-form]");
+        var copy = dialog && dialog.querySelector("[data-project-sequence-confirmation-copy]");
+        var error = dialog && dialog.querySelector("[data-project-sequence-confirmation-error]");
+        var cancelButton = dialog && dialog.querySelector("[data-project-sequence-cancel]");
+        var confirmButton = dialog && dialog.querySelector("[data-project-sequence-confirm]");
+        var pendingForm = null;
+        var pendingCheckbox = null;
+        var pendingValue = null;
+        var submitting = false;
+
+        if (!dialog || !dialogForm || !copy || !cancelButton || !confirmButton || typeof dialog.showModal !== "function") return;
+
+        each("[data-project-sequence-form]", function (form) {
+            var checkbox = form.querySelector("[data-project-sequence-checkbox]");
+            var title = form.querySelector("[data-project-sequence-title]");
+            if (!checkbox || !title) return;
+
+            checkbox.addEventListener("change", function () {
+                if (pendingForm || submitting) return;
+
+                pendingValue = checkbox.checked;
+                checkbox.checked = !pendingValue;
+                pendingForm = form;
+                pendingCheckbox = checkbox;
+
+                var milestoneTitle = title.textContent.trim();
+                if (pendingValue) {
+                    copy.textContent = 'Mark “' + milestoneTitle + '” complete? This updates the shared progress tracker shown to the client and team, and notifies the client and any assigned team members. If a pending payment draw is linked to this milestone, it will also become ready to bill.';
+                    confirmButton.textContent = "Mark complete";
+                } else {
+                    copy.textContent = 'Reopen “' + milestoneTitle + '”? This lowers the shared progress tracker shown to the client and team and notifies the client and any assigned team members.';
+                    confirmButton.textContent = "Reopen milestone";
+                }
+                confirmButton.disabled = false;
+                confirmButton.removeAttribute("aria-busy");
+                if (error) error.hidden = true;
+                dialog.showModal();
+            });
+        });
+
+        dialogForm.addEventListener("submit", function (event) {
+            var submitter = event.submitter || document.activeElement;
+            if (!submitter || submitter.value !== "confirm") return;
+            event.preventDefault();
+            if (!pendingForm || !pendingCheckbox || pendingValue === null || submitting) return;
+
+            submitting = true;
+            pendingCheckbox.checked = pendingValue;
+            confirmButton.disabled = true;
+            confirmButton.setAttribute("aria-busy", "true");
+            confirmButton.textContent = "Saving…";
+            try {
+                if (typeof pendingForm.requestSubmit === "function") {
+                    pendingForm.requestSubmit();
+                } else {
+                    pendingForm.submit();
+                }
+            } catch (submissionError) {
+                submitting = false;
+                pendingCheckbox.checked = !pendingValue;
+                confirmButton.disabled = false;
+                confirmButton.removeAttribute("aria-busy");
+                confirmButton.textContent = pendingValue ? "Mark complete" : "Reopen milestone";
+                if (error) error.hidden = false;
+            }
+        });
+
+        dialog.addEventListener("close", function () {
+            if (!submitting && pendingCheckbox && pendingCheckbox.isConnected) pendingCheckbox.focus();
+            if (!submitting) {
+                pendingForm = null;
+                pendingCheckbox = null;
+                pendingValue = null;
+            }
+        });
+    }
+
     function initNotificationActions() {
         function showNotificationEmptyState() {
             var inbox = document.querySelector(".notification-inbox");
@@ -1630,6 +2087,9 @@
 
     function init() {
         initNavigation();
+        initTaskSearch();
+        initTaskFilterDropdowns();
+        initTaskAssociationSelectors();
         initLeadDetailTabs();
         initProjectFilters();
         initGoogleReviewsCarousel();
@@ -1639,6 +2099,8 @@
         initStandaloneCalendarPickers();
         initAdminIpBlockForms();
         initWorkerSelectors();
+        initProjectUpdateDrafts();
+        initProjectSequenceConfirmation();
         initNotificationActions();
         initEstimateEditors();
         initEstimateDeliveryDialog();

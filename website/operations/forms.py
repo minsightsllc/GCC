@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from decimal import Decimal
 from urllib.parse import urlparse
@@ -33,6 +34,7 @@ from .models import (
     ProjectDocument,
     Project,
     ProjectUpdate,
+    ProjectUpdateDraft,
     ScheduleEvent,
     Service,
     Subcontractor,
@@ -162,7 +164,14 @@ class QuickTaskForm(forms.ModelForm):
     class Meta:
         model = Task
         fields = ["title", "due_date", "assigned_to", "priority"]
-        widgets = {"due_date": forms.DateInput(attrs={"type": "date"})}
+        widgets = {
+            "due_date": forms.DateInput(attrs={"type": "date"}),
+            "assigned_to": forms.SelectMultiple(attrs={
+                "size": 4,
+                "data-worker-selector": "assignees",
+                "aria-label": "Task assignees",
+            }),
+        }
 
     def __init__(self, *args, staff_queryset=None, lead=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -173,30 +182,99 @@ class QuickTaskForm(forms.ModelForm):
             self.instance.lead = lead
         self.fields["assigned_to"].queryset = staff_queryset if staff_queryset is not None else get_user_model().objects.filter(is_staff=True)
         self.fields["assigned_to"].label_from_instance = user_choice_label
+        self.fields["assigned_to"].label = "Assigned to"
 
 
 class TaskForm(forms.ModelForm):
     class Meta:
         model = Task
-        fields = ["title", "description", "lead", "project", "milestone", "assigned_to", "watchers", "status", "priority", "due_date"]
+        fields = ["title", "description", "lead", "client", "project", "milestone", "assigned_to", "watchers", "status", "priority", "due_date"]
+        labels = {"watchers": "Supervisors"}
+        help_texts = {
+            "lead": "Choose a lead for pre-client follow-up. Selecting a client disables this field; selecting a lead disables the client and project fields.",
+            "client": "Choose an existing client to connect this employee task to their account.",
+            "project": "Choose a project for this client, or leave it unassigned if a project has not been created yet.",
+            "milestone": "Choose a milestone after selecting a project.",
+            "assigned_to": "Select every employee responsible for completing this task.",
+            "watchers": "Supervisors can follow the task but are not assigned to complete it.",
+        }
         widgets = {
             "description": forms.Textarea(attrs={"rows": 4}),
             "due_date": forms.DateInput(attrs={"type": "date"}),
+            "assigned_to": forms.SelectMultiple(attrs={
+                "size": 4,
+                "data-worker-selector": "assignees",
+                "aria-label": "Task assignees",
+            }),
             "watchers": forms.SelectMultiple(attrs={
                 "size": 4,
-                "data-worker-selector": "watchers",
-                "aria-label": "Task watchers",
+                "data-worker-selector": "supervisors",
+                "aria-label": "Task supervisors",
             }),
         }
 
-    def __init__(self, *args, staff_queryset=None, project_queryset=None, **kwargs):
+    def __init__(self, *args, staff_queryset=None, client_queryset=None, project_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
         staff = staff_queryset if staff_queryset is not None else get_user_model().objects.filter(is_staff=True)
         self.fields["assigned_to"].queryset = staff
         self.fields["watchers"].queryset = staff
         self.fields["assigned_to"].label_from_instance = user_choice_label
         self.fields["watchers"].label_from_instance = user_choice_label
-        self.fields["project"].queryset = project_queryset if project_queryset is not None else Project.objects.all()
+        self.fields["assigned_to"].label = "Assigned to"
+        self.fields["lead"].queryset = Lead.objects.filter(
+            deleted_at__isnull=True,
+            client__isnull=True,
+        )
+        self.fields["client"].queryset = (
+            client_queryset if client_queryset is not None else Client.objects.all()
+        )
+        self.fields["project"].queryset = (
+            project_queryset if project_queryset is not None else Project.objects.all()
+        )
+
+        if (
+            not self.is_bound
+            and self.instance.pk
+            and not self.instance.lead_id
+            and not self.instance.client_id
+            and self.instance.project_id
+            and self.instance.project.client_id
+        ):
+            self.initial.setdefault("client", self.instance.project.client_id)
+
+        lead_attrs = self.fields["lead"].widget.attrs
+        lead_attrs["data-task-lead-select"] = ""
+        client_attrs = self.fields["client"].widget.attrs
+        client_attrs["data-task-client-select"] = ""
+        project_attrs = self.fields["project"].widget.attrs
+        project_attrs["data-task-project-select"] = ""
+        project_attrs["data-project-client-map"] = json.dumps({
+            str(project.pk): str(project.client_id or "")
+            for project in self.fields["project"].queryset.select_related("client")
+        })
+        self.fields["milestone"].widget.attrs["data-task-milestone-select"] = ""
+
+    def clean(self):
+        cleaned = super().clean()
+        lead = cleaned.get("lead")
+        client = cleaned.get("client")
+        project = cleaned.get("project")
+
+        if lead and client:
+            self.add_error("client", "Clear the lead selection before choosing a client.")
+        if lead and project:
+            self.add_error("project", "Clear the lead selection before choosing a project.")
+        if project and not client:
+            if project.client_id:
+                cleaned["client"] = project.client
+                client = project.client
+            else:
+                self.add_error("client", "Choose a client before selecting a project.")
+        if client and project and project.client_id != client.pk:
+            self.add_error("project", "Choose a project that belongs to the selected client.")
+        if not lead and not client and not project:
+            self.add_error("client", "Choose a lead or client to connect this task to.")
+        return cleaned
 
 
 class TeamTaskUpdateForm(forms.ModelForm):
@@ -350,7 +428,7 @@ EstimateLineItemFormSet = inlineformset_factory(
 class ProjectForm(forms.ModelForm):
     class Meta:
         model = Project
-        fields = ["title", "client", "lead", "assigned_staff", "location", "project_type", "status", "next_step", "summary", "is_published", "start_date", "target_date"]
+        fields = ["title", "client", "lead", "assigned_staff", "location", "project_type", "admin_stage_note", "next_step", "summary", "is_published", "start_date", "target_date"]
         widgets = {
             "summary": forms.Textarea(attrs={"rows": 4}),
             "start_date": forms.DateInput(attrs={"type": "date"}),
@@ -364,6 +442,18 @@ class ProjectForm(forms.ModelForm):
 
     def __init__(self, *args, staff_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["is_published"].label = "Publish on public website"
+        self.fields["is_published"].help_text = (
+            "Shows a public project page; this does not control client portal access."
+        )
+        self.fields["admin_stage_note"].label = "Admin-only stage note"
+        self.fields["admin_stage_note"].help_text = (
+            "Private staff reference only. Shared project progress and client/team alerts are controlled by milestones."
+        )
+        stage_note_choices = list(self.fields["admin_stage_note"].choices)
+        if stage_note_choices and stage_note_choices[0][0] == "":
+            stage_note_choices[0] = ("", "No admin note")
+            self.fields["admin_stage_note"].choices = stage_note_choices
         self.fields["assigned_staff"].queryset = staff_queryset if staff_queryset is not None else get_user_model().objects.filter(is_staff=True)
         self.fields["assigned_staff"].label_from_instance = user_choice_label
 
@@ -387,24 +477,6 @@ class ProjectForm(forms.ModelForm):
                 )
             if not has_accepted_estimate:
                 self.add_error("lead", "Lead-derived projects require an externally approved estimate recorded in GCC.")
-        execution_statuses = {
-            Project.Status.SELECTIONS,
-            Project.Status.CONSTRUCTION,
-            Project.Status.FINAL,
-            Project.Status.COMPLETE,
-        }
-        if (
-            cleaned.get("status") in execution_statuses
-            and not cleaned.get("assigned_staff")
-            and (
-                not self.instance.pk
-                or cleaned.get("status") != self.instance.status
-            )
-        ):
-            self.add_error(
-                "assigned_staff",
-                "Assign at least one employee before moving this project into execution.",
-            )
         return cleaned
 
 
@@ -442,6 +514,13 @@ class ProjectUpdateForm(forms.ModelForm):
         model = ProjectUpdate
         fields = ["title", "body", "visibility"]
         widgets = {"body": forms.Textarea(attrs={"rows": 4})}
+
+
+class ProjectUpdateDraftForm(forms.ModelForm):
+    class Meta:
+        model = ProjectUpdateDraft
+        fields = ["title", "body"]
+        widgets = {"body": forms.Textarea(attrs={"rows": 7})}
 
 
 class MediaEditForm(forms.ModelForm):

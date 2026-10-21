@@ -303,6 +303,13 @@ class Task(TimeStampedModel):
     title = models.CharField(max_length=180)
     description = models.TextField(blank=True)
     lead = models.ForeignKey(Lead, null=True, blank=True, on_delete=models.CASCADE, related_name="tasks")
+    client = models.ForeignKey(
+        Client,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="tasks",
+    )
     project = models.ForeignKey(
         "Project",
         null=True,
@@ -317,17 +324,16 @@ class Task(TimeStampedModel):
         on_delete=models.SET_NULL,
         related_name="tasks",
     )
-    assigned_to = models.ForeignKey(
+    assigned_to = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        null=True,
         blank=True,
-        on_delete=models.SET_NULL,
         related_name="assigned_tasks",
     )
     watchers = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         blank=True,
         related_name="watched_tasks",
+        verbose_name="supervisors",
     )
     due_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
@@ -352,8 +358,10 @@ class Task(TimeStampedModel):
             not self.project_id or self.milestone.project_id != self.project_id
         ):
             raise ValidationError('The selected milestone must belong to the selected project.')
-        if not self.lead_id and not self.project_id:
-            raise ValidationError("A task must be attached to a lead or project.")
+        if self.client_id and self.project_id and self.project.client_id != self.client_id:
+            raise ValidationError("The selected project must belong to the selected client.")
+        if not self.lead_id and not self.client_id and not self.project_id:
+            raise ValidationError("A task must be attached to a lead, client, or project.")
         if self.milestone_id and self.project_id and self.milestone.project_id != self.project_id:
             raise ValidationError("The selected milestone must belong to the selected project.")
 
@@ -630,6 +638,12 @@ class Project(TimeStampedModel):
     location = models.CharField(max_length=160, blank=True)
     project_type = models.CharField(max_length=80, default="renovation")
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.PLANNING)
+    admin_stage_note = models.CharField(
+        max_length=30,
+        choices=Status.choices,
+        blank=True,
+        default="",
+    )
     project_code = models.CharField(max_length=32, blank=True, db_index=True)
     operational_phase = models.CharField(
         max_length=20,
@@ -729,6 +743,49 @@ class ProjectUpdate(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class ProjectUpdateDraft(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        SENT = "sent", "Sent"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    source_update = models.OneToOneField(
+        ProjectUpdate,
+        on_delete=models.CASCADE,
+        related_name="client_draft",
+    )
+    published_update = models.OneToOneField(
+        ProjectUpdate,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="client_draft_record",
+    )
+    title = models.CharField(max_length=180)
+    body = models.TextField()
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_project_update_drafts",
+    )
+    sent_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="sent_project_update_drafts",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
 
 
 class MediaAsset(models.Model):

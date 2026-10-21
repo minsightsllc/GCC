@@ -1,0 +1,19 @@
+<dialog
+    class="workflow-confirm-dialog"
+    data-project-sequence-confirmation
+    aria-labelledby="project-sequence-confirmation-title"
+    aria-describedby="project-sequence-confirmation-description"
+>
+    <form method="dialog" novalidate data-project-sequence-confirmation-form>
+        <span class="section-kicker">Project sequence</span>
+        <h3 id="project-sequence-confirmation-title">Confirm project sequence update</h3>
+        <p id="project-sequence-confirmation-description" data-project-sequence-confirmation-copy></p>
+        <p class="workflow-confirm-error" data-project-sequence-confirmation-error role="alert" hidden>
+            The milestone could not be submitted. Please try confirming again.
+        </p>
+        <div class="workflow-confirm-actions">
+            <button class="button button-quiet" type="submit" value="cancel" data-project-sequence-cancel autofocus>Cancel</button>
+            <button class="button button-primary" type="submit" value="confirm" data-project-sequence-confirm>Mark complete</button>
+        </div>
+    </form>
+</dialog>

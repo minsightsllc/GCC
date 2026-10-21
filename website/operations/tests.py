@@ -626,10 +626,11 @@ class OperationsWorkflowTests(TestCase):
 
     def test_project_milestones_and_updates_persist_with_visibility(self):
         self.login_staff()
-        self.browser.post(
+        milestone_response = self.browser.post(
             reverse("operations:milestone-toggle", kwargs={"pk": self.milestone.pk}),
-            {"is_complete": "on"},
+            {"is_complete": ["off", "on"]},
         )
+        self.assertEqual(milestone_response.status_code, 302)
         update_response = self.browser.post(
             reverse("operations:project-add-update", kwargs={"pk": self.project.pk}),
             {"title": "Selections are ready", "body": "Please review the finish direction.", "visibility": ProjectUpdate.Visibility.CLIENT},
@@ -637,8 +638,84 @@ class OperationsWorkflowTests(TestCase):
         self.assertEqual(update_response.status_code, 302)
         self.milestone.refresh_from_db()
         self.assertTrue(self.milestone.is_complete)
+        project_response = self.browser.get(
+            reverse("operations:dashboard-section", kwargs={"section": "projects"}),
+            {"project": self.project.pk},
+        )
+        self.assertContains(project_response, 'checked data-project-sequence-checkbox')
+        self.assertContains(project_response, 'data-project-sequence-confirmation')
+        self.assertContains(project_response, '100% complete')
+        self.assertContains(project_response, 'Walkthrough marked complete.')
         update = ProjectUpdate.objects.get(project=self.project, title="Selections are ready")
         self.assertEqual(update.visibility, ProjectUpdate.Visibility.CLIENT)
+
+    def test_milestone_can_be_completed_again_after_reopening(self):
+        self.milestone.title = "Selections"
+        self.milestone.sort_order = 3
+        self.milestone.save(update_fields=["title", "sort_order"])
+        for title, sort_order, is_complete in (
+            ("Walkthrough", 1, True),
+            ("Estimate approved", 2, True),
+            ("Construction", 4, False),
+            ("Final walkthrough", 5, False),
+        ):
+            Milestone.objects.create(
+                project=self.project,
+                title=title,
+                sort_order=sort_order,
+                is_complete=is_complete,
+                completed_at=timezone.now() if is_complete else None,
+            )
+
+        self.login_staff()
+        milestone_url = reverse("operations:milestone-toggle", kwargs={"pk": self.milestone.pk})
+        self.browser.post(milestone_url, {"is_complete": ["off", "on"]})
+        self.milestone.refresh_from_db()
+        self.assertTrue(self.milestone.is_complete)
+        self.assertEqual(self.project.progress_percent, 60)
+
+        self.browser.post(milestone_url, {"is_complete": "off"})
+        self.milestone.refresh_from_db()
+        self.assertFalse(self.milestone.is_complete)
+        self.assertEqual(self.project.progress_percent, 40)
+
+        self.browser.post(milestone_url, {"is_complete": ["off", "on"]})
+        self.milestone.refresh_from_db()
+        self.assertTrue(self.milestone.is_complete)
+        self.assertEqual(self.project.progress_percent, 60)
+
+        admin_response = self.browser.get(
+            reverse("operations:dashboard-section", kwargs={"section": "projects"}),
+            {"project": self.project.pk},
+        )
+        self.assertContains(admin_response, "60% complete")
+        self.assertContains(admin_response, "Selections marked complete.")
+
+        self.login_client()
+        client_response = self.browser.get(reverse("operations:portal"), {"project": self.project.pk})
+        self.assertContains(client_response, "60% complete")
+
+    def test_replayed_milestone_request_does_not_claim_success_for_stale_state(self):
+        self.login_staff()
+        milestone_url = reverse("operations:milestone-toggle", kwargs={"pk": self.milestone.pk})
+        repeated_request_key = "same-milestone-completion"
+        self.browser.post(
+            milestone_url,
+            {"is_complete": ["off", "on"], "idempotency_key": repeated_request_key},
+            follow=True,
+        )
+        self.browser.post(milestone_url, {"is_complete": "off"}, follow=True)
+
+        response = self.browser.post(
+            milestone_url,
+            {"is_complete": ["off", "on"], "idempotency_key": repeated_request_key},
+            follow=True,
+        )
+
+        self.milestone.refresh_from_db()
+        self.assertFalse(self.milestone.is_complete)
+        self.assertContains(response, "The milestone could not be updated.")
+        self.assertNotContains(response, "Walkthrough marked complete.")
 
     def test_client_portal_only_shows_assigned_project(self):
         self.lead.internal_note = "PRIVATE admin-only follow-up detail"

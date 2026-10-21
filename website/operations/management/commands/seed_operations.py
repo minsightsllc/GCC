@@ -309,17 +309,18 @@ class Command(BaseCommand):
             ("Prepare site walkthrough", projects["harbor"], leads["hello@harborstudio.example.com"], "open", "normal"),
         ]
         for title, project, lead, status, priority in specs:
-            Task.objects.get_or_create(
+            task, created = Task.objects.get_or_create(
                 title=title,
                 project=project,
                 defaults={
                     "lead": lead,
                     "status": status,
                     "priority": priority,
-                    "assigned_to": staff_user,
                     "created_by": staff_user,
                 },
             )
+            if created:
+                task.assigned_to.add(staff_user)
 
     def seed_activities(self, leads, estimates, projects, staff_user):
         specs = [

@@ -54,6 +54,7 @@ from .models import (
     Project,
     ProjectDocument,
     ProjectUpdate,
+    ProjectUpdateDraft,
     ScheduleEvent,
     SiteSettings,
     Task,
@@ -219,11 +220,11 @@ class PlatformWorkflowTests(TestCase):
             project=cls.project,
             lead=cls.lead,
             milestone=cls.milestone,
-            assigned_to=cls.field,
             priority=Task.Priority.HIGH,
             due_date=timezone.localdate(),
             created_by=cls.manager,
         )
+        cls.task.assigned_to.add(cls.field)
         cls.other_project = Project.objects.create(
             client=cls.other_client_record,
             title='Other private project',
@@ -236,9 +237,9 @@ class PlatformWorkflowTests(TestCase):
         cls.other_task = Task.objects.create(
             title='Other client task',
             project=cls.other_project,
-            assigned_to=cls.manager,
             created_by=cls.manager,
         )
+        cls.other_task.assigned_to.add(cls.manager)
         cls.field_event = ScheduleEvent.objects.create(
             title='Kitchen field visit',
             project=cls.project,
@@ -375,6 +376,27 @@ class PlatformWorkflowTests(TestCase):
         )
         self.assertEqual(response.context['operations_nav_counts']['leads'], 0)
 
+    def test_employee_project_cards_hide_fallback_image_but_keep_uploaded_cover(self):
+        self.login(self.field)
+        projects_url = reverse('operations:team-section', kwargs={'section': 'projects'})
+
+        response = self.browser.get(projects_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.project.title)
+        self.assertNotContains(response, 'operations/images/progress-kitchen.png')
+        self.assertNotContains(response, 'class="project-workspace-image"')
+
+        self.project.cover = 'projects/covers/project-cover.jpg'
+        self.project.save(update_fields=['cover'])
+        response = self.browser.get(projects_url)
+
+        self.assertContains(response, 'class="project-workspace-image"')
+        self.assertContains(
+            response,
+            reverse('operations:project-cover', kwargs={'pk': self.project.pk}),
+        )
+
     def test_client_portal_navigation_hides_zero_and_shows_positive_unread_count(self):
         self.login(self.client_user)
         overview_url = reverse('operations:portal-section', kwargs={'section': 'overview'})
@@ -444,6 +466,26 @@ class PlatformWorkflowTests(TestCase):
         self.assertContains(response, 'data-count-messages="0"')
         self.assertContains(response, 'data-count-notifications="0"')
         self.assertEqual(self.browser.get(counts_url).json(), {'estimates': 0, 'messages': 0, 'notifications': 0})
+
+    def test_client_update_does_not_show_the_project_fallback_image_as_update_media(self):
+        ProjectUpdate.objects.create(
+            project=self.project,
+            title='Published text-only update',
+            body='The team completed the next project milestone.',
+            visibility=ProjectUpdate.Visibility.CLIENT,
+            created_by=self.owner,
+        )
+        self.login(self.client_user)
+
+        response = self.browser.get(
+            reverse('operations:portal-section', kwargs={'section': 'updates'}),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Published text-only update')
+        self.assertContains(response, 'The team completed the next project milestone.')
+        self.assertNotContains(response, 'class="update-image"')
+        self.assertNotContains(response, 'operations/images/progress-kitchen.png')
 
     def test_client_team_message_count_clears_only_after_messages_tab_opens(self):
         message = ClientMessage.objects.create(
@@ -605,6 +647,88 @@ class PlatformWorkflowTests(TestCase):
                 }
                 self.assertEqual(choices[str(self.manager.pk)], 'Project Manager')
                 self.assertNotIn('platform-manager', choices.values())
+
+        task_form = TaskForm(staff_queryset=staff_queryset)
+        self.assertTrue(task_form.fields['assigned_to'].widget.allow_multiple_selected)
+        self.assertEqual(task_form.fields['watchers'].label, 'Supervisors')
+
+    def test_task_form_lead_selector_excludes_leads_converted_to_clients(self):
+        unconverted_lead = Lead.objects.create(
+            name='Noah Rivera',
+            email='noah.rivera@example.com',
+            service='Renovations',
+            location='Ventura, CA',
+        )
+        form = TaskForm()
+        lead_queryset = form.fields['lead'].queryset
+
+        self.assertFalse(lead_queryset.filter(pk=self.lead.pk).exists())
+        self.assertTrue(lead_queryset.filter(pk=unconverted_lead.pk).exists())
+        rendered_lead_select = str(form['lead'])
+        self.assertIn('Noah Rivera', rendered_lead_select)
+        self.assertNotIn('Maya Thompson', rendered_lead_select)
+
+    def test_task_form_supports_a_client_without_a_project_and_shows_dependent_selectors(self):
+        self.login(self.owner)
+        response = self.browser.get(
+            reverse('operations:dashboard-section', kwargs={'section': 'tasks'}),
+            {'new': 'task'},
+        )
+        self.assertContains(response, 'data-task-association-form')
+        self.assertContains(response, 'data-task-lead-select')
+        self.assertContains(response, 'data-task-client-select')
+        self.assertContains(response, 'data-task-project-select')
+
+        response = self.browser.post(
+            reverse('operations:task-create'),
+            {
+                'title': 'Prepare client onboarding checklist',
+                'description': 'Collect the project preferences.',
+                'lead': '',
+                'client': str(self.client_record.pk),
+                'project': '',
+                'milestone': '',
+                'assigned_to': [str(self.manager.pk), str(self.field.pk)],
+                'status': Task.Status.OPEN,
+                'priority': Task.Priority.NORMAL,
+                'due_date': '',
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        task = Task.objects.get(title='Prepare client onboarding checklist')
+        self.assertEqual(task.client_id, self.client_record.pk)
+        self.assertIsNone(task.project_id)
+        self.assertEqual(set(task.assigned_to.values_list('pk', flat=True)), {self.manager.pk, self.field.pk})
+
+    def test_task_form_rejects_a_project_from_another_client_and_lead_client_mix(self):
+        base_data = {
+            'title': 'Review client selections',
+            'description': '',
+            'lead': '',
+            'client': str(self.other_client_record.pk),
+            'project': str(self.project.pk),
+            'milestone': '',
+            'assigned_to': '',
+            'status': Task.Status.OPEN,
+            'priority': Task.Priority.NORMAL,
+            'due_date': '',
+        }
+        form = TaskForm(
+            data=base_data,
+            client_queryset=ClientRecord.objects.all(),
+            project_queryset=Project.objects.all(),
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('project', form.errors)
+
+        base_data['lead'] = str(self.lead.pk)
+        form = TaskForm(
+            data=base_data,
+            client_queryset=ClientRecord.objects.all(),
+            project_queryset=Project.objects.all(),
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('client', form.errors)
 
     def test_roles_are_idempotent_and_field_isolated(self):
         ensure_role_groups()
@@ -1196,6 +1320,183 @@ class PlatformWorkflowTests(TestCase):
         media = MediaAsset.objects.get(title='field-report')
         self.assertEqual(media.visibility, MediaAsset.Visibility.INTERNAL)
 
+    def test_owner_can_review_keep_send_and_delete_a_client_update_draft(self):
+        internal_update = ProjectUpdate.objects.create(
+            project=self.project,
+            title='Field note to share',
+            body='The crew finished framing and confirmed the window measurements.',
+            visibility=ProjectUpdate.Visibility.INTERNAL,
+            created_by=self.field,
+        )
+        published_update = ProjectUpdate.objects.create(
+            project=self.project,
+            title='Published progress',
+            body='The client can already see this update.',
+            visibility=ProjectUpdate.Visibility.CLIENT,
+            created_by=self.owner,
+        )
+        self.login(self.owner)
+
+        response = self.browser.get(
+            reverse('operations:dashboard-section', kwargs={'section': 'projects'})
+            + f'?project={self.project.pk}',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, internal_update.title)
+        self.assertContains(response, published_update.title)
+        self.assertContains(response, 'by Field Lead')
+        self.assertContains(response, 'by Platform Owner')
+        self.assertEqual(response.content.decode().count('data-project-update-draft-trigger'), 1)
+        self.assertContains(response, 'View draft')
+        self.assertContains(response, 'Keep draft')
+        self.assertContains(response, 'Send to client')
+        self.assertNotContains(response, 'Copy an internal update into a client draft')
+        internal_update.refresh_from_db()
+        self.assertEqual(internal_update.visibility, ProjectUpdate.Visibility.INTERNAL)
+        self.assertEqual(ProjectUpdate.objects.filter(project=self.project).count(), 2)
+
+        self.login(self.client_user)
+        client_response = self.browser.get(
+            reverse('operations:portal-section', kwargs={'section': 'updates'}),
+        )
+        self.assertEqual(client_response.status_code, 200)
+        self.assertNotContains(client_response, internal_update.title)
+        self.assertNotContains(client_response, 'by Platform Owner')
+
+        self.login(self.field)
+        draft_url = reverse('operations:project-update-draft', kwargs={'pk': internal_update.pk})
+        forbidden_response = self.browser.post(draft_url, {
+            'draft_action': 'keep',
+            'project-update-draft-title': 'Client version',
+            'project-update-draft-body': 'A client-ready update.',
+        })
+        self.assertEqual(forbidden_response.status_code, 403)
+        internal_update.refresh_from_db()
+        self.assertEqual(internal_update.visibility, ProjectUpdate.Visibility.INTERNAL)
+        self.assertFalse(ProjectUpdateDraft.objects.filter(source_update=internal_update).exists())
+
+        self.login(self.owner)
+        invalid_response = self.browser.post(draft_url, {
+            'draft_action': 'keep',
+            'project-update-draft-title': 'Draft title to preserve',
+            'project-update-draft-body': '',
+        })
+        self.assertEqual(invalid_response.status_code, 200)
+        self.assertContains(invalid_response, 'Draft title to preserve')
+        self.assertContains(invalid_response, 'data-auto-open="true"')
+        self.assertContains(invalid_response, 'This field is required.')
+        self.assertFalse(ProjectUpdateDraft.objects.filter(source_update=internal_update).exists())
+
+        keep_response = self.browser.post(draft_url, {
+            'draft_action': 'keep',
+            'project-update-draft-title': 'Client-ready progress',
+            'project-update-draft-body': 'The framing and window measurements are complete.',
+        })
+        self.assertEqual(keep_response.status_code, 302)
+        draft = ProjectUpdateDraft.objects.get(source_update=internal_update)
+        self.assertEqual(draft.status, ProjectUpdateDraft.Status.DRAFT)
+        self.assertEqual(draft.title, 'Client-ready progress')
+        self.assertEqual(draft.created_by, self.owner)
+        internal_update.refresh_from_db()
+        self.assertEqual(internal_update.visibility, ProjectUpdate.Visibility.INTERNAL)
+        self.assertFalse(ClientNotification.objects.filter(client=self.client_record, kind='update-published').exists())
+
+        saved_draft_page = self.browser.get(
+            reverse('operations:dashboard-section', kwargs={'section': 'projects'})
+            + f'?project={self.project.pk}',
+        )
+        self.assertContains(saved_draft_page, 'data-project-update-draft-saved="true"')
+        self.assertContains(saved_draft_page, 'Client-ready progress')
+
+        self.login(self.client_user)
+        client_response = self.browser.get(
+            reverse('operations:portal-section', kwargs={'section': 'updates'}),
+        )
+        self.assertEqual(client_response.status_code, 200)
+        self.assertNotContains(client_response, draft.title)
+        self.assertNotContains(client_response, draft.body)
+
+        self.login(self.owner)
+        edit_response = self.browser.post(draft_url, {
+            'draft_action': 'keep',
+            'project-update-draft-title': 'Client-ready progress (edited)',
+            'project-update-draft-body': 'The framing is complete and the windows are installed.',
+        })
+        self.assertEqual(edit_response.status_code, 302)
+        draft.refresh_from_db()
+        self.assertEqual(draft.title, 'Client-ready progress (edited)')
+        self.assertEqual(ProjectUpdateDraft.objects.filter(source_update=internal_update).count(), 1)
+
+        send_response = self.browser.post(draft_url, {
+            'draft_action': 'send',
+            'project-update-draft-title': draft.title,
+            'project-update-draft-body': draft.body,
+        })
+        self.assertEqual(send_response.status_code, 302)
+        draft.refresh_from_db()
+        self.assertEqual(draft.status, ProjectUpdateDraft.Status.SENT)
+        self.assertEqual(draft.sent_by, self.owner)
+        self.assertIsNotNone(draft.sent_at)
+        self.assertEqual(draft.published_update.visibility, ProjectUpdate.Visibility.CLIENT)
+        self.assertEqual(draft.published_update.created_by, self.owner)
+        notifications = ClientNotification.objects.filter(
+            client=self.client_record,
+            kind='update-published',
+            title='A new project update is available',
+        )
+        self.assertEqual(notifications.count(), 1)
+
+        duplicate_send_response = self.browser.post(draft_url, {
+            'draft_action': 'send',
+            'project-update-draft-title': draft.title,
+            'project-update-draft-body': draft.body,
+        })
+        self.assertEqual(duplicate_send_response.status_code, 302)
+        self.assertEqual(notifications.count(), 1)
+        self.assertEqual(ProjectUpdate.objects.filter(project=self.project, title=draft.title).count(), 1)
+        internal_update.refresh_from_db()
+        self.assertEqual(internal_update.visibility, ProjectUpdate.Visibility.INTERNAL)
+
+        self.login(self.client_user)
+        client_response = self.browser.get(
+            reverse('operations:portal-section', kwargs={'section': 'updates'}),
+        )
+        self.assertEqual(client_response.status_code, 200)
+        self.assertContains(client_response, draft.title)
+        self.assertContains(client_response, draft.body)
+        self.assertNotContains(client_response, 'by Field Lead')
+        self.assertNotContains(client_response, 'by Platform Owner')
+
+    def test_deleting_a_saved_client_update_draft_keeps_the_internal_source_private(self):
+        internal_update = ProjectUpdate.objects.create(
+            project=self.project,
+            title='Internal source to retain',
+            body='This remains an internal staff note.',
+            visibility=ProjectUpdate.Visibility.INTERNAL,
+            created_by=self.field,
+        )
+        draft = ProjectUpdateDraft.objects.create(
+            source_update=internal_update,
+            title='Draft to delete',
+            body='This client-facing copy should be removed.',
+            created_by=self.owner,
+        )
+        self.login(self.owner)
+
+        response = self.browser.post(
+            reverse('operations:project-update-draft', kwargs={'pk': internal_update.pk}),
+            {'draft_action': 'delete'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(ProjectUpdateDraft.objects.filter(pk=draft.pk).exists())
+        internal_update.refresh_from_db()
+        self.assertEqual(internal_update.visibility, ProjectUpdate.Visibility.INTERNAL)
+        self.assertEqual(internal_update.body, 'This remains an internal staff note.')
+        self.assertFalse(ProjectUpdate.objects.filter(project=self.project, title='Draft to delete').exists())
+        self.assertFalse(ClientNotification.objects.filter(client=self.client_record, kind='update-published').exists())
+
     def test_employee_invite_is_one_time_and_expired_links_are_rejected(self):
         group = Group.objects.get(name='Field')
         invite, raw_token = create_employee_invite(
@@ -1523,10 +1824,11 @@ class PlatformWorkflowTests(TestCase):
             {
                 'title': 'Assign concrete inspection',
                 'description': 'Check the slab before the next phase.',
-                'lead': self.lead.pk,
+                'lead': '',
+                'client': self.client_record.pk,
                 'project': self.project.pk,
                 'milestone': self.milestone.pk,
-                'assigned_to': self.field.pk,
+                'assigned_to': [self.field.pk, self.manager.pk],
                 'watchers': [self.office.pk],
                 'status': Task.Status.OPEN,
                 'priority': Task.Priority.URGENT,
@@ -1535,7 +1837,12 @@ class PlatformWorkflowTests(TestCase):
         )
         self.assertEqual(create_response.status_code, 302)
         new_task = Task.objects.get(title='Assign concrete inspection')
+        self.assertEqual(set(new_task.assigned_to.values_list('pk', flat=True)), {self.field.pk, self.manager.pk})
         self.assertTrue(new_task.watchers.filter(pk=self.office.pk).exists())
+        for employee in (self.field, self.manager, self.office):
+            self.assertTrue(
+                EmployeeNotification.objects.filter(task=new_task, employee=employee).exists()
+            )
         self.assertTrue(Activity.objects.filter(message='Task created', detail=new_task.title).exists())
 
         self.login(self.field)
@@ -1563,6 +1870,9 @@ class PlatformWorkflowTests(TestCase):
         )
         self.assertContains(filtered, self.task.title)
         self.assertNotContains(filtered, self.other_task.title)
+        self.assertContains(filtered, 'data-task-filter-select')
+        self.assertContains(filtered, 'name="priority" value="high" checked')
+        self.assertContains(filtered, 'Filter by Priority')
 
     def test_lead_add_task_action_persists_the_lead_relationship(self):
         self.login(self.owner)
@@ -1571,7 +1881,7 @@ class PlatformWorkflowTests(TestCase):
             {
                 'followup-title': 'Call about selections',
                 'followup-due_date': timezone.localdate().isoformat(),
-                'followup-assigned_to': self.manager.pk,
+                'followup-assigned_to': [self.manager.pk, self.field.pk],
                 'followup-priority': Task.Priority.HIGH,
             },
         )
@@ -1579,7 +1889,7 @@ class PlatformWorkflowTests(TestCase):
         self.assertIn("lead_tab=notes", response.url)
         task = Task.objects.get(title='Call about selections')
         self.assertEqual(task.lead_id, self.lead.pk)
-        self.assertEqual(task.assigned_to_id, self.manager.pk)
+        self.assertEqual(set(task.assigned_to.values_list('pk', flat=True)), {self.manager.pk, self.field.pk})
         self.assertEqual(task.priority, Task.Priority.HIGH)
 
     def test_lead_note_save_returns_to_notes_and_tasks(self):
@@ -2975,7 +3285,7 @@ class PlatformWorkflowTests(TestCase):
         self.assertEqual(security_profile.pin_hash, '')
 
         self.assertTrue(Project.objects.filter(pk=self.project.pk).exists())
-        self.assertEqual(Task.objects.get(pk=self.task.pk).assigned_to_id, user_id)
+        self.assertFalse(Task.objects.get(pk=self.task.pk).assigned_to.filter(pk=user_id).exists())
         self.assertTrue(self.project.assigned_staff.filter(pk=user_id).exists())
         self.assertTrue(TimeEntry.objects.filter(pk=time_entry.pk, employee_id=user_id).exists())
         self.assertEqual(Activity.objects.get(pk=activity.pk).actor_id, user_id)

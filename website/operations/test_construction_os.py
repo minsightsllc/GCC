@@ -736,6 +736,26 @@ class ConstructionOperatingSystemTests(TestCase):
         GCC_EXECUTION_LOOP_USER_IDS="",
         GCC_OPERATING_SYSTEM_ENABLED=True,
     )
+    def test_project_milestone_can_be_completed_again_after_reopening_in_execution_hub(self):
+        project = self._create_project()
+        milestone = project.milestones.order_by("sort_order").first()
+        self.http.force_login(self.owner)
+        milestone_url = reverse("operations:project-milestone-status", kwargs={"pk": milestone.pk})
+
+        for status, expected_complete in (("1", True), ("0", False), ("1", True)):
+            response = self.http.post(milestone_url, {"is_complete": status})
+            self.assertEqual(response.status_code, 302)
+            milestone.refresh_from_db()
+            self.assertEqual(milestone.is_complete, expected_complete)
+
+        self.assertGreater(project.progress_percent, 0)
+
+    @override_settings(
+        GCC_EXECUTION_LOOP_ENABLED=True,
+        GCC_EXECUTION_LOOP_PROJECT_IDS="",
+        GCC_EXECUTION_LOOP_USER_IDS="",
+        GCC_OPERATING_SYSTEM_ENABLED=True,
+    )
     def test_project_hub_execution_actions_are_transactional_and_scoped(self):
         project = self._create_project()
         self.http.force_login(self.owner)
@@ -961,7 +981,7 @@ class ConstructionOperatingSystemTests(TestCase):
                 "title": "Confirm cabinet delivery",
                 "description": "Confirm the delivery window with the millwork vendor.",
                 "milestone": "",
-                "assigned_to": self.manager.pk,
+                "assigned_to": [self.manager.pk, self.field.pk],
                 "status": Task.Status.OPEN,
                 "priority": Task.Priority.HIGH,
                 "due_date": "2030-01-15",
@@ -970,7 +990,7 @@ class ConstructionOperatingSystemTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         task = project.tasks.get(title="Confirm cabinet delivery")
-        self.assertEqual(task.assigned_to_id, self.manager.pk)
+        self.assertEqual(set(task.assigned_to.values_list("pk", flat=True)), {self.manager.pk, self.field.pk})
 
         response = self.http.post(
             reverse("operations:project-task-status", kwargs={"pk": task.pk}),
@@ -981,12 +1001,22 @@ class ConstructionOperatingSystemTests(TestCase):
         task.refresh_from_db()
         self.assertEqual(task.status, Task.Status.COMPLETE)
 
+        self.http.force_login(self.field)
+        response = self.http.post(
+            reverse("operations:project-task-status", kwargs={"pk": task.pk}),
+            data={"status": Task.Status.IN_PROGRESS},
+            HTTP_IDEMPOTENCY_KEY="project-task-status-second-assignee",
+        )
+        self.assertEqual(response.status_code, 302)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.Status.IN_PROGRESS)
+
         field_task = Task.objects.create(
             project=project,
             title="Photograph cabinet delivery",
-            assigned_to=self.field,
             created_by=self.owner,
         )
+        field_task.assigned_to.add(self.field)
         self.http.force_login(self.field)
         response = self.http.post(
             reverse("operations:project-task-status", kwargs={"pk": field_task.pk}),

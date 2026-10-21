@@ -402,7 +402,7 @@ def project_operations(request, pk):
     project_tasks = list(
         existing_views._visible_tasks_for_user(request.user)
         .filter(project=project)
-        .select_related("assigned_to")[:40]
+        .prefetch_related("assigned_to")[:40]
     )
     project_site_visits = list(project.site_visits.all()[:12])
     if is_field(request.user):
@@ -461,8 +461,13 @@ def project_operations(request, pk):
         {"assignment": assignment, "form": AssignmentStatusForm(initial={"status": assignment.status})}
         for assignment in project_assignments
     ] if execution_enabled else []
+    can_edit_operations = can_manage_project_operations(request.user, project)
     execution_task_rows = [
-        {"task": task, "form": TaskStatusForm(initial={"status": task.status})}
+        {
+            "task": task,
+            "form": TaskStatusForm(initial={"status": task.status}),
+            "can_update": can_edit_operations or task.assigned_to.filter(pk=request.user.pk).exists(),
+        }
         for task in project_tasks
     ] if execution_enabled else []
     execution_material_rows = [
@@ -655,7 +660,7 @@ def project_operations(request, pk):
         "external_payment_schedules": external_payment_schedules,
         "external_status_idempotency_key": str(uuid.uuid4()),
         "show_inspection_details": not is_field(request.user),
-        "can_edit_operations": can_manage_project_operations(request.user, project),
+        "can_edit_operations": can_edit_operations,
         "today": timezone.localdate(),
     })
     return render(request, "operations/construction_project_operations.html", data)
@@ -1207,7 +1212,7 @@ def project_task_status(request, pk):
     project = _project_for_execution(request, task.project_id)
     if not (
         can_manage_project_operations(request.user, project)
-        or (is_field(request.user) and task.assigned_to_id == request.user.pk)
+        or (is_field(request.user) and task.assigned_to.filter(pk=request.user.pk).exists())
     ):
         raise PermissionDenied
     form = TaskStatusForm(request.POST)
@@ -1238,12 +1243,7 @@ def project_milestone_status(request, pk):
         milestone,
         actor=request.user,
         is_complete=request.POST.get("is_complete") == "1",
-        idempotency_key=_execution_idempotency_key(
-            request,
-            "milestone-status",
-            milestone.pk,
-            request.POST.get("is_complete"),
-        ),
+        idempotency_key=str(request.POST.get("idempotency_key") or "").strip() or None,
     )
     return redirect("operations:project-operations", pk=project.pk)
 

@@ -413,9 +413,16 @@ class ProjectTaskForm(forms.ModelForm):
     class Meta:
         model = Task
         fields = ["title", "description", "milestone", "assigned_to", "status", "priority", "due_date"]
+        labels = {"assigned_to": "Assigned to"}
+        help_texts = {"assigned_to": "Select every employee responsible for completing this task."}
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
             "due_date": forms.DateInput(attrs={"type": "date"}),
+            "assigned_to": forms.SelectMultiple(attrs={
+                "size": 4,
+                "data-worker-selector": "assignees",
+                "aria-label": "Task assignees",
+            }),
         }
 
     def __init__(self, *args, project=None, staff_queryset=None, **kwargs):
@@ -425,6 +432,9 @@ class ProjectTaskForm(forms.ModelForm):
             self.fields["milestone"].queryset = project.milestones.all()
         if staff_queryset is not None:
             self.fields["assigned_to"].queryset = staff_queryset
+        self.fields["assigned_to"].label_from_instance = (
+            lambda user: user.get_full_name().strip() or user.get_username()
+        )
 
 
 class TaskStatusForm(forms.Form):

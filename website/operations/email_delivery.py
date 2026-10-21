@@ -17,7 +17,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import ClientInvite, EmailOutbox
+from .models import ClientInvite, EmployeeInvite, EmailOutbox
 
 
 logger = logging.getLogger(__name__)
@@ -85,6 +85,31 @@ def queue_client_invite_email(invite: ClientInvite, invite_url: str, *, actor=No
         actor=actor,
         client=client,
         idempotency_key=f'client-portal-invite:{invite.pk}',
+    )
+
+
+def queue_employee_invite_email(invite: EmployeeInvite, invite_url: str, *, actor=None):
+    '''Queue the one-time employee onboarding URL exactly once for an invite.'''
+    if invite.purpose != EmployeeInvite.Purpose.ONBOARDING or not invite.email:
+        return None
+    subject = 'Your Grand Coast Construction employee invitation'
+    name = ' '.join(part for part in (invite.first_name, invite.last_name) if part).strip()
+    greeting = f'Hello {name}' if name else 'Hello'
+    body = (
+        f'{greeting},\n\n'
+        'Grand Coast Construction has invited you to create your employee account. '
+        'Use the one-time link below to choose your sign-in details:\n\n'
+        f'{invite_url}\n\n'
+        'This link expires in seven days and can only be used once. '
+        'If you did not expect this invitation, contact Grand Coast Construction.\n\n'
+        'Grand Coast Construction'
+    )
+    return queue_email(
+        recipient=invite.email,
+        subject=subject,
+        body=body,
+        actor=actor,
+        idempotency_key=f'employee-onboarding-invite:{invite.pk}',
     )
 
 

@@ -37,10 +37,11 @@
     </div>
 
     {% if not portal_project.needs_staff_assignment %}
+        <div class="portal-progress-summary"><span>Project progress</span><strong>{{ portal_project.progress_percent }}% complete</strong></div>
         <section class="portal-progress" aria-label="Project progress">
             <div class="portal-progress-line"></div>
             {% for milestone in portal_project.milestones.all %}
-                <div class="portal-progress-step {% if milestone.is_complete %}is-complete{% elif forloop.first %}is-current{% endif %}">
+                <div class="portal-progress-step {% if milestone.is_complete %}is-complete{% elif milestone.pk == portal_project.current_milestone_id %}is-current{% endif %}">
                     <span>{% if milestone.is_complete %}&#10003;{% else %}{{ forloop.counter }}{% endif %}</span>
                     <strong>{{ milestone.title }}</strong>
                 </div>
@@ -61,7 +62,14 @@
                     <article class="portal-construction-card">
                         <span class="section-kicker">Agreement</span>
                         <h3>{{ portal_agreement.project.title }}</h3>
-                        <div class="portal-control-row"><span>Current contract</span><strong>&#36;{{ portal_agreement.current_contract_value|floatformat:2 }}</strong></div>
+                        <div class="portal-control-row">
+                            <span>Estimate</span>
+                            {% if portal_agreement.estimate and portal_agreement.estimate.external_url and portal_agreement.estimate.external_client_visible %}
+                                <a class="text-link-button" href="{% url 'operations:external-estimate-link' pk=portal_agreement.estimate.pk %}" aria-label="Open the actual estimate for {{ portal_agreement.project.title }}">Open actual estimate &rarr;</a>
+                            {% else %}
+                                <strong class="detail-value">Not shared in the portal yet</strong>
+                            {% endif %}
+                        </div>
                         <div class="portal-control-row"><span>Status</span><strong>{{ portal_agreement.get_status_display }}</strong></div>
                         {% if portal_agreement.signed_pdf %}<a class="text-link-button" href="{% url 'operations:agreement-file' pk=portal_agreement.pk %}">View signed agreement &rarr;</a>{% endif %}
                         {% if portal_agreement.status == 'issued' and not request.user.is_staff %}

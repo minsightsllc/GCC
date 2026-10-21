@@ -1,0 +1,17 @@
+<details class="task-filter-select{% if filter_group.name == 'project_filter' %} task-project-filter-field{% endif %}" data-task-filter-select>
+    <summary class="select-field">
+        <span class="task-filter-label">{{ filter_group.label }}</span>
+        <span class="task-filter-selected-value" data-task-filter-value>{{ filter_group.selected_label }}</span>
+        <span class="task-filter-caret" aria-hidden="true"></span>
+    </summary>
+    <fieldset class="task-filter-options">
+        <legend class="sr-only">Filter by {{ filter_group.label }}</legend>
+        {% for option_value, option_label in filter_group.options %}
+            <label class="task-filter-option{% if option_value == filter_group.value %} is-selected{% endif %}">
+                <input class="task-filter-radio" type="radio" name="{{ filter_group.name }}" value="{{ option_value }}" {% if option_value == filter_group.value %}checked{% endif %}>
+                <span class="task-filter-option-text">{{ option_label }}</span>
+                <span class="task-filter-option-check" aria-hidden="true">&#10003;</span>
+            </label>
+        {% endfor %}
+    </fieldset>
+</details>

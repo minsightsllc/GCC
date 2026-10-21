@@ -243,7 +243,7 @@ class MilestoneAdmin(GrandCoastModelAdmin):
 class TaskAdmin(GrandCoastModelAdmin):
     list_display = (
         "title",
-        "assigned_to",
+        "assignee_names",
         "project",
         "lead",
         "status",
@@ -258,6 +258,14 @@ class TaskAdmin(GrandCoastModelAdmin):
         "lead__name",
         "assigned_to__username",
     )
+
+    @admin.display(description="Assigned to")
+    def assignee_names(self, task):
+        names = [person.get_full_name() or person.get_username() for person in task.assigned_to.all()]
+        return ", ".join(names) or "Unassigned"
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related("assigned_to")
 
 
 @admin.register(ProjectUpdate, site=grand_coast_admin_site)

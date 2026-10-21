@@ -122,6 +122,7 @@ urlpatterns = [
     path("dashboard/projects/<uuid:pk>/update/", views.project_update, name="project-update"),
     path("dashboard/projects/<uuid:pk>/invite/", views.project_create_invite, name="project-invite"),
     path("dashboard/projects/<uuid:pk>/update-note/", views.project_add_update, name="project-add-update"),
+    path("dashboard/project-updates/<uuid:pk>/draft/", views.project_update_draft, name="project-update-draft"),
     path("dashboard/milestones/<uuid:pk>/toggle/", views.milestone_toggle, name="milestone-toggle"),
     path("dashboard/media/upload/", views.media_upload, name="media-upload"),
     path("dashboard/media/<uuid:pk>/update/", views.media_edit, name="media-update"),

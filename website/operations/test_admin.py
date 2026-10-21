@@ -71,7 +71,7 @@ class UnfoldAdminTests(TestCase):
 
         assignment_fields = (
             (lead_admin, Lead._meta.get_field('assigned_to'), 'foreignkey'),
-            (task_admin, Task._meta.get_field('assigned_to'), 'foreignkey'),
+            (task_admin, Task._meta.get_field('assigned_to'), 'manytomany'),
             (project_admin, Project._meta.get_field('assigned_staff'), 'manytomany'),
         )
         for model_admin, db_field, field_type in assignment_fields:

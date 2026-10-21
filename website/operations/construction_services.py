@@ -2043,7 +2043,15 @@ def create_project_task(
         milestone = Milestone.objects.get(pk=milestone.pk)
         if milestone.project_id != project.pk:
             raise ValidationError("The selected milestone must belong to this project.")
-    if assigned_to is not None and not is_staff_user(assigned_to):
+    if assigned_to is None:
+        assignees = []
+    elif hasattr(assigned_to, "all"):
+        assignees = list(assigned_to.all())
+    elif isinstance(assigned_to, (list, tuple, set)):
+        assignees = list(assigned_to)
+    else:
+        assignees = [assigned_to]
+    if any(not is_staff_user(assignee) for assignee in assignees):
         raise ValidationError("Tasks may only be assigned to active staff.")
     if status not in {value for value, _label in Task.Status.choices}:
         raise ValidationError("Choose a valid task status.")
@@ -2054,7 +2062,6 @@ def create_project_task(
         title=title,
         description=str(description or "").strip()[:20000],
         milestone=milestone,
-        assigned_to=assigned_to,
         status=status,
         priority=priority,
         due_date=due_date,
@@ -2063,12 +2070,15 @@ def create_project_task(
     )
     task.full_clean()
     task.save()
+    task.assigned_to.set(assignees)
+    after_state = state_snapshot(task, ["title", "status", "priority", "due_date", "milestone_id"])
+    after_state["assigned_to_ids"] = [str(assignee.pk) for assignee in assignees]
     record_workflow_event(
         "project_task_created",
         actor=actor,
         related=task,
         project=project,
-        after_state=state_snapshot(task, ["title", "status", "priority", "due_date", "assigned_to_id", "milestone_id"]),
+        after_state=after_state,
         idempotency_key=idempotency_key,
         event_key_override=event_key,
     )
@@ -2081,7 +2091,7 @@ def record_project_task_status(task, *, actor, status, idempotency_key=None):
     locked = Task.objects.select_for_update().select_related("project", "lead").get(pk=task.pk)
     if not (
         can_manage_project_operations(actor, locked.project)
-        or (is_field(actor) and locked.assigned_to_id == actor.pk)
+        or (is_field(actor) and locked.assigned_to.filter(pk=actor.pk).exists())
     ):
         raise PermissionDenied("You cannot update tasks for this project.")
     if status not in {value for value, _label in Task.Status.choices}:
@@ -2720,6 +2730,8 @@ def set_milestone_status(milestone, *, actor, is_complete, idempotency_key=None)
     ).exists():
         return locked
     complete = bool(is_complete)
+    if locked.is_complete == complete:
+        return locked
     before = state_snapshot(locked, ["is_complete", "completed_at"])
     locked.is_complete = complete
     locked.completed_at = timezone.now() if complete else None
@@ -2759,6 +2771,71 @@ def set_milestone_status(milestone, *, actor, is_complete, idempotency_key=None)
         actor=actor,
         project=locked.project,
     )
+    progress_percent = locked.project.progress_percent
+    action = "completed" if complete else "reopened"
+    notification_kind = f"project-milestone-{action}"
+    notification_title = "Project milestone completed" if complete else "Project milestone reopened"
+    notification_body = (
+        f"{locked.title} was {action} for {locked.project.title}. "
+        f"Project progress is now {progress_percent}%."
+    )
+    notification_metadata = {
+        "milestone_id": str(locked.pk),
+        "milestone_title": locked.title,
+        "is_complete": complete,
+        "progress_percent": progress_percent,
+    }
+    employee_recipients = list(
+        locked.project.assigned_staff.filter(is_staff=True, is_active=True)
+        .filter(Q(employee_profile__isnull=True) | Q(employee_profile__is_active=True))
+        .distinct()
+    )
+    owner_recipients = [employee for employee in employee_recipients if employee.is_superuser]
+    assigned_employees = [employee for employee in employee_recipients if not employee.is_superuser]
+    project_query = urlencode({"project": locked.project_id})
+    if owner_recipients:
+        queue_employee_notifications(
+            owner_recipients,
+            kind=notification_kind,
+            title=notification_title,
+            body=notification_body,
+            destination_url=(
+                reverse("operations:dashboard-section", kwargs={"section": "projects"})
+                + "?"
+                + project_query
+            ),
+            metadata=notification_metadata,
+            created_by=actor,
+            exclude_users=[actor] if actor else None,
+            project=locked.project,
+        )
+    if assigned_employees:
+        queue_employee_notifications(
+            assigned_employees,
+            kind=notification_kind,
+            title=notification_title,
+            body=notification_body,
+            destination_url=(
+                reverse("operations:team-section", kwargs={"section": "projects"})
+                + "?"
+                + project_query
+            ),
+            metadata=notification_metadata,
+            created_by=actor,
+            exclude_users=[actor] if actor else None,
+            project=locked.project,
+        )
+    if locked.project.client_id:
+        queue_client_notifications(
+            [locked.project.client],
+            kind=notification_kind,
+            title=notification_title,
+            body=notification_body,
+            destination_url=reverse("operations:portal") + "?" + project_query,
+            metadata=notification_metadata,
+            created_by=actor,
+            project=locked.project,
+        )
     return locked
 
 
@@ -3142,7 +3219,7 @@ def attention_feed(user, *, limit=80):
         project_id__in=project_ids,
         status__in=[Task.Status.OPEN, Task.Status.IN_PROGRESS, Task.Status.BLOCKED],
         due_date__lt=today,
-    ).select_related("project", "assigned_to"):
+    ).select_related("project").prefetch_related("assigned_to"):
         items.append(_attention_item(
             kind="overdue_task",
             title=f"{task.project.title}: {task.title}",

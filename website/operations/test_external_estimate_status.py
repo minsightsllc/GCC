@@ -138,6 +138,23 @@ class ExternalEstimateStatusTests(TestCase):
         self.assertEqual(schedule.amount, Decimal("15000.00"))
         self.assertEqual(Project.objects.filter(estimate=estimate).count(), 1)
 
+    def test_project_agreement_links_to_actual_estimate_without_contract_price(self):
+        project = self._approve_and_create_project()
+        http = HttpClient()
+        http.force_login(self.client_user)
+
+        response = http.get(reverse("operations:portal"), {"project": project.pk})
+
+        estimate_url = reverse(
+            "operations:external-estimate-link",
+            kwargs={"pk": self.estimate.pk},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Open actual estimate")
+        self.assertContains(response, f'href="{estimate_url}"')
+        self.assertNotContains(response, "Current contract")
+        self.assertNotContains(response, "75,000.00")
+
     def test_retries_are_idempotent_and_do_not_duplicate_audit_events(self):
         first, created = record_external_estimate_status(
             self.estimate,

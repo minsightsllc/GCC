@@ -70,7 +70,7 @@ GCC_EXECUTION_LOOP_USER_IDS = os.getenv("GCC_EXECUTION_LOOP_USER_IDS", "")
 # Estimate details remain in the third-party estimate service selected by the
 # business. Grand Coast stores only a manually confirmed status and optional,
 # permission-checked links; it never stores provider credentials or syncs data.
-GCC_EMAIL_DELIVERY_ENABLED = _env_flag("GCC_EMAIL_DELIVERY_ENABLED", False)
+GCC_EMAIL_DELIVERY_ENABLED = _env_flag("GCC_EMAIL_DELIVERY_ENABLED")
 GCC_STORAGE_SMOKE_ENABLED = _env_flag("GCC_STORAGE_SMOKE_ENABLED", False)
 GCC_API_RATE_LIMIT = int(os.getenv("GCC_API_RATE_LIMIT", "120"))
 GCC_API_RATE_WINDOW_SECONDS = int(os.getenv("GCC_API_RATE_WINDOW_SECONDS", "60"))

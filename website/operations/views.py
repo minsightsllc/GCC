@@ -27,7 +27,7 @@ from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.template.loader import render_to_string
 from django.shortcuts import get_object_or_404, redirect, render
@@ -64,6 +64,7 @@ from .forms import (
     ProjectDocumentForm,
     ProjectForm,
     ProjectUpdateForm,
+    ProjectUpdateDraftForm,
     PublicAuthenticationForm,
     QuickTaskForm,
     ScheduleEventForm,
@@ -101,6 +102,7 @@ from .models import (
     Project,
     ProjectDocument,
     ProjectUpdate,
+    ProjectUpdateDraft,
     PaymentSchedule,
     ScheduleEvent,
     Selection,
@@ -175,7 +177,12 @@ from .construction_policies import (
 )
 from .construction_forms import ExternalEstimateStatusForm, ExternalInvoiceStatusForm
 from .notifications import queue_client_notifications, queue_employee_notifications
-from .email_delivery import deliver_email_outbox, queue_client_invite_email, queue_email
+from .email_delivery import (
+    deliver_email_outbox,
+    queue_client_invite_email,
+    queue_email,
+    queue_employee_invite_email,
+)
 
 
 PUBLIC_PAGES = {"home", "services", "projects", "process", "contact"}
@@ -1031,7 +1038,16 @@ def _dashboard_context(request, section, form_overrides=None):
 
     projects = list(
         Project.objects.select_related("estimate", "lead", "client")
-        .prefetch_related("milestones", "updates", "media_assets", "documents", "assigned_staff")
+        .prefetch_related(
+            "milestones",
+            Prefetch(
+                "updates",
+                queryset=ProjectUpdate.objects.select_related("created_by").prefetch_related("client_draft"),
+            ),
+            "media_assets",
+            "documents",
+            "assigned_staff",
+        )
         .all()
     )
     selected_project = None
@@ -1039,6 +1055,12 @@ def _dashboard_context(request, section, form_overrides=None):
         selected_project = next((item for item in projects if str(item.pk) == request.GET["project"]), None)
     if selected_project is None and projects:
         selected_project = projects[0]
+    if selected_project:
+        selected_project.internal_updates = [
+            update
+            for update in selected_project.updates.all()
+            if update.visibility == ProjectUpdate.Visibility.INTERNAL
+        ]
     for project in projects:
         project.display_image = _project_image(project)
 
@@ -1125,6 +1147,9 @@ def _dashboard_context(request, section, form_overrides=None):
         ),
         "can_manage_documents": _can_manage_documents(request.user),
         "project_update_form": ProjectUpdateForm(),
+        "project_update_draft_form": ProjectUpdateDraftForm(prefix="project-update-draft"),
+        "project_update_draft_source": None,
+        "project_update_draft_auto_open": False,
         "media_upload_form": MediaUploadForm(project_queryset=Project.objects.all()),
         "content_form": _content_form(site_settings, services, process_steps),
         "lead_note_form": (
@@ -1372,7 +1397,7 @@ def _execution_calendar_events(projects, *, include_completed=False):
     tasks_queryset = Task.objects.filter(
         project_id__in=project_ids,
         due_date__isnull=False,
-    ).select_related("project", "assigned_to")
+    ).select_related("project").prefetch_related("assigned_to")
     if not include_completed:
         tasks_queryset = tasks_queryset.exclude(status=Task.Status.COMPLETE)
     for task in tasks_queryset:
@@ -1389,7 +1414,7 @@ def _execution_calendar_events(projects, *, include_completed=False):
             end_at=start + timedelta(hours=1),
             location=project.location,
             notes=task.description,
-            assignees=[task.assigned_to or project.project_manager],
+            assignees=list(task.assigned_to.all()) or [project.project_manager],
             calendar_event_kind="Task due",
             anchor="schedule",
         ))
@@ -1461,7 +1486,7 @@ def _admin_calendar_events(projects, tasks):
                 end_at=start + timedelta(hours=1),
                 location=project.location if project else "",
                 notes=task.description,
-                assignees=[task.assigned_to],
+                assignees=list(task.assigned_to.all()),
                 calendar_event_kind="Task due",
                 anchor="schedule",
             ))
@@ -1478,7 +1503,7 @@ def _admin_calendar_events(projects, tasks):
                 end_at=start + timedelta(minutes=30),
                 location=project.location if project else "",
                 notes=task.description,
-                assignees=[task.assigned_to],
+                assignees=list(task.assigned_to.all()),
                 calendar_event_kind="Task completed",
                 anchor="schedule",
             ))
@@ -1573,7 +1598,7 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
     for project in projects:
         project.display_image = _project_image(project)
 
-    tasks_qs = _visible_tasks_for_user(request.user).select_related("lead", "project", "milestone", "assigned_to").prefetch_related("watchers")
+    tasks_qs = _visible_tasks_for_user(request.user).select_related("lead", "client", "project", "milestone").prefetch_related("assigned_to", "watchers")
     task_query = request.GET.get("q", "").strip()
     task_status = request.GET.get("status", "all")
     task_priority = request.GET.get("priority", "all")
@@ -1581,7 +1606,7 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
     task_employee = request.GET.get("employee", "all")
     task_due = request.GET.get("due", "all")
     if task_query:
-        tasks_qs = tasks_qs.filter(Q(title__icontains=task_query) | Q(description__icontains=task_query) | Q(project__title__icontains=task_query) | Q(lead__name__icontains=task_query))
+        tasks_qs = tasks_qs.filter(Q(title__icontains=task_query) | Q(description__icontains=task_query) | Q(project__title__icontains=task_query) | Q(lead__name__icontains=task_query) | Q(client__name__icontains=task_query))
     if task_status in dict(Task.Status.choices):
         tasks_qs = tasks_qs.filter(status=task_status)
     if task_priority in dict(Task.Priority.choices):
@@ -1601,7 +1626,7 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
         except (TypeError, ValueError):
             employee_is_visible = False
         if employee_is_visible:
-            tasks_qs = tasks_qs.filter(assigned_to_id=task_employee)
+            tasks_qs = tasks_qs.filter(assigned_to__pk=task_employee).distinct()
         else:
             task_employee = "all"
     if task_due == "overdue":
@@ -1620,8 +1645,8 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
         if _can_access_dashboard(request.user):
             admin_calendar_tasks = list(
                 _visible_tasks_for_user(request.user)
-                .select_related("lead", "project", "milestone", "assigned_to")
-                .prefetch_related("watchers")
+                .select_related("lead", "project", "milestone")
+                .prefetch_related("assigned_to", "watchers")
             )
             derived_calendar_events = _admin_calendar_events(projects, admin_calendar_tasks)
         elif execution_loop_enabled_for(request.user):
@@ -1879,6 +1904,46 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
     selected_time_entry_id = request.GET.get("time_entry")
     selected_time_entry = next((entry for entry in time_entries if str(entry.pk) == selected_time_entry_id), None) if selected_time_entry_id else None
     staff_users = list(_staff_users()) if _can_access_dashboard(request.user) else [request.user]
+    task_filter_groups = []
+    if section == "tasks":
+        task_filter_definitions = [
+            ("status", "Status", task_status, [("all", "All statuses"), *Task.Status.choices]),
+            ("priority", "Priority", task_priority, [("all", "All priorities"), *Task.Priority.choices]),
+            (
+                "project_filter",
+                "Project",
+                task_project,
+                [("all", "All projects")] + [(project.pk, project.title) for project in projects],
+            ),
+            ("due", "Due", task_due, [("all", "Any due date"), ("overdue", "Overdue"), ("today", "Today"), ("upcoming", "Upcoming")]),
+        ]
+        if not team_mode:
+            task_filter_definitions.insert(
+                3,
+                (
+                    "employee",
+                    "Employee",
+                    task_employee,
+                    [("all", "All employees")]
+                    + [(person.pk, person.get_full_name() or person.username) for person in staff_users],
+                ),
+            )
+        for name, label, selected_value, options in task_filter_definitions:
+            normalized_options = [(str(value), option_label) for value, option_label in options]
+            option_labels = dict(normalized_options)
+            selected_value = str(selected_value)
+            if selected_value not in option_labels:
+                selected_value = normalized_options[0][0]
+            task_filter_groups.append(
+                {
+                    "name": name,
+                    "label": label,
+                    "value": selected_value,
+                    "selected_label": option_labels[selected_value],
+                    "options": normalized_options,
+                }
+            )
+    task_clients_qs = _visible_clients_for_user(request.user)
     employee_profiles = list(EmployeeProfile.objects.select_related("user").filter(user__in=staff_users))
     pending_employee_invites = []
     if not team_mode and _can_manage_team(request.user):
@@ -1895,7 +1960,8 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
         task_form = TaskForm(
             instance=selected_task if request.GET.get("edit") == "task" else None,
             staff_queryset=_staff_users(),
-            project_queryset=projects_qs,
+            client_queryset=task_clients_qs if section == "tasks" else Client.objects.none(),
+            project_queryset=projects_qs if section == "tasks" else Project.objects.none(),
         )
     event_form = ScheduleEventForm(
         instance=selected_event if request.GET.get("edit") == "event" else None,
@@ -1985,7 +2051,7 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
         selected_task
         and (
             (not team_mode and _can_manage_tasks(request.user))
-            or (team_mode and selected_task.assigned_to_id == request.user.id)
+            or (team_mode and selected_task.assigned_to.filter(pk=request.user.id).exists())
         )
     )
     employee_notifications = list(
@@ -2008,6 +2074,7 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
         "projects": projects,
         "selected_project": selected_project,
         "tasks": tasks,
+        "task_filter_groups": task_filter_groups,
         "selected_task": selected_task,
         "task_status_choices": Task.Status.choices,
         "task_priority_choices": Task.Priority.choices,
@@ -2081,6 +2148,8 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
         "can_view_full_team_calendar": can_view_full_team_calendar,
         "can_edit_selected_task": can_edit_selected_task,
         "last_employee_invite_url": request.session.pop("last_employee_invite_url", ""),
+        "last_employee_invite_email_status": request.session.pop("last_employee_invite_email_status", ""),
+        "last_employee_invite_recipient": request.session.pop("last_employee_invite_recipient", ""),
         "last_reset_url": request.session.pop("last_reset_url", ""),
         "last_invite_url": request.session.pop("last_invite_url", ""),
         "last_invite_email_status": request.session.pop("last_invite_email_status", ""),
@@ -2328,7 +2397,12 @@ def task_create(request):
     if not _can_manage_tasks(request.user):
         raise PermissionDenied
     projects_qs = _visible_projects_for_user(request.user)
-    form = TaskForm(request.POST, staff_queryset=_staff_users(), project_queryset=projects_qs)
+    form = TaskForm(
+        request.POST,
+        staff_queryset=_staff_users(),
+        client_queryset=_visible_clients_for_user(request.user),
+        project_queryset=projects_qs,
+    )
     if form.is_valid():
         task = form.save(commit=False)
         task.created_by = request.user
@@ -2369,9 +2443,10 @@ def task_update(request, pk):
             request.POST,
             instance=task,
             staff_queryset=_staff_users(),
+            client_queryset=_visible_clients_for_user(request.user),
             project_queryset=_visible_projects_for_user(request.user),
         )
-    previous_assignee_id = task.assigned_to_id
+    previous_assignee_ids = set(task.assigned_to.values_list("pk", flat=True))
     previous_status = task.status
     previous_watcher_ids = set(task.watchers.values_list("pk", flat=True))
     if form.is_valid():
@@ -2381,9 +2456,9 @@ def task_update(request, pk):
         if not team_mode:
             form.save_m2m()
         record_activity("Task updated", task.title, actor=request.user, lead=task.lead, project=task.project)
-        task = Task.objects.select_related("lead", "project").prefetch_related("watchers").get(pk=task.pk)
+        task = Task.objects.select_related("lead", "client", "project").prefetch_related("assigned_to", "watchers").get(pk=task.pk)
         assignment_changed = (
-            previous_assignee_id != task.assigned_to_id
+            previous_assignee_ids != set(task.assigned_to.values_list("pk", flat=True))
             or previous_watcher_ids != set(task.watchers.values_list("pk", flat=True))
         )
         _notify_task_participants(
@@ -2404,7 +2479,7 @@ def task_update(request, pk):
 def task_set_status(request, pk):
     task = get_object_or_404(Task.objects.select_related("project", "lead"), pk=pk)
     if request.path.startswith("/team/"):
-        if task.assigned_to_id != request.user.id:
+        if not task.assigned_to.filter(pk=request.user.id).exists():
             raise PermissionDenied
     elif not _can_manage_tasks(request.user):
         raise PermissionDenied
@@ -2605,8 +2680,7 @@ def _notify_project_client(
 
 def _task_notification_recipients(task, *, notify_owners=True):
     recipients = []
-    if task.assigned_to_id:
-        recipients.append(task.assigned_to)
+    recipients += list(task.assigned_to.all())
     recipients += list(task.watchers.all())
     if task.project_id:
         recipients += _project_staff_recipients(task.project)
@@ -2614,7 +2688,7 @@ def _task_notification_recipients(task, *, notify_owners=True):
         recipients.append(task.lead.assigned_to)
     if notify_owners:
         recipients += _owner_notification_recipients()
-    return recipients
+    return list({recipient.pk: recipient for recipient in recipients if recipient}.values())
 
 
 def _notify_task_participants(
@@ -3516,7 +3590,7 @@ def time_update(request, pk):
 
 
 @require_POST
-@team_required
+@staff_required
 @transaction.atomic
 def document_upload(request):
     if not _can_manage_documents(request.user):
@@ -3667,9 +3741,40 @@ def employee_invite_create(request):
             group=form.cleaned_data["group"],
             actor=request.user,
         )
-        request.session["last_employee_invite_url"] = request.build_absolute_uri(reverse("operations:employee-invite", kwargs={"token": raw_token}))
+        invite_url = request.build_absolute_uri(
+            reverse("operations:employee-invite", kwargs={"token": raw_token})
+        )
+        outbox = queue_employee_invite_email(invite, invite_url, actor=request.user)
+        outbox = deliver_email_outbox(outbox)
+        request.session["last_employee_invite_url"] = invite_url
+        request.session["last_employee_invite_email_status"] = (
+            outbox.status if outbox else ""
+        )
+        request.session["last_employee_invite_recipient"] = invite.email
         record_activity('Employee invitation created', form.cleaned_data['email'], actor=request.user)
-        messages.success(request, "Employee invitation created. Copy the one-time link below.")
+        if outbox and outbox.status == EmailOutbox.Status.SENT:
+            messages.success(
+                request,
+                f'Employee invitation emailed to {invite.email}. Copy the one-time link below as a backup.',
+            )
+        elif outbox and outbox.status == EmailOutbox.Status.FAILED:
+            messages.warning(
+                request,
+                'The employee invitation was created, but email delivery failed. '
+                'Use the one-time copy link below.',
+            )
+        elif outbox:
+            messages.info(
+                request,
+                'The employee invitation was created. Email delivery is pending or disabled; '
+                'use the one-time copy link below.',
+            )
+        else:
+            messages.warning(
+                request,
+                'The employee invitation was created, but no deliverable email address was available. '
+                'Use the one-time copy link below.',
+            )
     else:
         messages.error(request, "Please correct the employee invitation details.")
         return _render_workspace_form_error(request, "team", {"invite_form": form})
@@ -3892,6 +3997,7 @@ def lead_create_followup(request, pk):
         task.lead = lead
         task.created_by = request.user
         task.save()
+        form.save_m2m()
         record_activity("Task added", f"{lead.name} · {task.title}", actor=request.user, lead=lead)
         _notify_task_participants(
             task,
@@ -4270,7 +4376,6 @@ def estimate_create_project(request, pk):
 @transaction.atomic
 def project_update(request, pk):
     project = get_object_or_404(Project, pk=pk)
-    previous_status = project.status
     previous_staff_ids = set(project.assigned_staff.values_list("pk", flat=True))
     form_data = request.POST.copy()
     for field_name in ("location", "project_type", "start_date", "target_date"):
@@ -4299,12 +4404,6 @@ def project_update(request, pk):
         elif staff_changed and current_staff_ids and project.next_step == "Assign project staff":
             project.next_step = "Confirm project schedule"
             project.save(update_fields=["next_step", "updated_at"])
-        status_changed = previous_status != project.status
-        execution_statuses = {
-            Project.Status.SELECTIONS,
-            Project.Status.CONSTRUCTION,
-            Project.Status.FINAL,
-        }
         additional_staff = get_user_model().objects.filter(pk__in=previous_staff_ids | current_staff_ids)
         if staff_changed:
             _notify_project_staff(
@@ -4328,45 +4427,6 @@ def project_update(request, pk):
                 created_by=request.user,
                 estimate=project.estimate,
             )
-        if status_changed and project.status == Project.Status.COMPLETE:
-            _notify_project_staff(
-                project,
-                kind="project-complete",
-                title="Project completed",
-                body=f"{project.title} has been marked complete.",
-                created_by=request.user,
-                notify_owners=True,
-                additional_recipients=additional_staff,
-            )
-            _notify_project_client(
-                project,
-                kind="project-complete",
-                title="Your project is complete",
-                body=f"{project.title} has reached completion.",
-                created_by=request.user,
-            )
-        elif status_changed:
-            _notify_project_staff(
-                project,
-                kind="project-status",
-                title=(
-                    "Project moved into execution"
-                    if project.status in execution_statuses
-                    else "Project status changed"
-                ),
-                body=f"{project.title} is now in {project.get_status_display().lower()}.",
-                created_by=request.user,
-                notify_owners=True,
-                additional_recipients=additional_staff,
-            )
-            if project.status in execution_statuses:
-                _notify_project_client(
-                    project,
-                    kind="project-execution",
-                    title="Your project is moving forward",
-                    body=f"{project.title} is now in {project.get_status_display().lower()}.",
-                    created_by=request.user,
-                )
         messages.success(request, "Project details saved.")
     else:
         messages.error(request, "Please correct the project fields and try again.")
@@ -4383,15 +4443,21 @@ def project_update(request, pk):
 @staff_required
 def milestone_toggle(request, pk):
     milestone = get_object_or_404(Milestone.objects.select_related("project"), pk=pk)
-    set_milestone_status(
+    is_complete = "on" in request.POST.getlist("is_complete")
+    idempotency_key = str(request.POST.get("idempotency_key") or "").strip() or None
+    updated_milestone = set_milestone_status(
         milestone,
         actor=request.user,
-        is_complete=request.POST.get("is_complete") == "on",
-        idempotency_key=request.POST.get("idempotency_key") or (
-            f"milestone-toggle:{milestone.pk}:{request.POST.get('is_complete') == 'on'}:{milestone.completed_at or ''}"
-        ),
+        is_complete=is_complete,
+        idempotency_key=idempotency_key,
     )
-    messages.success(request, "Milestone updated.")
+    if updated_milestone.is_complete == is_complete:
+        messages.success(
+            request,
+            f"{milestone.title} marked complete." if is_complete else f"{milestone.title} reopened.",
+        )
+    else:
+        messages.error(request, "The milestone could not be updated. Reload the project and try again.")
     return _dashboard_redirect("projects", project=milestone.project.pk)
 
 
@@ -4466,6 +4532,113 @@ def project_add_update(request, pk):
             selections={"project": project.pk},
         )
     return _workspace_redirect(request, "projects", project=project.pk)
+
+
+@require_POST
+@staff_required
+@transaction.atomic
+def project_update_draft(request, pk):
+    update = get_object_or_404(
+        ProjectUpdate.objects.select_for_update().select_related("project"),
+        pk=pk,
+    )
+    project = update.project
+    if update.visibility != ProjectUpdate.Visibility.INTERNAL:
+        raise Http404
+
+    draft = ProjectUpdateDraft.objects.select_for_update().filter(source_update=update).first()
+    action = request.POST.get("draft_action", "")
+
+    if draft and draft.status == ProjectUpdateDraft.Status.SENT:
+        messages.info(request, "This client update has already been sent.")
+        return _dashboard_redirect("projects", project=project.pk)
+
+    if action == "delete":
+        if draft:
+            draft.delete()
+            record_activity(
+                "Client update draft deleted",
+                f"{project.title} · {update.title}",
+                actor=request.user,
+                project=project,
+            )
+            messages.success(request, "Client draft deleted. The original internal update is unchanged.")
+        else:
+            messages.info(request, "There is no saved client draft to delete.")
+        return _dashboard_redirect("projects", project=project.pk)
+
+    if not project.client_id:
+        messages.error(request, "Add a client to this project before saving or sending a client draft.")
+        return _dashboard_redirect("projects", project=project.pk)
+    if action not in {"keep", "send"}:
+        messages.error(request, "Choose whether to keep the draft or send it to the client.")
+        return _dashboard_redirect("projects", project=project.pk)
+
+    existing_draft = draft is not None
+    form = ProjectUpdateDraftForm(request.POST, instance=draft, prefix="project-update-draft")
+    if not form.is_valid():
+        for field_name in form.errors:
+            form.fields[field_name].widget.attrs.update(
+                {
+                    "aria-invalid": "true",
+                    "aria-describedby": f"project-update-draft-{field_name}-error",
+                }
+            )
+        return _render_dashboard_form_error(
+            request,
+            "projects",
+            {
+                "project_update_draft_form": form,
+                "project_update_draft_source": update,
+                "project_update_draft_auto_open": True,
+            },
+            selections={"project": project.pk},
+        )
+
+    draft = form.save(commit=False)
+    draft.source_update = update
+    if not existing_draft:
+        draft.created_by = request.user
+
+    if action == "keep":
+        draft.save()
+        record_activity(
+            "Client update draft saved",
+            f"{project.title} · {draft.title}",
+            actor=request.user,
+            project=project,
+        )
+        messages.success(request, "Client draft saved. It is still private.")
+    else:
+        published_update = ProjectUpdate.objects.create(
+            project=project,
+            title=draft.title,
+            body=draft.body,
+            visibility=ProjectUpdate.Visibility.CLIENT,
+            created_by=request.user,
+        )
+        draft.status = ProjectUpdateDraft.Status.SENT
+        draft.published_update = published_update
+        draft.sent_by = request.user
+        draft.sent_at = timezone.now()
+        draft.save()
+        record_activity(
+            "Project update sent to client",
+            f"{project.title} · {draft.title}",
+            actor=request.user,
+            project=project,
+        )
+        _notify_project_client(
+            project,
+            kind="update-published",
+            title="A new project update is available",
+            body=f"{draft.title} was published in your client portal.",
+            created_by=request.user,
+            metadata={"update_id": str(published_update.pk)},
+        )
+        messages.success(request, "Update sent to the client.")
+
+    return _dashboard_redirect("projects", project=project.pk)
 
 
 @require_POST
@@ -4916,6 +5089,14 @@ def portal(request, section="overview"):
     if selected_project:
         selected_project.progress = selected_project.progress_percent
         selected_project.display_image = _project_image(selected_project)
+        selected_project.current_milestone_id = next(
+            (
+                milestone.pk
+                for milestone in selected_project.milestones.all()
+                if not milestone.is_complete
+            ),
+            None,
+        )
         for media_item in media:
             media_item.display_url = reverse("operations:media-file", kwargs={"pk": media_item.pk})
     portal_estimate = requested_estimate
@@ -4928,7 +5109,7 @@ def portal(request, section="overview"):
         portal_estimate = portal_estimates[0]
     portal_documents = list(selected_project.documents.filter(visibility=ProjectDocument.Visibility.CLIENT)[:12]) if selected_project else []
     portal_agreement = (
-        Agreement.objects.filter(project=selected_project).first()
+        Agreement.objects.select_related("estimate").filter(project=selected_project).first()
         if selected_project
         else None
     )

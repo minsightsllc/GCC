@@ -1,0 +1,119 @@
+<div class="admin-section-heading compact project-update-list-heading">
+    <h4>Update history</h4>
+</div>
+<div class="mini-activity project-timeline">
+    {% for update in selected_project.updates.all %}
+        <div class="mini-activity-item project-update-entry {% if update.visibility == 'internal' %}is-internal{% endif %}" data-project-update-entry>
+            <i aria-hidden="true"></i>
+            <div class="project-update-entry-content">
+                <div class="project-update-entry-heading">
+                    <strong>{{ update.title }}</strong>
+                    {% if update.visibility == 'internal' and selected_project.client %}
+                        {% if update.client_draft.status == 'sent' %}
+                            <span class="status-badge green">Client copy sent</span>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                {% if update.visibility == 'internal' and selected_project.client and update.client_draft.status != 'sent' %}
+                    <div class="project-update-draft-link">
+                        <button
+                            class="button button-outline project-update-draft-trigger"
+                            type="button"
+                            data-project-update-draft-trigger
+                            data-project-update-draft-url="{% url 'operations:project-update-draft' pk=update.pk %}"
+                            data-project-update-source-id="{{ update.pk }}"
+                            data-project-update-draft-saved="{% if update.client_draft.status == 'draft' %}true{% else %}false{% endif %}"
+                            aria-label="View client draft for {{ update.title }}"
+                            aria-haspopup="dialog"
+                            aria-controls="project-update-draft-dialog"
+                        >View draft</button>
+                    </div>
+                    {% if update.client_draft.status == 'draft' %}
+                        <template data-saved-client-draft>
+                            <span data-saved-draft-title>{{ update.client_draft.title }}</span>
+                            <span data-saved-draft-body>{{ update.client_draft.body }}</span>
+                        </template>
+                    {% endif %}
+                {% endif %}
+                <small>
+                    {{ update.get_visibility_display }} · {{ update.created_at|date:'M d, Y g:i A' }} ·
+                    {% if update.created_by %}
+                        by {{ update.created_by.get_full_name|default:update.created_by.username }}
+                    {% else %}
+                        by Grand Coast team
+                    {% endif %}
+                </small>
+                <p>{{ update.body }}</p>
+            </div>
+        </div>
+    {% empty %}
+        <p class="detail-value">Project updates will appear here.</p>
+    {% endfor %}
+</div>
+
+{% if selected_project.internal_updates and selected_project.client %}
+    <dialog
+        class="project-update-draft-dialog"
+        id="project-update-draft-dialog"
+        data-project-update-draft-dialog
+        data-auto-open="{{ project_update_draft_auto_open|yesno:'true,false' }}"
+        data-source-update-id="{{ project_update_draft_source.pk|default:'' }}"
+        aria-labelledby="project-update-draft-heading"
+        aria-describedby="project-update-draft-description"
+    >
+        <form
+            method="post"
+            action="{% if project_update_draft_source %}{% url 'operations:project-update-draft' pk=project_update_draft_source.pk %}{% endif %}"
+            data-project-update-draft-form
+            novalidate
+        >
+            {% csrf_token %}
+            <span class="section-kicker">Project update</span>
+            <h3 id="project-update-draft-heading" data-project-update-draft-heading>Client-facing draft</h3>
+            <p class="project-update-draft-description" id="project-update-draft-description" data-project-update-draft-description>
+                Review or edit this separate copy. The original internal message stays private.
+            </p>
+            <p class="project-update-draft-state" data-project-update-draft-state aria-live="polite"></p>
+
+            {% if project_update_draft_form.non_field_errors %}
+                <div class="project-update-draft-error" role="alert">{{ project_update_draft_form.non_field_errors }}</div>
+            {% endif %}
+            <div class="project-update-draft-fields">
+                <div class="project-update-draft-field">
+                    <label for="{{ project_update_draft_form.title.id_for_label }}">Client-facing title</label>
+                    {{ project_update_draft_form.title }}
+                    {% if project_update_draft_form.title.errors %}
+                        <div class="project-update-draft-error" id="project-update-draft-title-error" role="alert">{{ project_update_draft_form.title.errors }}</div>
+                    {% endif %}
+                </div>
+                <div class="project-update-draft-field">
+                    <label for="{{ project_update_draft_form.body.id_for_label }}">Client-facing update</label>
+                    {{ project_update_draft_form.body }}
+                    {% if project_update_draft_form.body.errors %}
+                        <div class="project-update-draft-error" id="project-update-draft-body-error" role="alert">{{ project_update_draft_form.body.errors }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            <p class="project-update-draft-validation" data-project-update-draft-validation id="project-update-draft-validation" role="alert" hidden>
+                Add a title and update text before saving or sending.
+            </p>
+
+            <div class="project-update-draft-actions" data-project-update-draft-actions>
+                <button class="button button-danger" type="button" data-delete-project-update-draft>Delete draft</button>
+                <span class="project-update-draft-action-spacer" aria-hidden="true"></span>
+                <button class="button button-quiet" type="button" data-close-project-update-draft>Close</button>
+                <button class="button button-outline" type="submit" data-project-update-draft-submit="keep">Keep draft</button>
+                <button class="button button-primary" type="submit" data-project-update-draft-submit="send">Send to client</button>
+            </div>
+
+            <div class="project-update-draft-delete-confirm" data-project-update-draft-delete-confirm hidden>
+                <p>Delete this saved client draft and discard any unsaved edits? The original internal message will remain unchanged.</p>
+                <div class="project-update-draft-delete-actions">
+                    <button class="button button-quiet" type="button" data-cancel-project-update-draft-delete>Keep draft</button>
+                    <button class="button button-danger" type="submit" data-project-update-draft-submit="delete">Delete draft</button>
+                </div>
+            </div>
+            <input type="hidden" name="draft_action" value="keep" data-project-update-draft-action>
+        </form>
+    </dialog>
+{% endif %}

@@ -68,14 +68,24 @@ class WorkflowContractTests(TestCase):
             email="contract-office@gcc.example.com",
             is_staff=True,
         )
+        cls.field = user_model.objects.create_user(
+            username="contract-field",
+            password="field-pass-123",
+            first_name="Contract",
+            last_name="Field",
+            email="contract-field@gcc.example.com",
+            is_staff=True,
+        )
         roles = ensure_role_groups()
         cls.owner.groups.add(roles["Owner"])
         cls.manager.groups.add(roles["Manager"])
         cls.office.groups.add(roles["Office"])
+        cls.field.groups.add(roles["Field"])
         for user, title in (
             (cls.owner, "Owner"),
             (cls.manager, "Manager"),
             (cls.office, "Office"),
+            (cls.field, "Field"),
         ):
             EmployeeProfile.objects.create(user=user, job_title=title)
 
@@ -504,9 +514,9 @@ class WorkflowContractTests(TestCase):
             title="Route-specific task",
             project=project,
             lead=self.lead,
-            assigned_to=self.manager,
             created_by=self.owner,
         )
+        task.assigned_to.add(self.manager)
         _notify_task_participants(
             task,
             kind="task-assignment",
@@ -596,9 +606,9 @@ class WorkflowContractTests(TestCase):
             title="Complete field work",
             project=project,
             lead=self.lead,
-            assigned_to=self.manager,
             created_by=self.owner,
         )
+        task.assigned_to.add(self.manager)
         self.assertEqual(
             self.http.post(reverse("operations:task-status", kwargs={"pk": task.pk}), {"status": Task.Status.IN_PROGRESS}).status_code,
             302,
@@ -626,6 +636,32 @@ class WorkflowContractTests(TestCase):
         self.login_as(self.manager)
         employee_alert = EmployeeNotification.objects.filter(employee=self.manager, task=task).order_by("-created_at").first()
         self.assertContains(self.http.get(reverse("operations:team-section", kwargs={"section": "notifications"})), employee_alert.title)
+
+    def test_document_library_upload_is_owner_only(self):
+        project = self.make_project()
+        upload_url = reverse("operations:document-upload")
+
+        for user in (self.manager, self.office, self.field, self.client_user):
+            with self.subTest(user=user.username):
+                self.login_as(user)
+                response = self.http.post(
+                    upload_url,
+                    {
+                        "project": str(project.pk),
+                        "title": "Restricted document",
+                        "category": "Scope",
+                        "description": "",
+                        "visibility": ProjectDocument.Visibility.CLIENT,
+                        "file": SimpleUploadedFile(
+                            "restricted.pdf",
+                            b"%PDF-1.4 document",
+                            content_type="application/pdf",
+                        ),
+                    },
+                )
+                self.assertEqual(response.status_code, 403)
+
+        self.assertFalse(ProjectDocument.objects.filter(title="Restricted document").exists())
 
     def test_client_can_clear_own_notification_without_deleting_estimate(self):
         estimate = self.make_estimate(status=Estimate.Status.SENT)
