@@ -2753,7 +2753,7 @@ def set_milestone_status(milestone, *, actor, is_complete, idempotency_key=None)
                 project=locked.project,
                 after_state={"status": schedule.status, "milestone_id": str(locked.pk)},
                 source="workflow",
-                idempotency_key=f"milestone-draw:{locked.pk}:{schedule.pk}:{idempotency_key or locked.updated_at.isoformat()}",
+                idempotency_key=f"milestone-draw:{locked.pk}:{schedule.pk}:{idempotency_key or locked.completed_at.isoformat()}",
             )
     record_workflow_event(
         "milestone_status_updated",

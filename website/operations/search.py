@@ -125,6 +125,7 @@ def _search_tasks(term: str) -> list[SearchResult]:
                 'assigned_to__last_name',
             )
         )
+        .distinct()
         .order_by('-created_at')[:SEARCH_LIMIT]
     )
     return [

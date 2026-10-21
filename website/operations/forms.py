@@ -221,10 +221,14 @@ class TaskForm(forms.ModelForm):
         self.fields["assigned_to"].label_from_instance = user_choice_label
         self.fields["watchers"].label_from_instance = user_choice_label
         self.fields["assigned_to"].label = "Assigned to"
-        self.fields["lead"].queryset = Lead.objects.filter(
-            deleted_at__isnull=True,
-            client__isnull=True,
-        )
+        lead_queryset = Lead.objects.filter(deleted_at__isnull=True)
+        if not self.instance._state.adding and self.instance.lead_id:
+            lead_queryset = lead_queryset.filter(
+                Q(client__isnull=True) | Q(pk=self.instance.lead_id)
+            )
+        else:
+            lead_queryset = lead_queryset.filter(client__isnull=True)
+        self.fields["lead"].queryset = lead_queryset
         self.fields["client"].queryset = (
             client_queryset if client_queryset is not None else Client.objects.all()
         )
@@ -259,12 +263,22 @@ class TaskForm(forms.ModelForm):
         lead = cleaned.get("lead")
         client = cleaned.get("client")
         project = cleaned.get("project")
+        preserve_existing_lead_project = bool(
+            not self.instance._state.adding
+            and self.instance.lead_id
+            and self.instance.project_id
+            and lead
+            and lead.pk == self.instance.lead_id
+            and project
+            and project.pk == self.instance.project_id
+            and (client.pk if client else None) == self.instance.client_id
+        )
 
-        if lead and client:
+        if lead and client and not preserve_existing_lead_project:
             self.add_error("client", "Clear the lead selection before choosing a client.")
-        if lead and project:
+        if lead and project and not preserve_existing_lead_project:
             self.add_error("project", "Clear the lead selection before choosing a project.")
-        if project and not client:
+        if project and not client and not preserve_existing_lead_project:
             if project.client_id:
                 cleaned["client"] = project.client
                 client = project.client

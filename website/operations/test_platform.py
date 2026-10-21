@@ -721,7 +721,13 @@ class PlatformWorkflowTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn('project', form.errors)
 
-        base_data['lead'] = str(self.lead.pk)
+        unconverted_lead = Lead.objects.create(
+            name='Conflict validation lead',
+            email='conflict-validation@example.com',
+            service='Renovations',
+            location='Ventura, CA',
+        )
+        base_data['lead'] = str(unconverted_lead.pk)
         form = TaskForm(
             data=base_data,
             client_queryset=ClientRecord.objects.all(),
@@ -729,6 +735,29 @@ class PlatformWorkflowTests(TestCase):
         )
         self.assertFalse(form.is_valid())
         self.assertIn('client', form.errors)
+
+    def test_task_form_preserves_existing_lead_project_pair(self):
+        form = TaskForm(
+            data={
+                'title': self.task.title,
+                'description': self.task.description,
+                'lead': str(self.lead.pk),
+                'client': '',
+                'project': str(self.project.pk),
+                'milestone': str(self.milestone.pk),
+                'assigned_to': [str(self.field.pk)],
+                'watchers': [],
+                'status': self.task.status,
+                'priority': self.task.priority,
+                'due_date': self.task.due_date.isoformat(),
+            },
+            instance=self.task,
+            client_queryset=ClientRecord.objects.all(),
+            project_queryset=Project.objects.all(),
+        )
+
+        self.assertTrue(form.fields['lead'].queryset.filter(pk=self.lead.pk).exists())
+        self.assertTrue(form.is_valid(), form.errors)
 
     def test_roles_are_idempotent_and_field_isolated(self):
         ensure_role_groups()
