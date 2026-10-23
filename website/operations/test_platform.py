@@ -700,6 +700,32 @@ class PlatformWorkflowTests(TestCase):
         self.assertIsNone(task.project_id)
         self.assertEqual(set(task.assigned_to.values_list('pk', flat=True)), {self.manager.pk, self.field.pk})
 
+    def test_task_can_be_assigned_without_client_project_or_supervisors(self):
+        self.login(self.owner)
+        response = self.browser.post(
+            reverse('operations:task-create'),
+            {
+                'title': 'Prepare the shop for tomorrow',
+                'description': 'Organize tools and materials.',
+                'lead': '',
+                'client': '',
+                'project': '',
+                'milestone': '',
+                'assigned_to': [str(self.manager.pk)],
+                'watchers': [],
+                'status': Task.Status.OPEN,
+                'priority': Task.Priority.NORMAL,
+                'due_date': '',
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        task = Task.objects.get(title='Prepare the shop for tomorrow')
+        self.assertIsNone(task.lead_id)
+        self.assertIsNone(task.client_id)
+        self.assertIsNone(task.project_id)
+        self.assertEqual(list(task.assigned_to.values_list('pk', flat=True)), [self.manager.pk])
+        self.assertFalse(task.watchers.exists())
+
     def test_task_form_rejects_a_project_from_another_client_and_lead_client_mix(self):
         base_data = {
             'title': 'Review client selections',
@@ -812,6 +838,13 @@ class PlatformWorkflowTests(TestCase):
         self.login(owner_group_account)
         self.assertEqual(self.browser.get(reverse('operations:dashboard')).status_code, 403)
         self.assertEqual(self.browser.get(reverse('admin:index')).status_code, 403)
+        self.assertEqual(
+            self.browser.post(
+                reverse('operations:employee-profile-self-update'),
+                {'job_title': 'Unauthorized title change', 'phone': ''},
+            ).status_code,
+            403,
+        )
 
         ungrouped = user_model.objects.create_user(
             username='platform-ungrouped',
@@ -1348,6 +1381,21 @@ class PlatformWorkflowTests(TestCase):
         self.assertEqual(media_response.status_code, 302)
         media = MediaAsset.objects.get(title='field-report')
         self.assertEqual(media.visibility, MediaAsset.Visibility.INTERNAL)
+
+    def test_media_library_visibility_filter_and_empty_state_are_labeled(self):
+        self.login(self.owner)
+        response = self.browser.get(
+            reverse('operations:dashboard-section', kwargs={'section': 'media'}),
+            {'visibility': MediaAsset.Visibility.CLIENT, 'media_project': 'all'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['media_visibility'], MediaAsset.Visibility.CLIENT)
+        self.assertEqual(response.context['media_assets'], [])
+        self.assertContains(response, 'aria-label="Filter media by visibility"')
+        self.assertContains(response, 'aria-current="page"')
+        self.assertContains(response, 'class="media-empty-state"')
+        self.assertContains(response, 'No media matches these filters')
 
     def test_owner_can_review_keep_send_and_delete_a_client_update_draft(self):
         internal_update = ProjectUpdate.objects.create(
@@ -1903,6 +1951,62 @@ class PlatformWorkflowTests(TestCase):
         self.assertContains(filtered, 'name="priority" value="high" checked')
         self.assertContains(filtered, 'Filter by Priority')
 
+    def test_admin_task_routes_work_and_repeated_statuses_do_not_duplicate_alerts(self):
+        self.login(self.owner)
+        task = self.task
+        edit_response = self.browser.get(
+            reverse('operations:dashboard-section', kwargs={'section': 'tasks'}),
+            {'task': str(task.pk), 'edit': 'task'},
+        )
+        self.assertContains(
+            edit_response,
+            f'action="/dashboard/tasks/{task.pk}/update/"',
+        )
+        self.assertContains(edit_response, 'value="Field task for kitchen"')
+        self.assertContains(edit_response, 'Save changes')
+
+        response = self.browser.post(
+            reverse('operations:task-update', kwargs={'pk': task.pk}),
+            {
+                'title': 'Updated field task for kitchen',
+                'description': task.description,
+                'lead': task.lead_id,
+                'client': '',
+                'project': task.project_id,
+                'milestone': task.milestone_id,
+                'assigned_to': [self.field.pk],
+                'watchers': [],
+                'status': Task.Status.OPEN,
+                'priority': task.priority,
+                'due_date': task.due_date.isoformat(),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        task.refresh_from_db()
+        self.assertEqual(task.title, 'Updated field task for kitchen')
+
+        status_url = reverse('operations:task-status', kwargs={'pk': task.pk})
+        for status in (
+            Task.Status.COMPLETE,
+            Task.Status.COMPLETE,
+            Task.Status.IN_PROGRESS,
+            Task.Status.COMPLETE,
+        ):
+            response = self.browser.post(status_url, {'status': status})
+            self.assertEqual(response.status_code, 302)
+            task.refresh_from_db()
+            self.assertEqual(task.status, status)
+
+        self.assertIsNotNone(task.completed_at)
+        self.assertEqual(
+            EmployeeNotification.objects.filter(
+                task=task,
+                employee=self.field,
+                kind='task-status',
+            ).count(),
+            3,
+        )
+
     def test_lead_add_task_action_persists_the_lead_relationship(self):
         self.login(self.owner)
         response = self.browser.post(
@@ -2442,6 +2546,26 @@ class PlatformWorkflowTests(TestCase):
         self.assertEqual(empty_response.status_code, 200)
         self.assertEqual(empty_response.context['selected_day_events'], [])
         self.assertContains(empty_response, 'No schedule events are visible for this day.')
+        self.assertContains(
+            empty_response,
+            f"href='?month={empty_day.strftime('%Y-%m')}&amp;day={empty_day.isoformat()}' data-calendar-day-selection",
+        )
+        self.assertContains(empty_response, 'data-calendar-day-selection')
+        self.assertContains(empty_response, 'data-calendar-selection-status')
+        self.assertNotContains(empty_response, '#calendar-day-details')
+        self.assertContains(empty_response, "id='calendar-day-selection-content'")
+        rendered_calendar = empty_response.content.decode()
+        details_start = rendered_calendar.index("id='calendar-day-details'")
+        details_end = rendered_calendar.index('</section>', details_start)
+        controls_start = rendered_calendar.index(
+            "<section class='record-detail calendar-day-controls'"
+        )
+        self.assertLess(details_end, controls_start)
+        self.assertContains(empty_response, 'Changes here apply only to this date.')
+        self.assertContains(
+            empty_response,
+            "action='/dashboard/calendar/day/'",
+        )
         self.assertContains(empty_response, "data-calendar-day-status='normal'")
         self.assertContains(empty_response, "data-calendar-day-field='reason'")
         previous_month = empty_day.replace(day=1)
@@ -2606,6 +2730,7 @@ class PlatformWorkflowTests(TestCase):
         self.assertEqual(client_message_response.status_code, 302)
         client_message = ClientMessage.objects.get(body='Can we review the finish schedule?')
         self.assertEqual(client_message.sent_by_id, self.client_user.id)
+        self.assertEqual(client_message.project_id, self.project.pk)
         self.assertFalse(client_message.is_read)
 
         self.login(self.owner)
@@ -2616,16 +2741,66 @@ class PlatformWorkflowTests(TestCase):
         self.assertEqual(staff_response.status_code, 302)
         staff_message = ClientMessage.objects.get(body='Yes, the team will share it today.')
         self.assertTrue(staff_message.sent_by.is_staff)
+        self.assertIsNone(staff_message.project_id)
         staff_notification = ClientNotification.objects.get(kind='employee-reply', message=staff_message)
         self.assertIn(
             reverse('operations:portal-section', kwargs={'section': 'messages'}),
             staff_notification.destination_url,
         )
+
+        self.manager.employee_profile.job_title = 'Construction Coordinator'
+        self.manager.employee_profile.save(update_fields=['job_title', 'updated_at'])
+        self.login(self.manager)
+        employee_response = self.browser.post(
+            reverse('operations:team-staff-message-reply', kwargs={'client_pk': self.client_record.pk}),
+            {'project': self.project.pk, 'body': 'I will coordinate the finish schedule with you.'},
+        )
+        self.assertEqual(employee_response.status_code, 302)
+        employee_message = ClientMessage.objects.get(
+            body='I will coordinate the finish schedule with you.'
+        )
+        self.assertEqual(employee_message.sent_by_id, self.manager.pk)
+        self.assertEqual(employee_message.project_id, self.project.pk)
+        employee_feed = self.browser.get(
+            reverse('operations:team-section', kwargs={'section': 'projects'})
+            + f'?project={self.project.pk}'
+        )
+        self.assertContains(employee_feed, 'I will coordinate the finish schedule with you.')
+        self.assertContains(employee_feed, 'Project Manager')
+        self.assertContains(
+            employee_feed,
+            'class="conversation-chat-sender-title">Construction Coordinator</span>',
+        )
+        self.login(self.owner)
+        admin_feed = self.browser.get(
+            reverse('operations:dashboard-section', kwargs={'section': 'clients'})
+            + f'?client={self.client_record.pk}'
+        )
+        self.assertContains(admin_feed, 'I will coordinate the finish schedule with you.')
+        self.assertContains(admin_feed, 'Project Manager')
+        self.assertContains(
+            admin_feed,
+            'class="conversation-chat-sender-title">Construction Coordinator</span>',
+        )
+
+        self.login(self.office)
+        unauthorized_response = self.browser.post(
+            reverse('operations:team-staff-message-reply', kwargs={'client_pk': self.client_record.pk}),
+            {'project': self.project.pk, 'body': 'I am not assigned to this project.'},
+        )
+        self.assertEqual(unauthorized_response.status_code, 403)
+
         self.login(self.client_user)
         self.browser.get(reverse('operations:portal-section', kwargs={'section': 'overview'}))
         staff_message.refresh_from_db()
         self.assertFalse(staff_message.is_read)
-        self.browser.get(reverse('operations:portal-section', kwargs={'section': 'messages'}))
+        portal_response = self.browser.get(reverse('operations:portal-section', kwargs={'section': 'messages'}))
+        self.assertContains(portal_response, 'Project Manager')
+        self.assertContains(
+            portal_response,
+            'class="conversation-chat-sender-title">Construction Coordinator</span>',
+        )
+        self.assertContains(portal_response, 'Grand Coast')
         staff_message.refresh_from_db()
         self.assertTrue(staff_message.is_read)
 
@@ -2637,6 +2812,89 @@ class PlatformWorkflowTests(TestCase):
         detail_response = self.browser.get(reverse('operations:project-detail', kwargs={'pk': self.project.pk}))
         self.assertContains(detail_response, self.public_media.title)
         self.assertNotContains(detail_response, self.internal_media.title)
+
+    def test_owner_can_change_the_title_shown_on_client_messages(self):
+        self.login(self.owner)
+        team_response = self.browser.get(
+            reverse('operations:dashboard-section', kwargs={'section': 'team'})
+        )
+        self.assertContains(team_response, 'Job title')
+
+        update_response = self.browser.post(
+            reverse(
+                'operations:employee-profile-update',
+                kwargs={'pk': self.owner.employee_profile.pk},
+            ),
+            {
+                'job_title': 'Principal Builder',
+                'phone': '805-555-0100',
+                'is_active': 'on',
+            },
+        )
+        self.assertEqual(update_response.status_code, 302)
+        self.owner.employee_profile.refresh_from_db()
+        self.assertEqual(self.owner.employee_profile.job_title, 'Principal Builder')
+
+        ClientMessage.objects.create(
+            client=self.client_record,
+            project=self.project,
+            body='A message from the Owner',
+            sent_by=self.owner,
+        )
+        staff_feed_response = self.browser.get(
+            reverse('operations:dashboard-section', kwargs={'section': 'clients'})
+            + f'?client={self.client_record.pk}'
+        )
+        self.assertContains(
+            staff_feed_response,
+            'class="conversation-chat-sender-title">Principal Builder</span>',
+        )
+        self.login(self.client_user)
+        portal_response = self.browser.get(
+            reverse('operations:portal-section', kwargs={'section': 'messages'})
+        )
+        self.assertContains(
+            portal_response,
+            'class="conversation-chat-sender-title">Principal Builder</span>',
+        )
+
+    def test_owner_without_profile_can_create_a_client_facing_title(self):
+        owner_without_profile = get_user_model().objects.create_user(
+            username='owner-without-profile',
+            password='owner-pass-123',
+            first_name='New',
+            last_name='Owner',
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.login(owner_without_profile)
+        team_response = self.browser.get(
+            reverse('operations:dashboard-section', kwargs={'section': 'team'})
+        )
+        self.assertContains(team_response, 'Set your client-facing title')
+
+        update_response = self.browser.post(
+            reverse('operations:employee-profile-self-update'),
+            {'job_title': 'Managing Owner', 'phone': '805-555-0134'},
+        )
+        self.assertEqual(update_response.status_code, 302)
+        profile = EmployeeProfile.objects.get(user=owner_without_profile)
+        self.assertEqual(profile.job_title, 'Managing Owner')
+
+        ClientMessage.objects.create(
+            client=self.client_record,
+            project=self.project,
+            body='A message from the new Owner',
+            sent_by=owner_without_profile,
+        )
+        self.login(self.client_user)
+        portal_response = self.browser.get(
+            reverse('operations:portal-section', kwargs={'section': 'messages'})
+        )
+        self.assertContains(
+            portal_response,
+            'class="conversation-chat-sender-title">Managing Owner</span>',
+        )
 
     def test_conversation_surfaces_render_as_one_chat_thread(self):
         ClientMessage.objects.create(
@@ -2663,6 +2921,8 @@ class PlatformWorkflowTests(TestCase):
         self.assertContains(admin_response, 'Write a message to the client...')
         self.assertContains(admin_response, '<textarea')
         self.assertContains(admin_response, 'Send message')
+        self.assertNotContains(admin_response, 'workspace-message-project')
+        self.assertNotContains(admin_response, 'Project context')
         self.assertNotContains(admin_response, 'workspace-messages')
         self.assertNotContains(admin_response, 'Reply to the client...')
         admin_markup = admin_response.content.decode()

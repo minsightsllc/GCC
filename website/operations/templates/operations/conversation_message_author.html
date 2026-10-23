@@ -1,0 +1,13 @@
+<span class="conversation-chat-author">
+    {% if message.sent_by and message.sent_by.is_staff %}
+        {% if message.sent_by.is_superuser %}
+            <strong>Grand Coast</strong>
+            <span class="conversation-chat-sender-title">{{ message.sent_by.employee_profile.job_title|default:"Owner" }}</span>
+        {% else %}
+            <strong>{{ message.sent_by.get_full_name|default:message.sent_by.username }}</strong>
+            <span class="conversation-chat-sender-title">{{ message.sent_by.employee_profile.job_title|default:"Grand Coast team member" }}</span>
+        {% endif %}
+    {% else %}
+        <strong>{{ client_name }}</strong>
+    {% endif %}
+</span>

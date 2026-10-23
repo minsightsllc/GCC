@@ -64,14 +64,19 @@ class FullLifecycleSimulationTests(TestCase):
         self.assertEqual(WarrantyItem.objects.filter(project=self.project).count(), 1)
         self.assertEqual(WarrantyItem.objects.get(project=self.project).status, WarrantyItem.Status.RESOLVED)
 
-    def test_role_scoped_project_and_financial_surfaces(self):
+    def test_role_scoped_project_workspaces_and_financial_surfaces(self):
         project_url = reverse("operations:project-operations", kwargs={"pk": self.project.pk})
         summary_url = reverse("operations-api:project-summary", kwargs={"pk": self.project.pk})
         commitments_url = reverse("operations-api:project-commitments", kwargs={"pk": self.project.pk})
         document_url = reverse("operations:document-file", kwargs={"pk": self.result["records"]["document_id"]})
 
         self._login("owner")
-        self.assertEqual(self.http.get(project_url).status_code, 200)
+        owner_project = self.http.get(project_url)
+        self.assertEqual(owner_project.status_code, 302)
+        self.assertIn("/dashboard/projects/?project=", owner_project["Location"])
+        owner_record = self.http.get(owner_project["Location"])
+        self.assertEqual(owner_record.status_code, 200)
+        self.assertContains(owner_record, "Project record")
         owner_summary = self.http.get(summary_url)
         self.assertEqual(owner_summary.status_code, 200)
         self.assertIn("financials", json.loads(owner_summary.content)["project"])
@@ -81,14 +86,20 @@ class FullLifecycleSimulationTests(TestCase):
         owner_document.close()
 
         self._login("manager")
-        self.assertEqual(self.http.get(project_url).status_code, 200)
+        manager_project = self.http.get(project_url)
+        self.assertEqual(manager_project.status_code, 302)
+        self.assertIn("/projects/?project=", manager_project["Location"])
+        self.assertEqual(self.http.get(manager_project["Location"]).status_code, 200)
         manager_summary = json.loads(self.http.get(summary_url).content)["project"]
         self.assertIn("financials", manager_summary)
 
         self._login("field")
         field_response = self.http.get(project_url)
-        self.assertEqual(field_response.status_code, 200)
-        self.assertNotIn(b"Framing and supervision actuals", field_response.content)
+        self.assertEqual(field_response.status_code, 302)
+        self.assertIn("/team/projects/?project=", field_response["Location"])
+        field_project = self.http.get(field_response["Location"])
+        self.assertEqual(field_project.status_code, 200)
+        self.assertNotIn(b"Framing and supervision actuals", field_project.content)
         field_summary = json.loads(self.http.get(summary_url).content)["project"]
         self.assertNotIn("financials", field_summary)
         self.assertEqual(self.http.get(commitments_url).status_code, 403)
@@ -107,15 +118,15 @@ class FullLifecycleSimulationTests(TestCase):
         self.assertIn(unauthorized_document.status_code, {403, 404})
         unauthorized_document.close()
 
-    def test_command_center_weekly_review_calendar_and_client_portal(self):
+    def test_overview_legacy_review_calendar_and_client_portal(self):
         self._login("owner")
         dashboard = self.http.get(reverse("operations:dashboard"))
         self.assertEqual(dashboard.status_code, 200)
         self.assertIn(b"Overview", dashboard.content)
 
         review = self.http.get(reverse("operations:weekly-review"))
-        self.assertEqual(review.status_code, 200)
-        self.assertTrue(any(row["project_id"] == str(self.project.pk) for row in self.result["review"]["projects"]))
+        self.assertEqual(review.status_code, 302)
+        self.assertIn("/dashboard/overview/", review["Location"])
 
         calendar = self.http.get(reverse("operations:dashboard-section", kwargs={"section": "calendar"}))
         self.assertEqual(calendar.status_code, 200)
@@ -152,7 +163,7 @@ class FullLifecycleSimulationTests(TestCase):
             403,
         )
 
-    def test_project_hub_actions_are_in_context_and_retry_safe(self):
+    def test_project_record_actions_are_in_context_and_retry_safe(self):
         self._login("owner")
         readiness = PreconstructionItem.objects.filter(project=self.project).first()
         readiness_url = reverse("operations:readiness-update", kwargs={"pk": readiness.pk})
@@ -184,14 +195,18 @@ class FullLifecycleSimulationTests(TestCase):
 
         self._login("field")
         field_hub = self.http.get(reverse("operations:project-operations", kwargs={"pk": self.project.pk}))
-        self.assertEqual(field_hub.status_code, 200)
-        self.assertNotContains(field_hub, update_data["body"])
+        self.assertEqual(field_hub.status_code, 302)
+        field_page = self.http.get(field_hub["Location"])
+        self.assertEqual(field_page.status_code, 200)
+        self.assertNotContains(field_page, update_data["body"])
 
         self._login("owner")
         hub = self.http.get(reverse("operations:project-operations", kwargs={"pk": self.project.pk}))
-        self.assertEqual(hub.status_code, 200)
-        self.assertContains(hub, "Readiness details")
-        self.assertContains(hub, "Pilot project update")
+        self.assertEqual(hub.status_code, 302)
+        project_page = self.http.get(hub["Location"])
+        self.assertEqual(project_page.status_code, 200)
+        self.assertNotContains(project_page, "Readiness details")
+        self.assertContains(project_page, "Pilot project update")
 
         calendar = self.http.get(
             reverse("operations:dashboard-section", kwargs={"section": "calendar"}),

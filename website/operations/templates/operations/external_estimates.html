@@ -90,7 +90,7 @@
                     {% empty %}
                         <p class="detail-value">No historical line items were recorded.</p>
                     {% endfor %}
-                    {% if selected_estimate.project %}<a class="button button-outline" href="{% url 'operations:project-operations' pk=selected_estimate.project.pk %}">Open existing project</a>{% endif %}
+                    {% if selected_estimate.project %}<a class="button button-outline" href="{% url 'operations:dashboard-section' section='projects' %}?project={{ selected_estimate.project.pk }}">Open existing project</a>{% endif %}
                 </div>
             {% endif %}
 
@@ -173,7 +173,7 @@
 
             {% if selected_estimate.external_url and selected_estimate.external_status == 'approved' and selected_estimate.status == 'accepted' %}
                 {% if selected_estimate.project %}
-                    <a class="button button-primary" href="{% url 'operations:project-operations' pk=selected_estimate.project.pk %}">Open project operations</a>
+                    <a class="button button-primary" href="{% url 'operations:dashboard-section' section='projects' %}?project={{ selected_estimate.project.pk }}">Open project</a>
                 {% else %}
                     <form method="post" action="{% url 'operations:estimate-project' pk=selected_estimate.pk %}">
                         {% csrf_token %}

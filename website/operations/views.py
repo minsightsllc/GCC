@@ -170,7 +170,6 @@ from .construction_policies import (
     can_view_project_document,
     can_view_external_estimate,
     execution_loop_enabled_for,
-    feature_enabled,
     is_client,
     external_estimate_enabled_for,
     visible_estimates,
@@ -379,7 +378,7 @@ def _can_manage_messages(user):
 def _visible_projects_for_user(user):
     if _can_access_dashboard(user):
         return Project.objects.all()
-    return Project.objects.filter(assigned_staff=user).distinct()
+    return Project.objects.filter(Q(assigned_staff=user) | Q(project_manager=user)).distinct()
 
 
 def _visible_tasks_for_user(user):
@@ -1265,17 +1264,6 @@ def _dashboard_context(request, section, form_overrides=None):
 def dashboard(request, section="overview"):
     if section not in DASHBOARD_SECTIONS:
         section = "overview"
-    if (
-        section == "overview"
-        and getattr(request.resolver_match, "url_name", "") == "dashboard"
-        and feature_enabled("owner_command_center")
-        and feature_enabled("operating_system")
-    ):
-        # Keep the existing dashboard section routes intact while making the
-        # action-first operating system the owner's default landing page.
-        from .construction_views import render_command_center
-
-        return render_command_center(request)
     if section == "content" and not _can_manage_content(request.user):
         raise PermissionDenied
     if section in {"clients", "tasks", "calendar", "time", "documents", "team", "notifications"}:
@@ -1995,9 +1983,9 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
     project_update_form = ProjectUpdateForm()
     profile = getattr(request.user, "employee_profile", None)
     profile_form = (
-        EmployeeProfileForm(instance=profile, allow_status=_can_manage_team(request.user))
+        EmployeeProfileForm(instance=profile, allow_status=False)
         if profile
-        else EmployeeProfileForm(allow_status=_can_manage_team(request.user))
+        else EmployeeProfileForm(allow_status=False)
     )
     invite_form = EmployeeInviteForm(group_queryset=Group.objects.filter(name__in=["Manager", "Office", "Field", "Sales"]))
     client_form = form_overrides.get("client_form", client_form)
@@ -2015,13 +2003,16 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
     if selected_client:
         selected_messages = list(
             ClientMessage.objects.filter(client=selected_client)
-            .select_related("project", "sent_by")
+            .select_related("project", "sent_by", "sent_by__employee_profile")
             .order_by("-created_at")[:25]
         )
         selected_messages.sort(key=lambda message: message.created_at)
     selected_project_messages = []
     if team_mode and selected_project:
-        selected_project_messages = list(ClientMessage.objects.filter(project=selected_project).select_related("client", "sent_by")[:25])
+        selected_project_messages = list(
+            ClientMessage.objects.filter(project=selected_project)
+            .select_related("client", "sent_by", "sent_by__employee_profile")[:25]
+        )
     selected_client_portal_pending = bool(
         selected_client
         and not selected_client.user_id
@@ -2425,7 +2416,7 @@ def task_create(request):
 
 
 @require_POST
-@team_required
+@workspace_staff_required
 def task_update(request, pk):
     team_mode = request.path.startswith("/team/")
     if team_mode:
@@ -2450,8 +2441,15 @@ def task_update(request, pk):
     previous_status = task.status
     previous_watcher_ids = set(task.watchers.values_list("pk", flat=True))
     if form.is_valid():
+        if not form.has_changed():
+            messages.success(request, "No task changes were needed.")
+            return _workspace_redirect(request, "tasks", task=task.pk)
         task = form.save(commit=False)
-        task.completed_at = timezone.now() if task.status == Task.Status.COMPLETE else None
+        if task.status == Task.Status.COMPLETE:
+            if previous_status != Task.Status.COMPLETE or not task.completed_at:
+                task.completed_at = timezone.now()
+        else:
+            task.completed_at = None
         task.save()
         if not team_mode:
             form.save_m2m()
@@ -2475,7 +2473,7 @@ def task_update(request, pk):
 
 
 @require_POST
-@team_required
+@workspace_staff_required
 def task_set_status(request, pk):
     task = get_object_or_404(Task.objects.select_related("project", "lead"), pk=pk)
     if request.path.startswith("/team/"):
@@ -2487,9 +2485,14 @@ def task_set_status(request, pk):
     status = request.POST.get("status")
     if status not in dict(Task.Status.choices):
         messages.error(request, "That task status is not valid.")
+    elif status == previous_status:
+        messages.info(request, "The task already has that status.")
     else:
         task.status = status
-        task.completed_at = timezone.now() if status == Task.Status.COMPLETE else None
+        if status == Task.Status.COMPLETE:
+            task.completed_at = task.completed_at or timezone.now()
+        else:
+            task.completed_at = None
         task.save(update_fields=["status", "completed_at", "updated_at"])
         record_activity("Task status updated", f"{task.title} · {task.get_status_display()}", actor=request.user, lead=task.lead, project=task.project)
         _notify_task_participants(
@@ -3677,7 +3680,7 @@ def staff_message_reply(request, client_pk):
     client = get_object_or_404(Client, pk=client_pk)
     project = (
         get_object_or_404(Project, pk=request.POST.get("project"), client=client)
-        if request.POST.get("project")
+        if team_mode and request.POST.get("project")
         else None
     )
     if team_mode and (
@@ -3782,7 +3785,7 @@ def employee_invite_create(request):
 
 
 @require_POST
-@team_required
+@workspace_staff_required
 def employee_profile_update(request, pk):
     team_mode = request.path.startswith("/team/")
     if not team_mode and not _can_access_dashboard(request.user):
@@ -3801,6 +3804,25 @@ def employee_profile_update(request, pk):
         messages.success(request, f"{profile} profile updated.")
     else:
         messages.error(request, "Please correct the employee profile.")
+        return _render_workspace_form_error(request, "team", {"profile_form": form})
+    return _workspace_redirect(request, "team")
+
+
+@require_POST
+@staff_required
+def employee_profile_self_update(request):
+    profile = EmployeeProfile.objects.filter(user=request.user).first()
+    if profile is None:
+        profile = EmployeeProfile(user=request.user)
+    form = EmployeeProfileForm(request.POST, instance=profile, allow_status=False)
+    if form.is_valid():
+        profile = form.save(commit=False)
+        profile.user = request.user
+        profile.save()
+        record_activity("Employee profile updated", str(profile), actor=request.user)
+        messages.success(request, "Your profile title was saved.")
+    else:
+        messages.error(request, "Please correct your profile details.")
         return _render_workspace_form_error(request, "team", {"profile_form": form})
     return _workspace_redirect(request, "team")
 
@@ -5131,7 +5153,11 @@ def portal(request, section="overview"):
     # This keeps general questions and pre-project estimate discussions visible
     # to the same client without duplicating messages in the portal.
     portal_messages = list(
-        client.messages.select_related("project", "sent_by").order_by("-created_at")[:30]
+        client.messages.select_related(
+            "project",
+            "sent_by",
+            "sent_by__employee_profile",
+        ).order_by("-created_at")[:30]
     )
     portal_messages.sort(key=lambda message: message.created_at)
     visible_client_notifications = client.notifications.filter(dismissed_at__isnull=True).select_related(

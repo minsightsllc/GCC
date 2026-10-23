@@ -151,6 +151,25 @@ def _require_operating_system():
         raise Http404
 
 
+@never_cache
+@require_GET
+@login_required
+def legacy_construction_workspace_redirect(request, pk=None):
+    """Keep old construction-hub links working without exposing the hub."""
+    if not is_staff_user(request.user):
+        raise PermissionDenied
+    destination = (
+        "operations:dashboard-section"
+        if existing_views._can_access_dashboard(request.user)
+        else "operations:team-section"
+    )
+    if pk is None:
+        return redirect(destination, section="overview")
+    project = get_object_or_404(visible_projects(request.user), pk=pk)
+    url = reverse(destination, kwargs={"section": "projects"})
+    return redirect(f"{url}?project={project.pk}")
+
+
 def _require_execution_loop(request, project=None):
     _require_operating_system()
     if not execution_loop_enabled_for(request.user, project):
@@ -1218,16 +1237,16 @@ def project_task_status(request, pk):
     form = TaskStatusForm(request.POST)
     if not form.is_valid():
         raise ValidationError("Please provide a valid task status.")
+    idempotency_key = str(
+        request.POST.get("idempotency_key")
+        or request.headers.get("Idempotency-Key")
+        or ""
+    ).strip() or str(uuid.uuid4())
     record_project_task_status(
         task,
         actor=request.user,
         status=form.cleaned_data["status"],
-        idempotency_key=_execution_idempotency_key(
-            request,
-            "task-status",
-            task.pk,
-            form.cleaned_data["status"],
-        ),
+        idempotency_key=idempotency_key,
     )
     return redirect("operations:project-operations", pk=project.pk)
 

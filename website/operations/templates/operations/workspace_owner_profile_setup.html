@@ -1,0 +1,25 @@
+{% if active_section == "team" and can_manage_team and not profile %}
+<section class="record-detail workspace-form owner-profile-setup">
+    <div class="admin-section-heading compact">
+        <div>
+            <span class="section-kicker">Your profile</span>
+            <h2>Set your client-facing title</h2>
+            <p class="detail-value">Clients will see this title beside “Grand Coast” when you send them a message.</p>
+        </div>
+    </div>
+    <form method="post" action="{% url 'operations:employee-profile-self-update' %}" novalidate>
+        {% csrf_token %}
+        {{ profile_form.non_field_errors }}
+        <div class="workspace-form-grid">
+            {% for field in profile_form %}
+                <label class="form-field">
+                    {% if field.name == "job_title" %}Message-feed title{% else %}{{ field.label }}{% endif %}
+                    {{ field }}
+                    {{ field.errors }}
+                </label>
+            {% endfor %}
+        </div>
+        <button class="button button-primary" type="submit">Save profile title</button>
+    </form>
+</section>
+{% endif %}

@@ -145,7 +145,7 @@ I create a superuser if I do not already have one:
 I use that account for:
 
 - The separate Django/Unfold administration area at /gccad/
-- The owner-first Operations Command Center at /dashboard/
+- The established Operations workspace at /dashboard/, with Projects as the canonical project record
 - Employee access, assignments, schedules, and visibility controls
 - Local setup and data inspection
 
@@ -823,7 +823,6 @@ Before a real deployment, I also configure:
 $env:DJANGO_SECRET_KEY = "<long-random-production-secret>"
 $env:DJANGO_DEBUG = "false"
 $env:ALLOWED_HOSTS = "grandcoastconstruction.com,www.grandcoastconstruction.com"
-$env:GCC_OWNER_COMMAND_CENTER_ENABLED = "true"
 $env:GCC_TURNSTILE_ENABLED = "true"
 $env:GCC_TURNSTILE_ALLOW_MISSING = "false"
 $env:GCC_MOBILE_TURNSTILE_BYPASS_ENABLED = "false"
@@ -831,13 +830,15 @@ $env:GCC_MOBILE_TURNSTILE_BYPASS_ENABLED = "false"
 
 I do not use the development secret key or DEBUG=true in production.
 
-GCC_OWNER_COMMAND_CENTER_ENABLED is the independent rollout switch for the
-owner's default Operations landing page. Set it to false to keep the existing
-workspace overview as the temporary /dashboard/ fallback; /dashboard/overview/
-remains available as the preserved overview route.
+The Projects tab is the standard project workspace. Legacy links to the
+construction command center, weekly action list, and expanded Project
+Operations page return to the existing Overview or Projects tab. Generic
+readiness and closeout checklists are not automatically created for new
+projects; the Owner will define any additional construction workflow before
+it is exposed in the admin UI.
 
-The construction execution loop is a separate pilot switch. It is disabled by
-default until staging validation is complete:
+Construction execution services remain behind a separate pilot switch for
+backend and staging validation:
 
 ~~~powershell
 $env:GCC_EXECUTION_LOOP_ENABLED = "true"
@@ -847,9 +848,9 @@ $env:GCC_AI_ENABLED = "false"
 ~~~
 
 When either allowlist is non-empty, a user or project must be explicitly
-listed before the enhanced Project Operations controls, weekly action list,
-and derived calendar signals are available. The existing project page and
-routes remain the fallback when the execution-loop flag is off.
+listed before execution-loop API actions and derived calendar signals are
+available. This pilot flag does not expose the retired construction pages in
+the admin UI.
 
 For production security-alert delivery, I also set the existing Django SMTP settings and the alert controls:
 
@@ -1208,7 +1209,9 @@ Owner, Office, Project Manager, Sales, Field, Subcontractor, Client,
 Unauthorized user
 ~~~
 
-The scenario covers:
+The automated lifecycle simulation below is a backend regression harness. It
+does not define the currently exposed admin workflow or a required sequence
+of general-contracting steps:
 
 ~~~text
 Inquiry -> Lead -> Site Visit -> Estimate -> Agreement -> Deposit ->
@@ -1219,15 +1222,15 @@ Payment -> Closeout -> Warranty
 
 It also checks retry idempotency, stale updates, calendar conflicts,
 notification failure isolation, protected files, direct URL/API boundaries,
-financial redaction, command-center attention items, and weekly action-list
-data.
+financial redaction, and attention-feed and weekly-review service data.
 
 ### Browser smoke commands
 
 The browser runner uses Playwright CLI rather than a test framework. It logs
-in with the generated disposable accounts and checks the command center,
-project Operations hub, weekly review, calendar, field view, client portal,
-financial redaction, protected documents, and direct unauthorized URLs.
+in with the generated disposable accounts and checks the standard Overview
+and Projects workspaces, legacy construction-route redirects, calendar, field
+view, client portal, financial redaction, protected documents, and direct
+unauthorized URLs.
 
 Run it through the certification launcher:
 
@@ -1254,9 +1257,9 @@ production cookie, or production credential to this command.
 
 | Role | Must be able to use | Must not be able to use |
 | --- | --- | --- |
-| Owner | Command Center, all assigned company operations, financials, weekly review | Nothing outside the owners authorized company scope |
+| Owner | Overview, Projects tab, all authorized company operations and financials | Nothing outside the owners authorized company scope |
 | Office | Leads, clients, messages, scheduling, documents, permitted payment records | Restricted internal financial details outside its policy |
-| Project Manager | Assigned project Operations, readiness, schedules, field activity, budgets, subcontractors | Unassigned projects and unrelated financial records |
+| Project Manager | Assigned projects, tasks, schedules, and field activity | Unassigned projects and unrelated financial records |
 | Sales | Leads, appointments, estimates, follow-ups | Project costs, margins, internal notes, vendor details |
 | Field | Todays work, scope, tasks, plans, photos, daily reports, materials, problems | Financials, margins, internal vendor data, unrelated projects |
 | Subcontractor | Assigned work package and explicitly shared project records | Other projects, client-private records, financials, internal notes |
@@ -1501,21 +1504,22 @@ record instead of creating a duplicate.
 ### Manual test start
 
 1. Open `/gccad/` and sign in as `owner@manual.test`.
-2. Open the Operations Command Center.
+2. Open Overview, then use Projects to manage a project record.
 3. Create a dummy Client record and client portal invite through Operations.
 4. Complete the client invite in a separate browser profile and establish a
    temporary client password.
 5. Submit a website inquiry using that same client email.
 6. Convert the lead and create the estimate, agreement, deposit, and project.
-7. In Project Operations, assign:
+7. In the Projects tab, select the project and assign:
    - `manager@manual.test` as Project Manager.
    - `office@manual.test` as Office staff.
    - `field@manual.test` as Field staff.
 8. Log in separately as each employee and verify their scoped workspace.
 9. Use the Client account to approve selections, change orders, and review
    shared project information.
-10. Complete readiness, construction, field reports, inspections, payments,
-   closeout, and warranty testing.
+10. Verify the shared milestone sequence, project updates, employee tasks,
+    and the currently implemented project status workflow. Additional
+    readiness and closeout steps await Owner requirements.
 
 Refresh or sign out and back in if a browser session was open before the
 accounts were seeded. The temporary credentials and database are disposable;
@@ -1588,7 +1592,7 @@ Schedule the sync command daily in the deployment environment. The Places API
 returns a maximum of five reviews per request, and each displayed card includes
 Google attribution plus a direct “Read on Google” link.
 
-## 34. Mobile owner Command Center access
+## 34. Mobile owner Operations access
 
 The existing admin/superuser account can optionally use the Expo WebView as the Owner
 workspace. This does not create a new Owner role, does not expose the `/gccad/` admin
@@ -1605,7 +1609,7 @@ $env:GCC_AI_ENABLED = "false"
 The mobile app opens `/accounts/login/?mobile=1`. The owner must still complete the
 existing administrator PIN and authenticator verification steps when those protections
 are enabled. Only after the factors succeed is the Django session created, and the app
-lands at `/dashboard/` (the Command Center). The app redirects any `/gccad/` navigation
+lands at `/dashboard/` (the standard Overview). The app redirects any `/gccad/` navigation
 back to `/dashboard/`; browser access to `/gccad/` remains available through its existing
 protected administration gate.
 
@@ -1628,11 +1632,11 @@ stored in native plaintext storage or written to logs.
 1. Leave `GCC_MOBILE_OWNER_ACCESS_ENABLED=false` and verify the superuser is rejected by
    the mobile login form.
 2. Enable the access flag, sign in through the Expo app, and verify the owner lands on
-   the Command Center.
+   the standard Operations Overview.
 3. If enabled, verify the PIN page appears before a session exists; then verify the
    authenticator page appears before a session exists.
 4. Open the app drawer and verify Operations links work while `/gccad/` redirects to
-   the Command Center.
+   the standard Overview.
 5. Enable owner push, register a device, open an Operations notification, and verify the
    destination is internal and not `/gccad/`.
 6. Log out and verify the device is deactivated.

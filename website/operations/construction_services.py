@@ -1090,7 +1090,7 @@ def accept_agreement(agreement, *, actor, request=None, idempotency_key=None):
     locked.locked_at = now
     locked.save()
     project.operational_phase = Project.OperationalPhase.PRECONSTRUCTION
-    project.next_step = project.next_step or "Complete readiness checklist"
+    project.next_step = project.next_step or "Assign project staff"
     project.save(update_fields=["operational_phase", "next_step", "updated_at"])
     record_workflow_event(
         "agreement_accepted",
@@ -1134,7 +1134,6 @@ def create_project_from_estimate(estimate, *, actor, idempotency_key=None):
         raise PermissionDenied("You cannot create a project from this estimate.")
     existing = locked.projects.order_by("-created_at").first()
     if existing:
-        initialize_readiness(existing, actor=actor)
         return existing, False
     if (
         locked.status != Estimate.Status.ACCEPTED
@@ -1243,12 +1242,10 @@ def create_project_from_estimate(estimate, *, actor, idempotency_key=None):
             },
         )
         next_sequence += 1
-    initialize_readiness(project, actor=actor)
-    initialize_closeout(project, actor=actor)
     if lead:
         lead.status = Lead.Status.WON
         lead.workflow_stage = Lead.WorkflowStage.SOLD_SCHEDULED
-        lead.next_action = "Complete readiness checklist"
+        lead.next_action = "Assign project staff"
         lead.save(update_fields=["status", "workflow_stage", "next_action", "updated_at"])
     record_workflow_event(
         "project_created_from_estimate",
@@ -2083,6 +2080,13 @@ def create_project_task(
         event_key_override=event_key,
     )
     record_activity("Project task created", task.title, actor=actor, project=project)
+    _notify_project_task_participants(
+        task,
+        actor=actor,
+        kind="task-assignment",
+        title="New project task assigned",
+        body=f"{task.title} was added to the project work queue.",
+    )
     return task, True
 
 
@@ -2100,9 +2104,13 @@ def record_project_task_status(task, *, actor, status, idempotency_key=None):
         idempotency_key=_workflow_event_key("project_task_status_updated", locked, idempotency_key),
     ).exists():
         return locked
+    if locked.status == status:
+        return locked
     before = state_snapshot(locked, ["status", "completed_at"])
     locked.status = status
-    locked.completed_at = timezone.now() if status == Task.Status.COMPLETE else None
+    locked.completed_at = (
+        timezone.now() if status == Task.Status.COMPLETE else None
+    )
     locked.save(update_fields=["status", "completed_at", "updated_at"])
     record_workflow_event(
         "project_task_status_updated",
@@ -2115,7 +2123,71 @@ def record_project_task_status(task, *, actor, status, idempotency_key=None):
         idempotency_key=idempotency_key,
     )
     record_activity("Project task status updated", locked.title, actor=actor, project=locked.project)
+    _notify_project_task_participants(
+        locked,
+        actor=actor,
+        kind="task-status",
+        title="Project task status changed",
+        body=f"{locked.title} moved to {locked.get_status_display()}.",
+    )
     return locked
+
+
+def _notify_project_task_participants(task, *, actor, kind, title, body):
+    """Notify assignees and project staff with a link to their task workspace."""
+    user_model = get_user_model()
+    recipients = list(task.assigned_to.all())
+    if task.project_id:
+        recipients.extend(
+            task.project.assigned_staff.filter(is_staff=True, is_active=True).filter(
+                Q(employee_profile__isnull=True)
+                | Q(employee_profile__is_active=True)
+            )
+            .distinct()
+        )
+    recipients.extend(
+        user_model.objects.filter(is_active=True, is_staff=True, is_superuser=True)
+    )
+    unique_recipients = {recipient.pk: recipient for recipient in recipients if recipient}
+    owners = [
+        recipient for recipient in unique_recipients.values() if recipient.is_superuser
+    ]
+    employees = [
+        recipient for recipient in unique_recipients.values() if not recipient.is_superuser
+    ]
+    metadata = {"task_id": str(task.pk)}
+    shared = {
+        "kind": kind,
+        "title": title,
+        "body": body,
+        "metadata": metadata,
+        "created_by": actor,
+        "exclude_users": [actor],
+        "lead": task.lead,
+        "project": task.project,
+        "task": task,
+    }
+    task_query = urlencode({"task": task.pk})
+    if owners:
+        queue_employee_notifications(
+            owners,
+            destination_url=(
+                reverse("operations:dashboard-section", kwargs={"section": "tasks"})
+                + "?"
+                + task_query
+            ),
+            **shared,
+        )
+    if employees:
+        queue_employee_notifications(
+            employees,
+            destination_url=(
+                reverse("operations:team-section", kwargs={"section": "tasks"})
+                + "?"
+                + task_query
+            ),
+            **shared,
+        )
 
 
 @transaction.atomic

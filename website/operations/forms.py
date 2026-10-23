@@ -192,11 +192,11 @@ class TaskForm(forms.ModelForm):
         labels = {"watchers": "Supervisors"}
         help_texts = {
             "lead": "Choose a lead for pre-client follow-up. Selecting a client disables this field; selecting a lead disables the client and project fields.",
-            "client": "Choose an existing client to connect this employee task to their account.",
+            "client": "Optional: connect this task to an existing client account.",
             "project": "Choose a project for this client, or leave it unassigned if a project has not been created yet.",
             "milestone": "Choose a milestone after selecting a project.",
             "assigned_to": "Select every employee responsible for completing this task.",
-            "watchers": "Supervisors can follow the task but are not assigned to complete it.",
+            "watchers": "Optional. Supervisors can follow the task but are not assigned to complete it.",
         }
         widgets = {
             "description": forms.Textarea(attrs={"rows": 4}),
@@ -286,8 +286,6 @@ class TaskForm(forms.ModelForm):
                 self.add_error("client", "Choose a client before selecting a project.")
         if client and project and project.client_id != client.pk:
             self.add_error("project", "Choose a project that belongs to the selected client.")
-        if not lead and not client and not project:
-            self.add_error("client", "Choose a lead or client to connect this task to.")
         return cleaned
 
 

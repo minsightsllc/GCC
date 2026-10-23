@@ -22,6 +22,8 @@ from .construction_services import (
     create_selection,
     create_subcontractor_assignment,
     create_project_from_estimate,
+    initialize_closeout,
+    initialize_readiness,
     project_financial_summary,
     record_deposit,
     record_payment,
@@ -40,6 +42,7 @@ from .models import (
     Commitment,
     CostEntry,
     DailyReport,
+    EmployeeNotification,
     Estimate,
     EstimateLineItem,
     Inspection,
@@ -143,14 +146,15 @@ class ConstructionOperatingSystemTests(TestCase):
         project.assigned_staff.add(self.manager, self.field)
         return project
 
-    def test_estimate_conversion_is_idempotent_and_seeds_operational_records(self):
+    def test_estimate_conversion_is_idempotent_without_assumed_checklists(self):
         project = self._create_project()
         same_project, created = create_project_from_estimate(self.estimate, actor=self.owner)
 
         self.assertFalse(created)
         self.assertEqual(project.pk, same_project.pk)
         self.assertEqual(Project.objects.filter(estimate=self.estimate).count(), 1)
-        self.assertEqual(PreconstructionItem.objects.filter(project=project).count(), 9)
+        self.assertEqual(PreconstructionItem.objects.filter(project=project).count(), 0)
+        self.assertEqual(CloseoutItem.objects.filter(project=project).count(), 0)
         self.assertEqual(PaymentSchedule.objects.filter(project=project).count(), 1)
         self.assertTrue(WorkflowEvent.objects.filter(event_type="project_created_from_estimate").exists())
         self.assertFalse(project.is_published)
@@ -203,6 +207,7 @@ class ConstructionOperatingSystemTests(TestCase):
 
     def test_client_project_serializer_hides_internal_notes_and_field_hides_co_price(self):
         project = self._create_project()
+        initialize_readiness(project, actor=self.owner)
         project.health_note = "Internal budget risk."
         project.save(update_fields=["health_note", "updated_at"])
         readiness = project.readiness_items.first()
@@ -324,7 +329,7 @@ class ConstructionOperatingSystemTests(TestCase):
         self.assertEqual(PaymentRecord.objects.filter(project=project).count(), 1)
         self.assertEqual(project_financial_summary(project)["payments_received"], Decimal("10000.01"))
 
-    def test_command_center_and_project_operations_are_additive_views(self):
+    def test_legacy_construction_pages_redirect_to_the_standard_project_workspace(self):
         project = self._create_project()
         self.http.force_login(self.owner)
 
@@ -336,34 +341,48 @@ class ConstructionOperatingSystemTests(TestCase):
         project_view = self.http.get(reverse("operations:project-operations", kwargs={"pk": project.pk}))
 
         self.assertEqual(dashboard.status_code, 200)
-        self.assertContains(dashboard, "What needs my attention today?")
-        self.assertContains(dashboard, "Upcoming draws")
-        self.assertContains(dashboard, "Active contract value")
-        self.assertRedirects(command_center, reverse("operations:dashboard"))
+        self.assertContains(dashboard, "Here’s the shape of the work today.")
+        self.assertNotContains(dashboard, "What needs my attention today?")
+        self.assertNotContains(dashboard, "Required approvals complete")
+        self.assertRedirects(
+            command_center,
+            reverse("operations:dashboard-section", kwargs={"section": "overview"}),
+        )
         self.assertEqual(legacy_overview.status_code, 200)
         self.assertContains(legacy_overview, "Here’s the shape of the work today.")
-        self.assertEqual(project_view.status_code, 200)
-        self.assertContains(project_view, "Ready for construction")
-        self.assertContains(project_view, "Current contract")
-        self.assertContains(project_view, "Gross margin")
-        self.assertNotContains(project_view, "Restricted financial view")
+        project_url = reverse("operations:dashboard-section", kwargs={"section": "projects"})
+        self.assertRedirects(project_view, f"{project_url}?project={project.pk}")
+        project_page = self.http.get(f"{project_url}?project={project.pk}")
+        self.assertContains(project_page, "Project record")
+        self.assertContains(project_page, "Project sequence")
+        self.assertNotContains(project_page, "Ready for construction")
+        self.assertNotContains(project_page, "Client decisions")
+        self.assertNotContains(project_page, "Field requests")
+
+        project.assigned_staff.remove(self.manager)
+        project.project_manager = self.manager
+        project.save(update_fields=["project_manager", "updated_at"])
+        self.http.force_login(self.manager)
+        manager_project_view = self.http.get(
+            reverse("operations:project-operations", kwargs={"pk": project.pk})
+        )
+        team_project_url = reverse("operations:team-section", kwargs={"section": "projects"})
+        self.assertRedirects(manager_project_view, f"{team_project_url}?project={project.pk}")
+        manager_project_page = self.http.get(f"{team_project_url}?project={project.pk}")
+        self.assertContains(manager_project_page, project.title)
+        self.assertNotContains(manager_project_page, "Financial ledger")
 
         self.http.force_login(self.field)
         field_project_view = self.http.get(
             reverse("operations:project-operations", kwargs={"pk": project.pk})
         )
-        self.assertEqual(field_project_view.status_code, 200)
-        self.assertContains(field_project_view, "Owner / assigned manager")
-        self.assertNotContains(field_project_view, "Current contract")
-        self.assertContains(field_project_view, 'href="/team/"')
-        self.assertNotContains(field_project_view, 'href="/dashboard/"')
-        self.assertNotContains(field_project_view, "Legacy project view")
+        self.assertRedirects(field_project_view, f"{team_project_url}?project={project.pk}")
+        field_project_page = self.http.get(f"{team_project_url}?project={project.pk}")
+        self.assertContains(field_project_page, "Assigned projects")
+        self.assertContains(field_project_page, project.title)
+        self.assertNotContains(field_project_page, "Financial ledger")
 
-    @override_settings(
-        GCC_OWNER_COMMAND_CENTER_ENABLED=False,
-        GCC_OPERATING_SYSTEM_ENABLED=True,
-    )
-    def test_dashboard_feature_flag_falls_back_to_existing_overview(self):
+    def test_dashboard_uses_the_standard_overview(self):
         self.http.force_login(self.owner)
 
         response = self.http.get(reverse("operations:dashboard"))
@@ -616,6 +635,7 @@ class ConstructionOperatingSystemTests(TestCase):
 
     def test_permits_problems_and_closeout_are_scoped_and_idempotent(self):
         project = self._create_project()
+        initialize_closeout(project, actor=self.owner)
         permit_url = reverse("operations-api:project-permits", kwargs={"pk": project.pk})
         self.http.force_login(self.owner)
         missing_key = self.http.post(
@@ -686,37 +706,26 @@ class ConstructionOperatingSystemTests(TestCase):
         self.assertEqual(payload["readiness"], [])
         self.assertEqual(payload["selections"], [])
 
-    def test_execution_loop_flag_controls_project_hub_and_weekly_review(self):
+    def test_legacy_hub_and_weekly_review_routes_return_to_standard_workspaces(self):
         project = self._create_project()
         self.http.force_login(self.owner)
-        with self.settings(
-            GCC_EXECUTION_LOOP_ENABLED=False,
-            GCC_OPERATING_SYSTEM_ENABLED=True,
-        ):
-            fallback = self.http.get(
-                reverse("operations:project-operations", kwargs={"pk": project.pk})
-            )
-            self.assertEqual(fallback.status_code, 200)
-            self.assertNotContains(fallback, "Pilot execution loop")
-            self.assertEqual(
-                self.http.get(reverse("operations:weekly-review")).status_code,
-                404,
-            )
-        with self.settings(
-            GCC_EXECUTION_LOOP_ENABLED=True,
-            GCC_EXECUTION_LOOP_PROJECT_IDS=str(project.pk),
-            GCC_EXECUTION_LOOP_USER_IDS=str(self.owner.pk),
-            GCC_OPERATING_SYSTEM_ENABLED=True,
-        ):
-            enabled = self.http.get(
-                reverse("operations:project-operations", kwargs={"pk": project.pk})
-            )
-            self.assertEqual(enabled.status_code, 200)
-            self.assertContains(enabled, "Pilot execution loop")
-            review = self.http.get(reverse("operations:weekly-review"))
-            self.assertEqual(review.status_code, 200)
-            self.assertContains(review, "Weekly action list")
-            self.assertContains(review, project.title)
+        project_url = reverse("operations:dashboard-section", kwargs={"section": "projects"})
+        for execution_enabled in (False, True):
+            with self.settings(
+                GCC_EXECUTION_LOOP_ENABLED=execution_enabled,
+                GCC_EXECUTION_LOOP_PROJECT_IDS=str(project.pk),
+                GCC_EXECUTION_LOOP_USER_IDS=str(self.owner.pk),
+                GCC_OPERATING_SYSTEM_ENABLED=True,
+            ):
+                project_response = self.http.get(
+                    reverse("operations:project-operations", kwargs={"pk": project.pk})
+                )
+                self.assertRedirects(project_response, f"{project_url}?project={project.pk}")
+                review = self.http.get(reverse("operations:weekly-review"))
+                self.assertRedirects(
+                    review,
+                    reverse("operations:dashboard-section", kwargs={"section": "overview"}),
+                )
 
         self.http.force_login(self.field)
         with self.settings(
@@ -726,9 +735,10 @@ class ConstructionOperatingSystemTests(TestCase):
             GCC_OPERATING_SYSTEM_ENABLED=True,
         ):
             employee_review = self.http.get(reverse("operations:weekly-review"))
-            self.assertEqual(employee_review.status_code, 200)
-            self.assertContains(employee_review, 'href="/team/"')
-            self.assertNotContains(employee_review, 'href="/dashboard/"')
+            self.assertRedirects(
+                employee_review,
+                reverse("operations:team-section", kwargs={"section": "overview"}),
+            )
 
     @override_settings(
         GCC_EXECUTION_LOOP_ENABLED=True,
@@ -991,6 +1001,16 @@ class ConstructionOperatingSystemTests(TestCase):
         self.assertEqual(response.status_code, 302)
         task = project.tasks.get(title="Confirm cabinet delivery")
         self.assertEqual(set(task.assigned_to.values_list("pk", flat=True)), {self.manager.pk, self.field.pk})
+        for employee in (self.manager, self.field):
+            notification = EmployeeNotification.objects.get(
+                task=task,
+                employee=employee,
+                kind="task-assignment",
+            )
+            self.assertEqual(
+                notification.destination_url,
+                f'{reverse("operations:team-section", kwargs={"section": "tasks"})}?task={task.pk}',
+            )
 
         response = self.http.post(
             reverse("operations:project-task-status", kwargs={"pk": task.pk}),
@@ -1000,6 +1020,37 @@ class ConstructionOperatingSystemTests(TestCase):
         self.assertEqual(response.status_code, 302)
         task.refresh_from_db()
         self.assertEqual(task.status, Task.Status.COMPLETE)
+        completed_events = WorkflowEvent.objects.filter(
+            event_type="project_task_status_updated",
+            related_id=str(task.pk),
+            after_state__status=Task.Status.COMPLETE,
+        ).count()
+        self.assertEqual(completed_events, 1)
+        self.assertTrue(
+            EmployeeNotification.objects.filter(
+                task=task,
+                employee=self.field,
+                kind="task-status",
+                destination_url__contains=f"task={task.pk}",
+            ).exists()
+        )
+
+        # Replaying the same request key is a no-op, while a later completion
+        # after reopening receives a fresh key and is recorded normally.
+        response = self.http.post(
+            reverse("operations:project-task-status", kwargs={"pk": task.pk}),
+            data={"status": Task.Status.COMPLETE},
+            HTTP_IDEMPOTENCY_KEY="project-task-status-1",
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            WorkflowEvent.objects.filter(
+                event_type="project_task_status_updated",
+                related_id=str(task.pk),
+                after_state__status=Task.Status.COMPLETE,
+            ).count(),
+            1,
+        )
 
         self.http.force_login(self.field)
         response = self.http.post(
@@ -1010,6 +1061,23 @@ class ConstructionOperatingSystemTests(TestCase):
         self.assertEqual(response.status_code, 302)
         task.refresh_from_db()
         self.assertEqual(task.status, Task.Status.IN_PROGRESS)
+
+        self.http.force_login(self.owner)
+        response = self.http.post(
+            reverse("operations:project-task-status", kwargs={"pk": task.pk}),
+            data={"status": Task.Status.COMPLETE},
+        )
+        self.assertEqual(response.status_code, 302)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.Status.COMPLETE)
+        self.assertEqual(
+            WorkflowEvent.objects.filter(
+                event_type="project_task_status_updated",
+                related_id=str(task.pk),
+                after_state__status=Task.Status.COMPLETE,
+            ).count(),
+            2,
+        )
 
         field_task = Task.objects.create(
             project=project,
@@ -1085,6 +1153,8 @@ class ConstructionOperatingSystemTests(TestCase):
     )
     def test_execution_transitions_release_draw_and_finish_warranty(self):
         project = self._create_project()
+        initialize_readiness(project, actor=self.owner)
+        initialize_closeout(project, actor=self.owner)
         milestone = project.milestones.get(sort_order=3)
         draw = PaymentSchedule.objects.create(
             project=project,

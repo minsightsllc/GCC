@@ -235,19 +235,19 @@ try {
     Save-PageArtifacts "anonymous" "/accounts/login/"
 
     Run-Role "owner" $ownerUsername $ownerPassword @(
-        [pscustomobject]@{ Path = "/dashboard/"; Status = @(200); Contains = @("What needs my attention today?"); Excludes = @(); Description = "Owner Command Center" },
-        [pscustomobject]@{ Path = $projectPath; Status = @(200); Contains = @("Run the project from here", "Financial ledger"); Excludes = @(); Description = "Owner Project Operations hub" },
-        [pscustomobject]@{ Path = "/dashboard/reviews/weekly/"; Status = @(200); Contains = @("Weekly action list", "What happened, what is next"); Excludes = @(); Description = "Owner weekly action list" },
+        [pscustomobject]@{ Path = "/dashboard/"; Status = @(200); Contains = @("Overview", "Projects"); Excludes = @("What needs my attention today?", "Required approvals complete"); Description = "Owner standard Overview" },
+        [pscustomobject]@{ Path = $projectPath; Status = @(200); Contains = @("Project record", "Project sequence"); Excludes = @("Ready for construction", "Client decisions", "Field requests"); Description = "Owner standard project record" },
+        [pscustomobject]@{ Path = "/dashboard/reviews/weekly/"; Status = @(200); Contains = @("Overview"); Excludes = @("Weekly action list"); Description = "Legacy weekly-review redirect" },
         [pscustomobject]@{ Path = "/dashboard/calendar/"; Status = @(200); Contains = @("Calendar"); Excludes = @(); Description = "Owner calendar" }
     )
 
     Run-Role "office" $officeUsername $officePassword @(
         [pscustomobject]@{ Path = "/team/"; Status = @(200); Contains = @("Your work", "Assigned projects"); Excludes = @("Financial ledger", "Gross margin"); Description = "Office assigned-work workspace" },
-        [pscustomobject]@{ Path = $projectPath; Status = @(200); Contains = @("PROJECT HEALTH", "Where are we?"); Excludes = @("Financial ledger", "Gross margin"); Description = "Office project workspace" }
+        [pscustomobject]@{ Path = $projectPath; Status = @(200); Contains = @("Projects"); Excludes = @("Financial ledger", "Gross margin", "Ready for construction"); Description = "Office standard project workspace" }
     )
 
     Run-Role "manager" $managerUsername $managerPassword @(
-        [pscustomobject]@{ Path = $projectPath; Status = @(200); Contains = @("Financial ledger", "Ready for construction"); Excludes = @(); Description = "Manager assigned-project access" }
+        [pscustomobject]@{ Path = $projectPath; Status = @(200); Contains = @("Projects"); Excludes = @("Financial ledger", "Ready for construction"); Description = "Manager standard project workspace" }
     )
 
     Run-Role "sales" $salesUsername $salesPassword @(
@@ -258,7 +258,7 @@ try {
 
     Run-Role "field" $fieldUsername $fieldPassword @(
         [pscustomobject]@{ Path = "/team/field/"; Status = @(200); Contains = @("Where am I going? What am I doing? What do I need?"); Excludes = @("Financial ledger", "Gross margin"); Description = "Field today workspace" },
-        [pscustomobject]@{ Path = $projectPath; Status = @(200); Contains = @("Daily reports, materials, and problems"); Excludes = @("Financial ledger", "Gross margin"); Description = "Field project workflow" }
+        [pscustomobject]@{ Path = $projectPath; Status = @(200); Contains = @("Assigned projects"); Excludes = @("Financial ledger", "Gross margin", "Daily reports, materials, and problems"); Description = "Field assigned-project workspace" }
     )
 
     Run-Role "client" $clientUsername $clientPassword @(

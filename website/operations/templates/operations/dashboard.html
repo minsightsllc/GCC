@@ -14,7 +14,7 @@
     </aside>
 
     <div class="admin-main">
-        <header class="admin-topbar"><button class="admin-menu-toggle" type="button" data-admin-menu-toggle aria-expanded="false" aria-label="Open Operations navigation">☰</button><div><span class="admin-breadcrumb">Grand Coast / Operations</span><h1>{% if active_section == 'overview' %}Overview{% elif active_section == 'leads' %}Leads{% elif active_section == 'estimates' %}Estimates{% elif active_section == 'projects' %}Projects{% elif active_section == 'media' %}Media library{% else %}Content studio{% endif %}</h1></div><div class="admin-top-actions"><a class="button button-primary button-small" href="{% url 'operations:dashboard-section' section='estimates' %}?new=estimate">+ New estimate</a></div></header>
+        <header class="admin-topbar"><button class="admin-menu-toggle" type="button" data-admin-menu-toggle aria-expanded="false" aria-label="Open Operations navigation">☰</button><div><span class="admin-breadcrumb">Grand Coast / Operations</span><h1>{% if active_section == 'overview' %}Overview{% elif active_section == 'leads' %}Leads{% elif active_section == 'estimates' %}Estimates{% elif active_section == 'projects' %}Projects{% elif active_section == 'media' %}Media{% else %}Content studio{% endif %}</h1></div>{% if active_section != 'media' %}<div class="admin-top-actions"><a class="button button-primary button-small" href="{% url 'operations:dashboard-section' section='estimates' %}?new=estimate">+ New estimate</a></div>{% endif %}</header>
         <div class="admin-workspace-notice"><span class="staging-label">OWNER WORKSPACE</span><span>Private operations area · Updates are saved to the application.</span><span class="staging-spacer"></span><span class="admin-workspace-user">{{ request.user.get_full_name|default:request.user.username }}</span></div>
         {% if last_invite_url %}<div class="dashboard-alert"><strong>{% if last_invite_email_status == 'sent' %}Client invite emailed.{% elif last_invite_email_status == 'failed' %}Client invite email failed.{% else %}Client invite ready.{% endif %}</strong><span>{% if last_invite_email_status == 'sent' %}Sent to {{ last_invite_recipient }}. Copy the one-time link as a backup:{% elif last_invite_email_status == 'failed' %}Use the one-time copy link below:{% else %}Email is pending or disabled. Copy the one-time link below:{% endif %}</span><a href="{{ last_invite_url }}">{{ last_invite_url }}</a></div>{% endif %}
 
@@ -60,9 +60,61 @@
 
             <section class="admin-view {% if active_section == 'media' %}is-active{% endif %}">
                 <div class="admin-heading-row"><div><span class="section-kicker">Project story</span><h2>Media library</h2><p class="admin-intro">Upload the images and videos that make progress tangible.</p></div><a class="button button-primary" href="#media-upload">+ Add media</a></div>
-                <form class="media-upload-panel" id="media-upload" method="post" action="{% url 'operations:media-upload' %}" enctype="multipart/form-data">{% csrf_token %}<div><span class="section-kicker">New upload</span><h3>Add project media</h3></div><div class="media-upload-fields"><label class="form-field">Project{{ media_upload_form.project }}</label><label class="form-field">Visibility{{ media_upload_form.visibility }}</label><label class="file-drop"><span class="file-drop-icon">+</span><span><strong>Select photos or videos</strong><small>Up to 50 MB per file · Stored securely</small></span>{{ media_upload_form.files }}</label><button class="button button-primary" type="submit">Upload files</button></div></form>
-                <div class="media-toolbar"><div class="filter-tabs"><a class="{% if media_visibility == 'all' %}is-selected{% endif %}" href="?visibility=all{% if media_project != 'all' %}&amp;media_project={{ media_project }}{% endif %}">All media</a>{% for value,label in media_visibility_choices %}<a class="{% if media_visibility == value %}is-selected{% endif %}" href="?visibility={{ value }}{% if media_project != 'all' %}&amp;media_project={{ media_project }}{% endif %}">{{ label }}</a>{% endfor %}</div><form class="select-field" method="get"><span>Project</span><select name="media_project" onchange="this.form.submit()"><option value="all">All projects</option>{% for project in projects %}<option value="{{ project.pk }}" {% if media_project == project.pk|stringformat:'s' %}selected{% endif %}>{{ project.title }}</option>{% endfor %}</select>{% if media_visibility != 'all' %}<input type="hidden" name="visibility" value="{{ media_visibility }}">{% endif %}</form><span class="media-security-note">Public and client visibility are enforced by the server.</span></div>
-                <div class="media-grid">{% for media in media_assets %}<article class="media-item"><div class="media-preview">{% if media.media_type == 'video' and media.file %}<video src="{{ media.display_url }}" controls preload="metadata"></video>{% else %}<img src="{{ media.display_url }}" alt="{{ media.caption|default:media.title }}">{% endif %}<a class="media-preview-open" href="{{ media.display_url }}" target="_blank" rel="noreferrer" aria-label="Open {{ media.title }}">↗</a></div><div class="media-item-body"><strong>{{ media.title }}</strong><small>{{ media.project.title|default:'Unassigned' }} · {{ media.get_visibility_display }}</small><form class="media-controls" method="post" action="{% url 'operations:media-update' pk=media.pk %}">{% csrf_token %}<input type="hidden" name="project" value="{{ media.project.pk }}"><label class="form-field">Caption<textarea name="caption" rows="2">{{ media.caption }}</textarea></label><label class="form-field">Visibility<select name="visibility">{% for value,label in media_visibility_choices %}<option value="{{ value }}" {% if media.visibility == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label><button class="button button-quiet" type="submit">Save media details</button></form></div></article>{% empty %}<div class="empty-detail">No media matches this filter.</div>{% endfor %}</div>
+                <form class="media-upload-panel" id="media-upload" method="post" action="{% url 'operations:media-upload' %}" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="media-upload-heading">
+                        <span class="section-kicker">New upload</span>
+                        <h3>Add project media</h3>
+                    </div>
+                    <div class="media-upload-fields">
+                        <label class="form-field">Project{{ media_upload_form.project }}</label>
+                        <label class="form-field">Visibility{{ media_upload_form.visibility }}</label>
+                        <label class="file-drop"><span class="file-drop-icon">+</span><span><strong>Select photos or videos</strong><small>Up to 50 MB per file · Stored securely</small></span>{{ media_upload_form.files }}</label>
+                        <button class="button button-primary" type="submit">Upload files</button>
+                    </div>
+                </form>
+                <div class="media-toolbar">
+                    <div class="media-filter-group">
+                        <span class="media-filter-label">Visibility</span>
+                        <nav class="filter-tabs" aria-label="Filter media by visibility">
+                            <a class="{% if media_visibility == 'all' %}is-selected{% endif %}" href="?visibility=all{% if media_project != 'all' %}&amp;media_project={{ media_project }}{% endif %}" {% if media_visibility == 'all' %}aria-current="page"{% endif %}>All media</a>
+                            {% for value,label in media_visibility_choices %}
+                                <a class="{% if media_visibility == value %}is-selected{% endif %}" href="?visibility={{ value }}{% if media_project != 'all' %}&amp;media_project={{ media_project }}{% endif %}" {% if media_visibility == value %}aria-current="page"{% endif %}>{{ label }}</a>
+                            {% endfor %}
+                        </nav>
+                    </div>
+                    <form class="media-project-filter" method="get">
+                        <label class="select-field"><span>Project</span><select name="media_project" onchange="this.form.submit()"><option value="all">All projects</option>{% for project in projects %}<option value="{{ project.pk }}" {% if media_project == project.pk|stringformat:'s' %}selected{% endif %}>{{ project.title }}</option>{% endfor %}</select></label>
+                        {% if media_visibility != 'all' %}<input type="hidden" name="visibility" value="{{ media_visibility }}">{% endif %}
+                    </form>
+                    <p class="media-security-note">Public and client visibility are enforced by the server.</p>
+                </div>
+                <div class="media-grid">
+                    {% for media in media_assets %}
+                        <article class="media-item">
+                            <div class="media-preview">
+                                {% if media.media_type == 'video' and media.file %}<video src="{{ media.display_url }}" controls preload="metadata"></video>{% else %}<img src="{{ media.display_url }}" alt="{{ media.caption|default:media.title }}">{% endif %}
+                                <a class="media-preview-open" href="{{ media.display_url }}" target="_blank" rel="noreferrer" aria-label="Open {{ media.title }}">↗</a>
+                            </div>
+                            <div class="media-item-body">
+                                <strong>{{ media.title }}</strong>
+                                <small>{{ media.project.title|default:'Unassigned' }} · {{ media.get_visibility_display }}</small>
+                                <form class="media-controls" method="post" action="{% url 'operations:media-update' pk=media.pk %}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="project" value="{{ media.project.pk }}">
+                                    <label class="form-field">Caption<textarea name="caption" rows="2">{{ media.caption }}</textarea></label>
+                                    <label class="form-field">Visibility<select name="visibility">{% for value,label in media_visibility_choices %}<option value="{{ value }}" {% if media.visibility == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                                    <button class="button button-quiet" type="submit">Save media details</button>
+                                </form>
+                            </div>
+                        </article>
+                    {% empty %}
+                        <div class="media-empty-state">
+                            <strong>No media matches these filters</strong>
+                            <p>Try another project or visibility filter, or upload project photos and videos above.</p>
+                        </div>
+                    {% endfor %}
+                </div>
             </section>
 
             <section class="admin-view {% if active_section == 'content' %}is-active{% endif %}">

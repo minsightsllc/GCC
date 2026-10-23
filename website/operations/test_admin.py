@@ -107,7 +107,7 @@ class UnfoldAdminTests(TestCase):
         self.assertContains(response, 'gcc-admin-home')
         self.assertContains(response, 'Grand Coast')
         self.assertContains(response, 'Open Operations')
-        self.assertContains(response, 'Operations Command Center')
+        self.assertContains(response, 'Operations Overview')
         self.assertContains(response, 'Website Content')
         self.assertContains(response, 'Security &amp; Access')
         self.assertContains(response, 'Advanced Records')

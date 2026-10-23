@@ -1781,7 +1781,175 @@
         });
     }
 
-    function initCalendarDayForms() {
+    function initCalendarDaySelection() {
+        var calendar = document.querySelector(".calendar-month-panel");
+        if (
+            !calendar
+            || typeof window.fetch !== "function"
+            || typeof window.DOMParser !== "function"
+            || typeof window.URL !== "function"
+            || !window.history
+            || typeof window.history.pushState !== "function"
+        ) {
+            return;
+        }
+
+        var requestSequence = 0;
+        var activeRequest = null;
+
+        function dayFromLink(link) {
+            try {
+                return new window.URL(link.href, window.location.href).searchParams.get("day") || "";
+            } catch (error) {
+                return "";
+            }
+        }
+
+        function setSelectedDay(day) {
+            each(".calendar-day", function (link) {
+                link.classList.toggle("is-selected", Boolean(day && dayFromLink(link) === day));
+            }, calendar);
+            each(".calendar-mobile-day", function (card) {
+                var dayLink = card.querySelector("[data-calendar-day-selection]");
+                card.classList.toggle("is-selected", Boolean(day && dayLink && dayFromLink(dayLink) === day));
+            }, calendar);
+        }
+
+        function setStatus(message) {
+            var status = calendar.querySelector("[data-calendar-selection-status]");
+            if (status) {
+                status.textContent = message;
+            }
+        }
+
+        function loadDay(url, updateHistory) {
+            requestSequence += 1;
+            var currentSequence = requestSequence;
+            if (activeRequest) {
+                activeRequest.abort();
+            }
+            activeRequest = typeof window.AbortController === "function" ? new window.AbortController() : null;
+
+            calendar.setAttribute("aria-busy", "true");
+            setStatus("Loading day details…");
+
+            var options = {
+                credentials: "same-origin",
+                headers: {"X-Requested-With": "XMLHttpRequest", "Accept": "text/html"},
+            };
+            if (activeRequest) {
+                options.signal = activeRequest.signal;
+            }
+
+            window.fetch(url.href, options)
+                .then(function (response) {
+                    if (response.redirected) {
+                        var destination = new window.URL(response.url, window.location.href);
+                        if (destination.origin !== window.location.origin || destination.pathname !== url.pathname) {
+                            window.location.assign(destination.href);
+                            var redirectError = new Error("Calendar request redirected.");
+                            redirectError.redirecting = true;
+                            throw redirectError;
+                        }
+                    }
+                    if (!response.ok) {
+                        var responseError = new Error("Calendar request failed.");
+                        responseError.status = response.status;
+                        throw responseError;
+                    }
+                    return response.text();
+                })
+                .then(function (markup) {
+                    if (currentSequence !== requestSequence) {
+                        return;
+                    }
+
+                    var parsed = new window.DOMParser().parseFromString(markup, "text/html");
+                    var freshCalendar = parsed.querySelector(".calendar-month-panel");
+                    if (!freshCalendar) {
+                        throw new Error("Calendar details were not present in the response.");
+                    }
+
+                    var currentContent = calendar.querySelector("#calendar-day-selection-content");
+                    var freshContent = freshCalendar.querySelector("#calendar-day-selection-content");
+                    if (freshContent) {
+                        var updatedContent = document.importNode(freshContent, true);
+                        if (currentContent) {
+                            currentContent.replaceWith(updatedContent);
+                        } else {
+                            var mobileList = calendar.querySelector(".calendar-mobile-list");
+                            if (mobileList) {
+                                mobileList.insertAdjacentElement("afterend", updatedContent);
+                            } else {
+                                calendar.appendChild(updatedContent);
+                            }
+                        }
+                        initCalendarDayForms(updatedContent);
+                    } else if (currentContent) {
+                        currentContent.remove();
+                    }
+
+                    setSelectedDay(url.searchParams.get("day") || "");
+                    if (updateHistory && url.href !== window.location.href) {
+                        window.history.pushState({calendarDay: true}, "", url.href);
+                    }
+                    calendar.removeAttribute("aria-busy");
+                    setStatus("");
+                    activeRequest = null;
+                })
+                .catch(function (error) {
+                    if (currentSequence !== requestSequence || error.name === "AbortError" || error.redirecting) {
+                        return;
+                    }
+                    calendar.removeAttribute("aria-busy");
+                    activeRequest = null;
+                    setStatus(
+                        error.status === 403
+                            ? "You no longer have access to this calendar."
+                            : "Couldn’t load that day’s details. Select the day again to retry."
+                    );
+                });
+        }
+
+        calendar.addEventListener("click", function (event) {
+            var target = event.target;
+            var link = target && typeof target.closest === "function"
+                ? target.closest("[data-calendar-day-selection]")
+                : null;
+            if (
+                !link
+                || !calendar.contains(link)
+                || event.defaultPrevented
+                || event.button !== 0
+                || event.metaKey
+                || event.ctrlKey
+                || event.shiftKey
+                || event.altKey
+                || (link.target && link.target !== "_self")
+            ) {
+                return;
+            }
+
+            var url = new window.URL(link.href, window.location.href);
+            if (
+                url.origin !== window.location.origin
+                || url.pathname !== window.location.pathname
+                || !url.searchParams.has("day")
+            ) {
+                return;
+            }
+
+            event.preventDefault();
+            loadDay(url, true);
+        });
+
+        window.addEventListener("popstate", function () {
+            var url = new window.URL(window.location.href);
+            loadDay(url, false);
+        });
+    }
+
+    function initCalendarDayForms(root) {
         each("[data-calendar-day-form]", function (form) {
             var status = form.querySelector("[name='status']");
             if (!status) {
@@ -1820,7 +1988,7 @@
             status.addEventListener("change", syncFields);
             syncFields();
             initCalendarPickers(form);
-        });
+        }, root);
     }
 
     function numberValue(input) {
@@ -2094,6 +2262,7 @@
         initProjectFilters();
         initGoogleReviewsCarousel();
         initFileInputs();
+        initCalendarDaySelection();
         initCalendarDayForms();
         initEmployeeScheduleForms();
         initStandaloneCalendarPickers();

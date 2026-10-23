@@ -360,8 +360,6 @@ class Task(TimeStampedModel):
             raise ValidationError('The selected milestone must belong to the selected project.')
         if self.client_id and self.project_id and self.project.client_id != self.client_id:
             raise ValidationError("The selected project must belong to the selected client.")
-        if not self.lead_id and not self.client_id and not self.project_id:
-            raise ValidationError("A task must be attached to a lead, client, or project.")
         if self.milestone_id and self.project_id and self.milestone.project_id != self.project_id:
             raise ValidationError("The selected milestone must belong to the selected project.")
 

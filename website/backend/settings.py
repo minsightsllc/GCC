@@ -44,9 +44,6 @@ def _env_flag(name, default=False):
 # layer enabled by default for the current workspace; AI, native field
 # capabilities, and outbound email remain explicit opt-ins.
 GCC_OPERATING_SYSTEM_ENABLED = _env_flag("GCC_OPERATING_SYSTEM_ENABLED", True)
-# Keep the existing workspace available while the owner landing-page change is
-# rolled out independently in staging and production.
-GCC_OWNER_COMMAND_CENTER_ENABLED = _env_flag("GCC_OWNER_COMMAND_CENTER_ENABLED", True)
 GCC_AI_ENABLED = _env_flag("GCC_AI_ENABLED", False)
 GCC_NATIVE_FIELD_ENABLED = _env_flag("GCC_NATIVE_FIELD_ENABLED", False)
 GCC_NATIVE_MEDIA_ENABLED = _env_flag("GCC_NATIVE_MEDIA_ENABLED", False)
