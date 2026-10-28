@@ -15,6 +15,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from django.db.models import Q
 from django.forms import BaseInlineFormSet, inlineformset_factory
+from django.urls import reverse
 
 from .models import (
     Client,
@@ -636,6 +637,11 @@ class ServiceImageInput(forms.ClearableFileInput):
     input_text = "Choose replacement"
     clear_checkbox_label = "Remove current image"
 
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        context["widget"]["preview_url"] = getattr(self, "preview_url", "")
+        return context
+
 
 class ServiceForm(forms.ModelForm):
     class Meta:
@@ -652,6 +658,13 @@ class ServiceForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance.pk and self.instance.image:
+            # Serve the existing file through the storage-aware view. Its
+            # FieldFile.open() uses local media in development and Supabase in
+            # production, without exposing a backend-specific storage URL.
+            self.fields["image"].widget.preview_url = reverse(
+                "operations:service-image", kwargs={"pk": self.instance.pk}
+            )
         self.fields["image"].label = "Service image (optional)"
         self.fields["image"].help_text = "Use a clear photo that represents this service."
         self.fields["is_active"].help_text = "Only active services appear on the public Services page."

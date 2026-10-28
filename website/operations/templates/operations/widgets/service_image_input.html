@@ -1,7 +1,7 @@
 {% if widget.is_initial %}
 <div class="service-image-file-current">
     <span>{{ widget.initial_text }}</span>
-    <a href="{{ widget.value.url }}" target="_blank" rel="noopener">View image</a>
+    {% if widget.preview_url %}<a href="{{ widget.preview_url }}" target="_blank" rel="noopener">View image</a>{% endif %}
 </div>
 <small class="service-image-input-hint">Choose a replacement only if you want to change the current image.</small>
 {% else %}

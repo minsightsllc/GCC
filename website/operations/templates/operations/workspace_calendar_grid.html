@@ -112,12 +112,18 @@
                 <div class='selected-day-shift-list'>
                     <strong class='selected-day-shift-list-title'>Employee shifts</strong>
                     {% for employee_schedule in selected_day_employee_shifts %}
-                        <div class='selected-day-shift'>
-                            <strong>{{ employee_schedule.employee.get_full_name|default:employee_schedule.employee.username }}</strong>
+                        <div class='selected-day-shift{% if selected_schedule_employee and employee_schedule.employee.pk == selected_schedule_employee.pk %} is-selected{% endif %}'>
+                            <strong>{% if selected_schedule_employee and employee_schedule.employee.pk == selected_schedule_employee.pk %}Shift for {{ employee_schedule.employee.get_full_name|default:employee_schedule.employee.username }}{% else %}{{ employee_schedule.employee.get_full_name|default:employee_schedule.employee.username }}{% endif %}</strong>
                             {% if employee_schedule.shift.is_working %}
                                 <span>{{ employee_schedule.shift.start_time|time:'g:i A' }} &ndash; {{ employee_schedule.shift.end_time|time:'g:i A' }}</span>
-                            {% else %}
+                            {% elif employee_schedule.shift.is_company_closed %}
+                                <span>Company closed{% if employee_schedule.shift.reason %} &middot; {{ employee_schedule.shift.reason }}{% endif %}</span>
+                            {% elif employee_schedule.shift.is_company_short %}
+                                <span>Not scheduled during the short-day hours</span>
+                            {% elif employee_schedule.shift.employee_override %}
                                 <span>Day off{% if employee_schedule.shift.reason %} &middot; {{ employee_schedule.shift.reason }}{% endif %}</span>
+                            {% else %}
+                                <span>Not scheduled</span>
                             {% endif %}
                         </div>
                     {% empty %}

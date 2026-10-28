@@ -1868,6 +1868,10 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
             if shift and (
                 shift["is_working"]
                 or (shift["employee_override"] and not shift["is_company_closed"])
+                or (
+                    selected_schedule_employee
+                    and schedule_employee.pk == selected_schedule_employee.pk
+                )
             ):
                 selected_day_employee_shifts.append(
                     {"employee": schedule_employee, "shift": shift}
@@ -4967,6 +4971,12 @@ def service_move(request, pk):
 
 @require_GET
 def service_image(request, pk):
+    """Serve a service image through its configured storage backend.
+
+    Local development uses MEDIA_ROOT; production uses Supabase-backed
+    Django storage. Opening the FieldFile here keeps both environments on the
+    same path instead of depending on a directly served MEDIA_URL.
+    """
     service = get_object_or_404(Service, pk=pk)
     if not service.is_active and not _can_manage_content(request.user):
         raise Http404
