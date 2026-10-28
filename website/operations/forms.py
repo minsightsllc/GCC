@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import time
 from decimal import Decimal
 from urllib.parse import urlparse
 
@@ -31,6 +32,7 @@ from .models import (
     EstimateLineItem,
     Lead,
     MediaAsset,
+    MediaPublication,
     ProjectDocument,
     Project,
     ProjectUpdate,
@@ -440,9 +442,10 @@ EstimateLineItemFormSet = inlineformset_factory(
 class ProjectForm(forms.ModelForm):
     class Meta:
         model = Project
-        fields = ["title", "client", "lead", "assigned_staff", "location", "project_type", "admin_stage_note", "next_step", "summary", "is_published", "start_date", "target_date"]
+        fields = ["title", "client", "lead", "assigned_staff", "location", "project_type", "admin_stage_note", "next_step", "summary", "is_published", "public_title", "public_location", "public_summary", "show_client_name", "gallery_layout", "gallery_accent", "start_date", "target_date"]
         widgets = {
             "summary": forms.Textarea(attrs={"rows": 4}),
+            "public_summary": forms.Textarea(attrs={"rows": 3}),
             "start_date": forms.DateInput(attrs={"type": "date"}),
             "target_date": forms.DateInput(attrs={"type": "date"}),
             "assigned_staff": forms.SelectMultiple(attrs={
@@ -455,9 +458,22 @@ class ProjectForm(forms.ModelForm):
     def __init__(self, *args, staff_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["is_published"].label = "Publish on public website"
+        if self.is_bound:
+            self.data = self.data.copy()
+            # Older internal project forms can still be submitted after deployment.
+            for field in ("gallery_layout", "gallery_accent"):
+                if field not in self.data:
+                    self.data[field] = getattr(self.instance, field)
+            if not any(field in self.data for field in ("public_title", "public_location", "public_summary")):
+                for field in ("public_title", "public_location", "public_summary", "show_client_name"):
+                    self.data[field] = getattr(self.instance, field)
         self.fields["is_published"].help_text = (
             "Shows a public project page; this does not control client portal access."
         )
+        self.fields["public_title"].help_text = "A title for website visitors. Internal project names are never used as a fallback."
+        self.fields["public_location"].label = "Public city or region"
+        self.fields["public_summary"].label = "Public description"
+        self.fields["show_client_name"].label = "Show the client's name on the public project page"
         self.fields["admin_stage_note"].label = "Admin-only stage note"
         self.fields["admin_stage_note"].help_text = (
             "Private staff reference only. Shared project progress and client/team alerts are controlled by milestones."
@@ -473,6 +489,9 @@ class ProjectForm(forms.ModelForm):
         cleaned = super().clean()
         lead = cleaned.get("lead")
         client = cleaned.get("client")
+        was_published = not self.instance._state.adding and self.instance.is_published
+        if cleaned.get("is_published") and not was_published and not cleaned.get("public_title"):
+            self.add_error("public_title", "Enter a public title before publishing this project.")
         if lead and client and lead.client_id != client.pk:
             raise ValidationError("Choose the client connected to this lead.")
         if lead:
@@ -548,12 +567,102 @@ class MediaEditForm(forms.ModelForm):
 
 class MediaUploadForm(forms.Form):
     project = forms.ModelChoiceField(queryset=Project.objects.none())
-    visibility = forms.ChoiceField(choices=MediaAsset.Visibility.choices)
+    destinations = forms.MultipleChoiceField(
+        choices=MediaPublication.Destination.choices, required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Files upload as drafts. Review each file before sharing or publishing.",
+    )
     files = MultipleFileField(required=True)
 
     def __init__(self, *args, project_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["project"].queryset = project_queryset if project_queryset is not None else Project.objects.none()
+        self.fields["files"].widget.attrs["accept"] = ".jpg,.jpeg,.png,.webp,.gif,.heic,.mp4,.mov,.webm"
+
+    def clean_files(self):
+        files = self.cleaned_data["files"]
+        if not files:
+            raise ValidationError("Choose at least one photo or video.")
+        if len(files) > 20:
+            raise ValidationError("Upload up to 20 files at a time.")
+        for upload in files:
+            if upload.size == 0:
+                raise ValidationError(f"{upload.name} is empty.")
+            try:
+                validate_contact_upload(upload)
+            except ValidationError as exc:
+                raise ValidationError(f"{upload.name}: {' '.join(exc.messages)}") from exc
+        return files
+
+    def clean(self):
+        cleaned = super().clean()
+        project = cleaned.get("project")
+        if project and "client" in cleaned.get("destinations", []) and not project.client_id:
+            self.add_error("destinations", "Connect a client to this project before preparing client sharing.")
+        return cleaned
+
+
+class MediaPublicationForm(forms.ModelForm):
+    class Meta:
+        model = MediaPublication
+        fields = ["title", "caption", "label", "location", "show_client_name", "sort_order"]
+        widgets = {"caption": forms.Textarea(attrs={"rows": 3})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        is_client = self.instance.destination == "client"
+        self.fields["title"].label = "Client-facing filename" if is_client else "Public media title"
+        self.fields["caption"].label = "Client note" if is_client else "Public caption"
+        if not is_client:
+            self.fields["title"].help_text = (
+                "Names this photo or video in the gallery."
+                if self.instance.published_at
+                else "Names this photo or video. New website media also requires a public project title in Projects."
+            )
+        self.fields["sort_order"].label = "Display order"
+        self.fields["sort_order"].help_text = "Lower numbers appear first."
+        if is_client:
+            for name in ("label", "location", "show_client_name"):
+                self.fields.pop(name)
+        else:
+            self.fields["location"].label = "Public city or region (optional)"
+            self.fields["label"].label = "Public label (optional)"
+            self.fields["show_client_name"].label = "Show this project's client name"
+
+
+class ServiceImageInput(forms.ClearableFileInput):
+    template_name = "operations/widgets/service_image_input.html"
+    initial_text = "Current image"
+    input_text = "Choose replacement"
+    clear_checkbox_label = "Remove current image"
+
+
+class ServiceForm(forms.ModelForm):
+    class Meta:
+        model = Service
+        fields = ["title", "description", "image", "sort_order", "is_active"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+            "image": ServiceImageInput(attrs={
+                "accept": ".jpg,.jpeg,.png,.webp,.gif",
+                "class": "service-image-file-input",
+            }),
+        }
+        labels = {"is_active": "Show on website", "sort_order": "Display order"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["image"].label = "Service image (optional)"
+        self.fields["image"].help_text = "Use a clear photo that represents this service."
+        self.fields["is_active"].help_text = "Only active services appear on the public Services page."
+
+    def clean_image(self):
+        image = self.cleaned_data.get("image")
+        if image and str(image.name).rsplit(".", 1)[-1].lower() not in {"jpg", "jpeg", "png", "webp", "gif"}:
+            raise ValidationError("Choose an image for this service.")
+        if image and hasattr(image, "content_type"):
+            validate_contact_upload(image)
+        return image
 
 
 class ContentStudioForm(forms.Form):
@@ -562,12 +671,12 @@ class ContentStudioForm(forms.Form):
     featured_title = forms.CharField(max_length=180)
     featured_body = forms.CharField(widget=forms.Textarea, max_length=1200)
     google_review_url = forms.URLField(required=False, assume_scheme="https", max_length=500)
+    services_title = forms.CharField(max_length=180, label="Services page heading")
+    services_intro = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=2000, label="Services introduction")
+    services_note = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), max_length=1000, required=False, label="Services supporting note")
 
     def __init__(self, *args, services=None, process_steps=None, **kwargs):
         super().__init__(*args, **kwargs)
-        for service in services or Service.objects.filter(is_active=True):
-            self.fields[f"service_{service.slug}_title"] = forms.CharField(max_length=120)
-            self.fields[f"service_{service.slug}_copy"] = forms.CharField(widget=forms.Textarea, max_length=500)
         for step in process_steps or []:
             self.fields[f"step_{step.key}"] = forms.CharField(max_length=120)
 
@@ -724,12 +833,19 @@ class CalendarDayOverrideForm(forms.Form):
 
 
 class EmployeeWeeklyScheduleForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.start_time:
+            self.fields["start_time"].initial = time(9, 0)
+        if not self.instance.end_time:
+            self.fields["end_time"].initial = time(17, 0)
+
     class Meta:
         model = EmployeeWeeklySchedule
         fields = ["is_working", "start_time", "end_time"]
         widgets = {
-            "start_time": forms.TimeInput(attrs={"type": "time"}),
-            "end_time": forms.TimeInput(attrs={"type": "time"}),
+            "start_time": forms.TimeInput(format="%H:%M", attrs={"type": "time"}),
+            "end_time": forms.TimeInput(format="%H:%M", attrs={"type": "time"}),
         }
 
 
@@ -749,12 +865,14 @@ class EmployeeScheduleOverrideForm(forms.Form):
     start_time = forms.TimeField(
         label="Override start",
         required=False,
-        widget=forms.TimeInput(attrs={"type": "time"}),
+        initial=time(9, 0),
+        widget=forms.TimeInput(format="%H:%M", attrs={"type": "time"}),
     )
     end_time = forms.TimeField(
         label="Override end",
         required=False,
-        widget=forms.TimeInput(attrs={"type": "time"}),
+        initial=time(17, 0),
+        widget=forms.TimeInput(format="%H:%M", attrs={"type": "time"}),
     )
     reason = forms.CharField(
         label="Reason or note",
@@ -775,8 +893,8 @@ class EmployeeScheduleOverrideForm(forms.Form):
             initial.setdefault("employee", instance.employee_id)
             initial.setdefault("date", instance.date)
             initial.setdefault("status", instance.status)
-            initial.setdefault("start_time", instance.start_time)
-            initial.setdefault("end_time", instance.end_time)
+            initial.setdefault("start_time", instance.start_time or time(9, 0))
+            initial.setdefault("end_time", instance.end_time or time(17, 0))
             initial.setdefault("reason", instance.reason)
         kwargs["initial"] = initial
         super().__init__(*args, **kwargs)

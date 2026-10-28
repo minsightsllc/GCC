@@ -8,7 +8,10 @@
             <h2 id="portal-files-title">Files shared with you</h2>
             <div class="portal-document-list">
                 {% for document in portal_documents %}
-                    <a class="portal-document-row" href="{% url 'operations:document-file' pk=document.pk %}"><span>{{ document.title }}</span><small>{{ document.category }} &middot; Download</small></a>
+                    <a class="portal-document-row portal-file-row" href="{% url 'operations:document-file' pk=document.pk %}" aria-label="Download {{ document.title }}">
+                        <span><strong>{{ document.title }}</strong><small>{{ document.category }}</small></span>
+                        <span class="portal-resource-action">Download file</span>
+                    </a>
                 {% empty %}
                     <p class="detail-value">Client-ready documents will appear here when the team shares them.</p>
                 {% endfor %}
@@ -22,9 +25,9 @@
                 <h2 id="portal-estimates-title">Your estimates</h2>
                 <div class="portal-document-list">
                     {% for estimate in portal_estimates %}
-                        <a class="portal-document-row" href="{% url 'operations:portal-section' section='estimate-files' %}?client={{ portal_client.pk }}&amp;estimate={{ estimate.pk }}{% if estimate.portal_project %}&amp;project={{ estimate.portal_project.pk }}{% endif %}">
+                        <a class="portal-document-row portal-estimate-row" href="{% url 'operations:portal-section' section='estimate-files' %}?client={{ portal_client.pk }}&amp;estimate={{ estimate.pk }}{% if estimate.portal_project %}&amp;project={{ estimate.portal_project.pk }}{% endif %}" aria-label="Review estimate {{ estimate.title }}">
                             <span><strong>{{ estimate.title }}</strong><small>{% if estimate.portal_project %}{{ estimate.portal_project.title }}{% else %}Pre-project scope{% endif %}</small></span>
-                            <span>{% if estimate.external_url %}{{ estimate.get_external_status_display }}{% else %}{{ estimate.get_status_display }} · History{% endif %}</span>
+                            <span class="portal-estimate-row-actions"><span class="portal-estimate-status">{% if estimate.external_url %}{{ estimate.get_external_status_display }}{% else %}{{ estimate.get_status_display }} · History{% endif %}</span><span class="portal-resource-action">Review</span></span>
                         </a>
                     {% endfor %}
                 </div>

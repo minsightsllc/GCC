@@ -12,9 +12,9 @@
         <div class="portal-media-grid">
             {% for media in portal_media %}
                 {% if media.media_type == 'video' and media.file %}
-                    <a class="portal-media-tile" href="{{ media.display_url }}" target="_blank" rel="noreferrer"><video src="{{ media.display_url }}" preload="metadata"></video><span class="media-tile-label">{{ media.title }} &middot; Video</span></a>
+                    <a class="portal-media-tile" href="{{ media.display_url }}" target="_blank" rel="noreferrer"><video src="{{ media.display_url }}" preload="metadata"></video><span class="media-tile-label">{{ media.title }} &middot; Video{% if media.caption %}<small class="portal-media-note">{{ media.caption }}</small>{% endif %}</span></a>
                 {% else %}
-                    <button class="portal-media-tile js-lightbox" type="button" data-lightbox-src="{{ media.display_url }}" data-lightbox-alt="{{ media.caption|default:media.title }}"><img src="{{ media.display_url }}" alt="{{ media.caption|default:media.title }}"><span class="media-tile-label">{{ media.title }}</span></button>
+                    <button class="portal-media-tile js-lightbox" type="button" data-lightbox-src="{{ media.display_url }}" data-lightbox-alt="{{ media.caption|default:media.title }}"><img src="{{ media.display_url }}" alt="{{ media.caption|default:media.title }}"><span class="media-tile-label">{{ media.title }}{% if media.caption %}<small class="portal-media-note">{{ media.caption }}</small>{% endif %}</span></button>
                 {% endif %}
             {% empty %}
                 <p class="detail-value">Photos and videos will be shared here as the project moves forward.</p>

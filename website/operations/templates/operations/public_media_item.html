@@ -1,0 +1,9 @@
+<article class="public-gallery-item">
+    {% if media.media_type == 'video' %}<video src="{{ media.display_url }}" controls preload="metadata" aria-label="{{ media.title }}"></video>{% else %}<a href="{{ media.display_url }}" target="_blank" rel="noopener" aria-label="Open {{ media.title }}"><img src="{{ media.display_url }}" alt="{{ media.caption|default:media.title }}" loading="lazy"></a>{% endif %}
+    <div class="publication-copy">
+        {% if media.label %}<span class="publication-label">{{ media.label }}</span>{% endif %}
+        <h3>{{ media.title|default:'Untitled draft' }}</h3>
+        {% if media.caption %}<p>{{ media.caption|linebreaksbr }}</p>{% endif %}
+        {% if media.location or media.client_name %}<p class="publication-meta">{% if media.location %}{{ media.location }}{% endif %}{% if media.client_name %}{% if media.location %} &middot; {% endif %}Client: {{ media.client_name }}{% endif %}</p>{% endif %}
+    </div>
+</article>

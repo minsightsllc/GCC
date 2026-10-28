@@ -80,15 +80,18 @@ def can_access_operating_system(user):
 
 
 def can_view_media(user, media):
-    if getattr(media, "visibility", None) == "public":
-        return True
+    from .publishing import client_is_live, website_is_live
+
     project = getattr(media, "project", None)
+    if is_owner(user) or website_is_live(media):
+        return True
+    # Public files are available to everyone; client feeds filter destinations separately.
+    if is_client(user):
+        return bool(project and can_view_project(user, project) and client_is_live(media))
     if project is None or not can_view_project(user, project):
         return False
-    if is_client(user):
-        return media.visibility in {"public", "client"}
     if is_subcontractor(user):
-        return media.visibility == "client"
+        return client_is_live(media)
     return True
 
 

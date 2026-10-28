@@ -26,6 +26,7 @@ from .models import (
     Lead,
     LeadAttachment,
     MediaAsset,
+    MediaPublication,
     Milestone,
     ProcessStep,
     Project,
@@ -121,6 +122,9 @@ class OperationsWorkflowTests(TestCase):
             lead=cls.lead,
             client=cls.client_record,
             title="Kitchen project",
+            public_title="Kitchen project",
+            public_location="Ventura, CA",
+            is_published=True,
             location="Ventura, CA",
             project_type="renovation",
             status=Project.Status.PLANNING,
@@ -161,6 +165,9 @@ class OperationsWorkflowTests(TestCase):
             visibility=MediaAsset.Visibility.INTERNAL,
             uploaded_by=cls.staff,
         )
+        from .publishing import publish
+        for asset, destination in ((cls.public_media, "website"), (cls.public_media, "client"), (cls.client_media, "client")):
+            publish(MediaPublication.objects.create(asset=asset, destination=destination, title=asset.title))
         Service.objects.create(
             slug="renovations",
             title="Renovations",
@@ -793,13 +800,14 @@ class OperationsWorkflowTests(TestCase):
 
     def test_valid_media_upload_is_persisted(self):
         self.login_staff()
-        upload = SimpleUploadedFile("progress.jpg", b"fake image bytes", content_type="image/jpeg")
+        upload = SimpleUploadedFile("progress.jpg", b"\xff\xd8\xffimage bytes", content_type="image/jpeg")
         response = self.browser.post(
             reverse("operations:media-upload"),
-            {"project": str(self.project.pk), "visibility": MediaAsset.Visibility.CLIENT, "files": [upload]},
+            {"project": str(self.project.pk), "destinations": ["client"], "files": [upload]},
         )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(MediaAsset.objects.filter(project=self.project, title="progress").exists())
+        self.assertIsNone(MediaPublication.objects.get(asset__title="progress").published_at)
 
     def test_content_updates_appear_on_public_site(self):
         self.login_staff()
@@ -816,6 +824,14 @@ class OperationsWorkflowTests(TestCase):
             },
         )
         self.assertEqual(response.status_code, 302)
+        service = Service.objects.get(slug="renovations")
+        service_response = self.browser.post(reverse("operations:service-save", args=[service.pk]), {
+            f"service-{service.pk}-title": "Renovation planning",
+            f"service-{service.pk}-description": "Updated service copy.",
+            f"service-{service.pk}-sort_order": 1,
+            f"service-{service.pk}-is_active": "on",
+        })
+        self.assertEqual(service_response.status_code, 302)
         public_response = self.browser.get(reverse("operations:home"))
         self.assertContains(public_response, "Build with more clarity.")
         self.assertContains(public_response, "Renovation planning")

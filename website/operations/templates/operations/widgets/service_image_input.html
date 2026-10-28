@@ -1,0 +1,16 @@
+{% if widget.is_initial %}
+<div class="service-image-file-current">
+    <span>{{ widget.initial_text }}</span>
+    <a href="{{ widget.value.url }}" target="_blank" rel="noopener">View image</a>
+</div>
+<small class="service-image-input-hint">Choose a replacement only if you want to change the current image.</small>
+{% else %}
+<small class="service-image-input-hint">Choose an image file from your device.</small>
+{% endif %}
+<input type="{{ widget.type }}" name="{{ widget.name }}"{% include "django/forms/widgets/attrs.html" %}>
+{% if widget.is_initial and not widget.required %}
+<label class="service-image-clear" for="{{ widget.checkbox_id }}">
+    <input type="checkbox" name="{{ widget.checkbox_name }}" id="{{ widget.checkbox_id }}"{% if widget.attrs.disabled %} disabled{% endif %}{% if widget.attrs.checked %} checked{% endif %}>
+    <span>{{ widget.clear_checkbox_label }}</span>
+</label>
+{% endif %}

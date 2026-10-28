@@ -1,0 +1,63 @@
+<section class="content-editor-panel publication-services" aria-labelledby="services-editor-title">
+    <div class="service-list-heading">
+        <div>
+            <span class="section-kicker">Public website</span>
+            <h3 id="services-editor-title">Service entries</h3>
+            <p class="detail-value">Create the service list shown on your website. Only entries marked “Show on website” appear publicly.</p>
+        </div>
+        <a class="button button-outline" href="{% url 'operations:services' %}" target="_blank" rel="noopener">View services <span aria-hidden="true">↗</span></a>
+    </div>
+
+    <div class="service-entry-list">
+        {% for row in service_rows %}
+        <article class="service-admin-entry">
+            <header class="service-entry-heading">
+                <div class="service-entry-name">
+                    <span class="section-kicker">Service entry</span>
+                    <h4>{{ row.service.title }}</h4>
+                </div>
+                <div class="service-entry-tools">
+                    <span class="status-badge {% if row.service.is_active %}green{% endif %}">{% if row.service.is_active %}On website{% else %}Hidden{% endif %}</span>
+                    <form class="service-order-actions" action="{% url 'operations:service-move' pk=row.service.pk %}" method="post" novalidate data-publication-save aria-label="Reorder {{ row.service.title }}">
+                        {% csrf_token %}
+                        <button class="button button-quiet" type="submit" name="direction" value="up" {% if forloop.first %}disabled{% endif %} aria-label="Move {{ row.service.title }} up">↑ <span>Move up</span></button>
+                        <button class="button button-quiet" type="submit" name="direction" value="down" {% if forloop.last %}disabled{% endif %} aria-label="Move {{ row.service.title }} down">↓ <span>Move down</span></button>
+                    </form>
+                </div>
+            </header>
+
+            <form method="post" action="{% url 'operations:service-save' pk=row.service.pk %}" enctype="multipart/form-data" class="service-edit-form" novalidate data-publication-save>
+                {% csrf_token %}
+                {{ row.form.non_field_errors }}
+                {% include 'operations/service_form_fields.html' with service_form=row.form service=row.service %}
+                <div class="service-save-footer">
+                    <p>Saving updates this entry on the public Services page if it is active.</p>
+                    <button type="submit" class="button button-primary">Save service</button>
+                </div>
+            </form>
+        </article>
+        {% empty %}
+        <div class="media-empty-state service-empty-state">
+            <strong>No services added yet</strong>
+            <p>Add your first entry below. Until then, the public Services page will show its introduction without an empty list.</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <details class="service-add" {% if not service_rows or service_create_form.errors %}open{% endif %}>
+        <summary class="button button-outline">+ Add service</summary>
+        <form action="{% url 'operations:service-add' %}" method="post" enctype="multipart/form-data" class="service-edit-form service-create-form" novalidate data-publication-save>
+            {% csrf_token %}
+            {{ service_create_form.non_field_errors }}
+            <div class="service-create-heading">
+                <h4>New service</h4>
+                <p>Add a title and description, then choose whether it should appear publicly.</p>
+            </div>
+            {% include 'operations/service_form_fields.html' with service_form=service_create_form %}
+            <div class="service-save-footer">
+                <p>New services are added to your website when “Show on website” is selected.</p>
+                <button type="submit" class="button button-primary">Add service</button>
+            </div>
+        </form>
+    </details>
+</section>

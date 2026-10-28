@@ -6,32 +6,7 @@
 {% block extra_head %}{% if page == "contact" and turnstile_site_key %}<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>{% endif %}{% endblock %}
 
 {% block body %}
-<div class="staging-bar">
-    <span class="staging-label">GRAND COAST</span>
-    <span>Thoughtful construction. Clear communication. Better builds.</span>
-    <span class="staging-spacer"></span>
-</div>
-
-<header class="site-header">
-    <div class="container header-inner">
-        <a class="brand" href="{% url 'operations:home' %}" aria-label="Grand Coast Construction home">
-            <img class="brand-logo" src="{% static 'operations/images/gcc-logo.png' %}" alt="Grand Coast Construction Inc. logo">
-            <span class="brand-name">Grand Coast <strong>Construction Inc.</strong></span>
-        </a>
-        <button class="mobile-nav-toggle" type="button" aria-expanded="false" aria-controls="public-nav" data-mobile-nav-toggle>
-            <span></span><span></span><span></span><span class="sr-only">Open navigation</span>
-        </button>
-        <nav class="site-nav" id="public-nav" aria-label="Primary navigation">
-            <a class="{% if page == 'home' %}is-current{% endif %}" href="{% url 'operations:home' %}">Home</a>
-            <a class="{% if page == 'services' %}is-current{% endif %}" href="{% url 'operations:services' %}">Services</a>
-            <a class="{% if page == 'projects' %}is-current{% endif %}" href="{% url 'operations:projects' %}">Projects</a>
-            <a class="{% if page == 'process' %}is-current{% endif %}" href="{% url 'operations:process' %}">Process</a>
-            <a class="{% if page == 'contact' %}is-current{% endif %}" href="{% url 'operations:contact' %}">Contact</a>
-            {% if public_dashboard_url %}<a href="{{ public_dashboard_url }}">Dashboard</a>{% elif not request.user.is_authenticated %}<a href="{% url 'operations:login' %}">Sign in</a>{% endif %}
-            <a class="button button-primary nav-cta" href="{% url 'operations:contact' %}">Request an Estimate</a>
-        </nav>
-    </div>
-</header>
+{% include 'operations/public_header.html' %}
 
 <main>
 {% if page == "home" %}
@@ -106,16 +81,16 @@
     <section class="contact-band"><div class="container contact-band-inner"><div><span class="section-kicker">Start the conversation</span><h2>Tell us what you’re building.</h2></div><a class="button button-primary" href="{% url 'operations:contact' %}">Request an Estimate <span aria-hidden="true">→</span></a></div></section>
 
 {% elif page == "services" %}
-    <section class="page-hero"><div class="container page-hero-grid"><div><span class="gold-rule"></span><span class="section-kicker">Services</span><h1>Construction with a clear plan.</h1><p>Every project is different. Our job is to make the path from idea to finished space feel straightforward.</p></div><div class="page-hero-note"><span class="gold-dot"></span><p>Residential, commercial, renovation, restoration, and project oversight across Southern California.</p></div></div></section>
-    <section class="section service-detail-section"><div class="container service-detail-list">
-        {% for service in services %}<article class="service-detail" id="{{ service.slug }}"><span class="service-detail-number">{{ forloop.counter|stringformat:'02d' }}</span><div><h2>{{ service.title }}</h2><p>{{ service.description }}</p><a class="text-link" href="{% url 'operations:contact' %}">Discuss your project →</a></div><img src="{{ service.display_image }}" alt="{{ service.title }}"></article>{% endfor %}
-    </div></section>
+    <section class="page-hero"><div class="container page-hero-grid"><div><span class="gold-rule"></span><span class="section-kicker">Services</span><h1>{{ site_settings.services_title }}</h1><p>{{ site_settings.services_intro|linebreaksbr }}</p></div><div class="page-hero-note"><span class="gold-dot"></span><p>{{ site_settings.services_note|linebreaksbr }}</p></div></div></section>
+    {% if services %}<section class="section service-detail-section"><div class="container service-detail-list">
+        {% for service in services %}<article class="service-detail" id="{{ service.slug }}"><span class="service-detail-number">{{ forloop.counter|stringformat:'02d' }}</span><div><h2>{{ service.title }}</h2><p>{{ service.description }}</p><a class="text-link" href="{% url 'operations:contact' %}">Discuss your project →</a></div>{% if service.display_image %}<img src="{{ service.display_image }}" alt="{{ service.title }}">{% endif %}</article>{% endfor %}
+    </div></section>{% endif %}
     <section class="contact-band"><div class="container contact-band-inner"><div><span class="section-kicker">Have a project in mind?</span><h2>Let’s talk through the first step.</h2></div><a class="button button-primary" href="{% url 'operations:contact' %}">Request an Estimate →</a></div></section>
 
 {% elif page == "projects" %}
     <section class="page-hero page-hero-compact"><div class="container page-hero-grid"><div><span class="gold-rule"></span><span class="section-kicker">Projects</span><h1>Work worth living with.</h1><p>Explore the work Grand Coast is shaping across Southern California.</p></div><div class="page-hero-note"><span class="gold-dot"></span><p>Filter by project type, then open a project to see the story behind the work.</p></div></div></section>
     <section class="section projects-section"><div class="container"><div class="filter-bar" role="group" aria-label="Filter projects"><button class="filter-button is-selected" type="button" data-project-filter="all">All projects</button><button class="filter-button" type="button" data-project-filter="renovation">Renovation</button><button class="filter-button" type="button" data-project-filter="residential">Residential</button><button class="filter-button" type="button" data-project-filter="restoration">Restoration</button></div><div class="project-grid" data-project-grid>
-        {% for project in public_projects %}<article class="project-card {% if forloop.first %}project-card-large{% endif %}" data-project-card data-project-type="{{ project.project_type }}"><div class="project-image"><img src="{{ project.display_image }}" alt="{{ project.title }}"><span class="project-type">{{ project.project_type|title }}</span></div><div class="project-card-copy"><span class="project-location">{{ project.location }}</span><h2>{{ project.title }}</h2><p>{{ project.summary|default:'Thoughtful construction, clear communication, and a finished space made for everyday life.' }}</p><a class="text-link" href="/projects/{{ project.pk }}/">View project →</a></div></article>{% empty %}<div class="empty-detail">Project stories will appear here as work is published.</div>{% endfor %}
+        {% for project in public_projects %}<article class="project-card {% if forloop.first %}project-card-large{% endif %}" data-project-card data-project-type="{{ project.project_type }}"><div class="project-image"><img src="{{ project.display_image }}" alt="{{ project.public_display_title }}"><span class="project-type">{{ project.project_type|title }}</span></div><div class="project-card-copy"><span class="project-location">{{ project.public_location }}</span><h2>{{ project.public_display_title }}</h2><p>{{ project.public_summary|default:'Thoughtful construction, clear communication, and a finished space made for everyday life.' }}</p><a class="text-link" href="/projects/{{ project.pk }}/">View project →</a></div></article>{% empty %}<div class="empty-detail">Project stories will appear here as work is published.</div>{% endfor %}
     </div></div></section>
     <section class="section project-story" id="project-story"><div class="container feature-grid"><div class="feature-copy"><span class="gold-rule"></span><span class="section-kicker">Project story</span><h2>Details that make the difference.</h2><p>Each case study can show the scope, decisions, progress photos, and final walkthrough in one easy-to-follow story.</p><a class="button button-outline" href="{% url 'operations:contact' %}">Start a project →</a></div><div class="feature-image-frame"><img src="{% static 'operations/images/project-adu.png' %}" alt="Finished ADU with warm wood entry"></div></div></section>
 

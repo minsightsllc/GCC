@@ -49,6 +49,7 @@ from .models import (
     EstimateLineItem,
     Lead,
     MediaAsset,
+    MediaPublication,
     Milestone,
     MobilePushDevice,
     Project,
@@ -206,6 +207,8 @@ class PlatformWorkflowTests(TestCase):
             summary='A private test project.',
             fallback_image='operations/images/progress-kitchen.png',
             created_by=cls.owner,
+            public_title="Platform project",
+            is_published=True,
         )
         cls.project.assigned_staff.add(cls.manager, cls.field)
         cls.milestone = Milestone.objects.create(
@@ -272,6 +275,10 @@ class PlatformWorkflowTests(TestCase):
             visibility=MediaAsset.Visibility.INTERNAL,
             uploaded_by=cls.owner,
         )
+        from .publishing import publish
+        for destination in ("website", "client"):
+            publish(MediaPublication.objects.create(asset=cls.public_media, destination=destination, title=cls.public_media.title))
+
         SiteSettings.objects.create(
             headline='Build with confidence.',
             subheadline='A clear path.',
@@ -396,6 +403,39 @@ class PlatformWorkflowTests(TestCase):
             response,
             reverse('operations:project-cover', kwargs={'pk': self.project.pk}),
         )
+
+    def test_project_manager_can_see_managed_project_tasks_and_client_without_staff_assignment(self):
+        project_manager = get_user_model().objects.create_user(
+            username='platform-project-manager',
+            password='manager-pass-123',
+            is_staff=True,
+        )
+        project_manager.groups.add(Group.objects.get(name='Manager'))
+        EmployeeProfile.objects.create(user=project_manager, job_title='Project manager')
+        self.project.project_manager = project_manager
+        self.project.save(update_fields=['project_manager'])
+        self.assertFalse(self.project.assigned_staff.filter(pk=project_manager.pk).exists())
+        self.login(project_manager)
+
+        projects_response = self.browser.get(
+            reverse('operations:team-section', kwargs={'section': 'projects'}),
+            {'project': str(self.project.pk)},
+        )
+        self.assertEqual(projects_response.status_code, 200)
+        self.assertIn(self.project, projects_response.context['projects'])
+        self.assertNotIn(self.other_project, projects_response.context['projects'])
+        self.assertIn(self.client_record, projects_response.context['clients'])
+        self.assertNotIn(self.other_client_record, projects_response.context['clients'])
+        self.assertContains(projects_response, self.client_record.email)
+
+        tasks_response = self.browser.get(
+            reverse('operations:team-section', kwargs={'section': 'tasks'}),
+            {'task': str(self.task.pk)},
+        )
+        self.assertEqual(tasks_response.status_code, 200)
+        self.assertIn(self.task, tasks_response.context['tasks'])
+        self.assertNotIn(self.other_task, tasks_response.context['tasks'])
+        self.assertFalse(tasks_response.context['can_edit_selected_task'])
 
     def test_client_portal_navigation_hides_zero_and_shows_positive_unread_count(self):
         self.login(self.client_user)
@@ -1067,7 +1107,7 @@ class PlatformWorkflowTests(TestCase):
         self.assertEqual(verification_request.method, "POST")
         self.assertIn(b"response=server-token", verification_request.data)
 
-    def test_public_navigation_logs_out_owner_and_routes_staff_or_clients_to_dashboard(self):
+    def test_public_navigation_preserves_owner_session_and_routes_users_to_their_workspace(self):
         public_response = self.browser.get(reverse('operations:home'))
         self.assertContains(public_response, 'Sign in')
         self.assertNotContains(public_response, reverse('operations:dashboard'))
@@ -1076,16 +1116,17 @@ class PlatformWorkflowTests(TestCase):
 
         self.login(self.owner)
         owner_response = self.browser.get(reverse('operations:home'))
-        self.assertContains(owner_response, 'Sign in')
-        self.assertNotContains(owner_response, 'Dashboard')
-        self.assertIsNone(self.browser.session.get('_auth_user_id'))
+        self.assertContains(owner_response, 'Dashboard')
+        self.assertContains(owner_response, reverse('operations:dashboard'))
+        self.assertEqual(self.browser.session.get('_auth_user_id'), str(self.owner.pk))
 
         self.login(self.owner)
         owner_project_response = self.browser.get(
             reverse('operations:project-detail', kwargs={'pk': self.project.pk}),
         )
-        self.assertContains(owner_project_response, 'Sign in')
-        self.assertIsNone(self.browser.session.get('_auth_user_id'))
+        self.assertContains(owner_project_response, 'Dashboard')
+        self.assertContains(owner_project_response, reverse('operations:dashboard'))
+        self.assertEqual(self.browser.session.get('_auth_user_id'), str(self.owner.pk))
 
         self.login(self.manager)
         employee_response = self.browser.get(reverse('operations:home'))
@@ -1367,7 +1408,7 @@ class PlatformWorkflowTests(TestCase):
 
         upload = SimpleUploadedFile(
             'field-report.jpg',
-            b'fake image bytes',
+            b'\xff\xd8\xffimage bytes',
             content_type='image/jpeg',
         )
         media_response = self.browser.post(
@@ -1382,20 +1423,19 @@ class PlatformWorkflowTests(TestCase):
         media = MediaAsset.objects.get(title='field-report')
         self.assertEqual(media.visibility, MediaAsset.Visibility.INTERNAL)
 
-    def test_media_library_visibility_filter_and_empty_state_are_labeled(self):
+    def test_media_library_destinations_and_empty_state_are_labeled(self):
         self.login(self.owner)
+        empty_project = Project.objects.create(title="No media yet")
         response = self.browser.get(
             reverse('operations:dashboard-section', kwargs={'section': 'media'}),
-            {'visibility': MediaAsset.Visibility.CLIENT, 'media_project': 'all'},
+            {'destination': 'client', 'state': 'published', 'media_project': str(empty_project.pk)},
         )
-
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['media_visibility'], MediaAsset.Visibility.CLIENT)
-        self.assertEqual(response.context['media_assets'], [])
-        self.assertContains(response, 'aria-label="Filter media by visibility"')
+        self.assertEqual(response.context['media_destination'], 'client')
+        self.assertEqual(response.context['media_rows'], [])
+        self.assertContains(response, 'aria-label="Media destination"')
         self.assertContains(response, 'aria-current="page"')
-        self.assertContains(response, 'class="media-empty-state"')
-        self.assertContains(response, 'No media matches these filters')
+        self.assertContains(response, 'No files in this view')
 
     def test_owner_can_review_keep_send_and_delete_a_client_update_draft(self):
         internal_update = ProjectUpdate.objects.create(
@@ -1817,6 +1857,7 @@ class PlatformWorkflowTests(TestCase):
         form = ProjectForm(
             {
                 'title': 'Blocked lead project',
+                'public_title': 'Public renovation story',
                 'client': self.client_record.pk,
                 'lead': lead.pk,
                 'assigned_staff': [self.field.pk],
@@ -1876,6 +1917,7 @@ class PlatformWorkflowTests(TestCase):
             reverse('operations:project-create'),
             {
                 'title': 'Client-authoritative project',
+                'public_title': 'Client-authoritative public project',
                 'client': str(self.client_record.pk),
                 'assigned_staff': [str(self.manager.pk)],
                 'location': 'Ventura, CA',
@@ -2295,12 +2337,12 @@ class PlatformWorkflowTests(TestCase):
         self.assertIn(f"Project start: {project.title}", owner_event_titles)
         self.assertIn(f"Project deadline: {project.title}", owner_event_titles)
         self.assertIn(f"Construction ready: {project.title}", owner_event_titles)
-        self.assertIn(f"Task: {completed_task.title}", owner_event_titles)
+        self.assertNotIn(f"Task: {completed_task.title}", owner_event_titles)
         self.assertIn(f"Task completed: {completed_task.title}", owner_event_titles)
         self.assertIn("Milestone completed: Admin calendar milestone", owner_event_titles)
-        self.assertGreaterEqual(owner_response.context["calendar_job_event_count"], 6)
+        self.assertGreaterEqual(owner_response.context["calendar_job_event_count"], 5)
         self.assertContains(owner_response, "Owner job timeline:")
-        self.assertContains(owner_response, "Task due")
+        self.assertNotContains(owner_response, f"Task: {completed_task.title}")
         self.assertContains(owner_response, "Project target")
 
         self.login(self.field)

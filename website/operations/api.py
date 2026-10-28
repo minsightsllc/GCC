@@ -94,6 +94,7 @@ from .models import (
     Lead,
     MaterialRequest,
     MediaAsset,
+    MediaPublication,
     NativeUploadGrant,
     PaymentSchedule,
     Permit,
@@ -324,6 +325,20 @@ def _native_upload_target(user, payload):
     }
 
 
+def _media_copy(asset, user):
+    from .publishing import media_presentation
+    if is_client(user) or is_subcontractor(user):
+        return media_presentation(asset, "client")
+    return {"title": asset.title, "caption": asset.caption}
+
+
+def _can_list_media(user, asset):
+    from .publishing import client_is_live
+    if is_client(user) or is_subcontractor(user):
+        return can_view_project(user, asset.project) and client_is_live(asset)
+    return can_view_media(user, asset)
+
+
 def _native_upload_result(grant, *, replay=False):
     if grant.media_asset_id:
         asset = grant.media_asset
@@ -516,9 +531,13 @@ def api_v1_native_upload_complete(request):
                 file=upload,
                 media_type=media_type,
                 context=grant.context,
-                visibility=grant.visibility,
+                visibility=MediaAsset.Visibility.INTERNAL,
                 uploaded_by=grant.actor,
             )
+            # A native upload only prepares drafts; publishing happens in the editor.
+            destinations = ("website", "client") if grant.visibility == "public" else (("client",) if grant.visibility == "client" else ())
+            for destination in destinations:
+                MediaPublication.objects.create(asset=asset, destination=destination, title=asset.title if destination == "client" else "")
             if grant.target == NativeUploadGrant.Target.DAILY_REPORT_MEDIA:
                 related.media_assets.add(asset)
             elif grant.target == NativeUploadGrant.Target.PROBLEM_MEDIA:
@@ -987,17 +1006,17 @@ def _project_data(project, user, *, include_detail=False):
     data["media"] = [
         {
             "id": str(asset.pk),
-            "title": asset.title,
+            "title": _media_copy(asset, user)["title"],
             "media_type": asset.media_type,
             "context": asset.context,
             "site_visit_id": str(asset.site_visit_id) if asset.site_visit_id else None,
             "visibility": asset.visibility,
-            "caption": asset.caption,
+            "caption": _media_copy(asset, user)["caption"],
             "created_at": asset.created_at.isoformat(),
             "url": reverse("operations:media-file", kwargs={"pk": asset.pk}),
         }
         for asset in project.media_assets.all()
-        if can_view_media(user, asset)
+        if _can_list_media(user, asset)
     ]
     if is_client(user):
         data["updates"] = [
@@ -1435,22 +1454,22 @@ def api_v1_project_documents(request, pk):
 @_api_access
 def api_v1_project_media(request, pk):
     project = get_object_or_404(visible_projects(request.user), pk=pk)
-    media = project.media_assets.all()
+    media = project.media_assets.select_related("project__client").prefetch_related("publications")
     return JsonResponse({
         "results": [
             {
                 "id": str(asset.pk),
-                "title": asset.title,
+                "title": _media_copy(asset, request.user)["title"],
                 "media_type": asset.media_type,
                 "context": asset.context,
                 "site_visit_id": str(asset.site_visit_id) if asset.site_visit_id else None,
                 "visibility": asset.visibility,
-                "caption": asset.caption,
+                "caption": _media_copy(asset, request.user)["caption"],
                 "created_at": asset.created_at.isoformat(),
                 "url": reverse("operations:media-file", kwargs={"pk": asset.pk}),
             }
             for asset in media
-            if can_view_media(request.user, asset)
+            if _can_list_media(request.user, asset)
         ]
     })
 

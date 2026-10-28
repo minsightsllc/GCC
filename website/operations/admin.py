@@ -280,6 +280,7 @@ class MediaAssetAdmin(GrandCoastModelAdmin):
     list_display = ("title", "project", "media_type", "visibility", "created_at")
     list_filter = ("media_type", "visibility")
     search_fields = ("title", "caption", "project__title")
+    readonly_fields = ("visibility",)
 
 
 @admin.register(ProjectDocument, site=grand_coast_admin_site)

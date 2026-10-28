@@ -54,6 +54,7 @@ class FullLifecycleSimulationTests(TestCase):
     def test_complete_lifecycle_and_duplicate_contract(self):
         self.assertTrue(self.result["passed"])
         self.assertGreaterEqual(len(self.result["checks"]), 18)
+        self.assertGreater(self.project.readiness_items.count(), 0)
         self.assertEqual(self.project.status, Project.Status.COMPLETE)
         self.assertEqual(self.project.operational_phase, Project.OperationalPhase.WARRANTY)
         self.assertEqual(Project.objects.filter(pk=self.project.pk).count(), 1)

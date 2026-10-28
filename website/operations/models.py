@@ -671,7 +671,17 @@ class Project(TimeStampedModel):
     construction_ready_at = models.DateTimeField(null=True, blank=True)
     next_step = models.CharField(max_length=180, blank=True)
     summary = models.TextField(blank=True)
-    is_published = models.BooleanField(default=True)
+    is_published = models.BooleanField(default=False)
+    public_title = models.CharField(max_length=180, blank=True)
+    public_location = models.CharField(max_length=160, blank=True, help_text="City or region only.")
+    public_summary = models.TextField(blank=True)
+    show_client_name = models.BooleanField(default=False)
+    gallery_layout = models.CharField(max_length=16, default="grid", choices=[
+        ("grid", "Balanced grid"), ("feature", "Featured first image"), ("stack", "Full-width story"),
+    ])
+    gallery_accent = models.CharField(max_length=16, default="gold", choices=[
+        ("gold", "Coast gold"), ("blue", "Brand blue"), ("navy", "Deep navy"),
+    ])
     cover = models.FileField(upload_to="projects/covers/", blank=True, validators=[validate_uploaded_media])
     fallback_image = models.CharField(max_length=255, blank=True)
     start_date = models.DateField(null=True, blank=True)
@@ -689,6 +699,17 @@ class Project(TimeStampedModel):
 
     def __str__(self):
         return self.title
+
+    @property
+    def public_display_title(self):
+        return self.public_title.strip() or "A Grand Coast project"
+
+    def clean(self):
+        super().clean()
+        if self.is_published and not self.public_title.strip():
+            previously_published = not self._state.adding and type(self).objects.filter(pk=self.pk, is_published=True).exists()
+            if not previously_published:
+                raise ValidationError({"public_title": "Enter a public title before publishing this project."})
 
     @property
     def progress_percent(self):
@@ -837,6 +858,43 @@ class MediaAsset(models.Model):
         return self.title
 
 
+class MediaPublication(models.Model):
+    """Independent audience drafts and immutable-at-save live copies of an asset."""
+
+    class Destination(models.TextChoices):
+        CLIENT = "client", "Client sharing"
+        WEBSITE = "website", "Website publishing"
+
+    asset = models.ForeignKey(MediaAsset, on_delete=models.CASCADE, related_name="publications")
+    destination = models.CharField(max_length=12, choices=Destination.choices)
+    title = models.CharField(max_length=180, blank=True)
+    caption = models.TextField(blank=True)
+    label = models.CharField(max_length=60, blank=True)
+    location = models.CharField(max_length=160, blank=True)
+    show_client_name = models.BooleanField(default=False)
+    sort_order = models.PositiveIntegerField(default=0)
+    published_data = models.JSONField(default=dict, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    shared_client = models.ForeignKey(Client, null=True, blank=True, on_delete=models.SET_NULL, related_name="shared_media")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["asset", "destination"], name="unique_media_destination")]
+        ordering = ["sort_order", "pk"]
+
+    def draft_data(self):
+        project = self.asset.project
+        return {
+            "title": self.title, "caption": self.caption, "label": self.label,
+            "location": self.location, "sort_order": self.sort_order,
+            "client_name": project.client.name if self.show_client_name and project and project.client_id else "",
+        }
+
+    @property
+    def has_unpublished_changes(self):
+        return bool(self.published_at and self.draft_data() != self.published_data)
+
+
 class LeadAttachment(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="attachments")
@@ -895,6 +953,9 @@ class SiteSettings(models.Model):
         default="Thoughtful construction, clear communication, and a better experience from first walkthrough to final handoff."
     )
     google_review_url = models.URLField(blank=True, max_length=500)
+    services_title = models.CharField(max_length=180, default="Construction with a clear plan.")
+    services_intro = models.TextField(default="Every project is different. Our job is to make the path from idea to finished space feel straightforward.")
+    services_note = models.TextField(blank=True, default="Residential, commercial, renovation, restoration, and project oversight across Southern California.")
     google_places_display_name = models.CharField(max_length=180, blank=True)
     google_places_rating = models.DecimalField(max_digits=2, decimal_places=1, null=True, blank=True)
     google_places_review_count = models.PositiveIntegerField(null=True, blank=True)
@@ -942,6 +1003,7 @@ class Service(models.Model):
     title = models.CharField(max_length=120)
     description = models.TextField()
     image_path = models.CharField(max_length=255, blank=True)
+    image = models.FileField(upload_to="services/", blank=True, validators=[validate_uploaded_media])
     sort_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
 

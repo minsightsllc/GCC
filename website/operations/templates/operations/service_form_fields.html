@@ -1,0 +1,36 @@
+<div class="service-editor-grid">
+    <div class="form-field">
+        <label for="{{ service_form.title.id_for_label }}">{{ service_form.title.label }}</label>
+        {{ service_form.title }}{{ service_form.title.errors }}
+    </div>
+    <div class="form-field">
+        <label for="{{ service_form.sort_order.id_for_label }}">{{ service_form.sort_order.label }}</label>
+        {{ service_form.sort_order }}{{ service_form.sort_order.errors }}
+        {% if service_form.sort_order.help_text %}<small>{{ service_form.sort_order.help_text }}</small>{% endif %}
+    </div>
+    <div class="form-field service-description-field">
+        <label for="{{ service_form.description.id_for_label }}">{{ service_form.description.label }}</label>
+        {{ service_form.description }}{{ service_form.description.errors }}
+    </div>
+    <section class="service-image-editor" aria-label="Service image">
+        <div class="service-image-preview">
+            {% if service and service.image %}
+            <img src="{% url 'operations:service-image' pk=service.pk %}" alt="{{ service.title }} service image" loading="lazy">
+            {% else %}
+            <div class="service-image-placeholder"><span aria-hidden="true">▧</span><strong>No image selected</strong><small>Optional · JPG, PNG, WebP, or GIF</small></div>
+            {% endif %}
+        </div>
+        <div class="service-image-fields">
+            <label class="service-image-label" for="{{ service_form.image.id_for_label }}">{{ service_form.image.label }}</label>
+            {{ service_form.image }}{{ service_form.image.errors }}
+            {% if service_form.image.help_text %}<small class="service-field-help">{{ service_form.image.help_text }}</small>{% endif %}
+        </div>
+    </section>
+    <div class="service-visibility">
+        <label class="form-check service-visibility-toggle" for="{{ service_form.is_active.id_for_label }}">
+            {{ service_form.is_active }}
+            <span><strong>{{ service_form.is_active.label }}</strong><small>{{ service_form.is_active.help_text }}</small></span>
+        </label>
+        {{ service_form.is_active.errors }}
+    </div>
+</div>

@@ -142,6 +142,33 @@ class EmployeeSchedulingTests(TestCase):
         self.assertFalse(EmployeeScheduleOverride.objects.filter(employee=self.employee, date=day).exists())
         self.assertEqual(EmployeeNotification.objects.filter(employee=self.employee, kind='employee-schedule').count(), 3)
 
+    def test_calendar_day_links_preserve_employee_schedule_in_day_details(self):
+        day = self.pacific_day()
+        EmployeeWeeklySchedule.objects.create(
+            employee=self.employee,
+            weekday=day.weekday(),
+            is_working=True,
+            start_time=time(9),
+            end_time=time(17),
+        )
+        self.client.force_login(self.owner)
+
+        response = self.client.get(
+            reverse('operations:dashboard-section', kwargs={'section': 'calendar'}),
+            {
+                'month': day.strftime('%Y-%m'),
+                'day': day.isoformat(),
+                'schedule_employee': self.employee.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['selected_schedule_employee'], self.employee)
+        self.assertTrue(response.context['selected_day']['effective_shift']['is_working'])
+        self.assertEqual(response.context['selected_day']['effective_shift']['start_time'], time(9))
+        self.assertContains(response, 'Shift for Schedule Employee')
+        self.assertContains(response, f'&amp;schedule_employee={self.employee.pk}')
+
     def test_device_registration_and_deactivation_are_scoped_to_employee(self):
         self.client.force_login(self.employee)
         token = 'ExponentPushToken[test-device]'

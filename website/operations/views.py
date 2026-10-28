@@ -26,14 +26,16 @@ from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.core.exceptions import ValidationError
+from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch, Q
+from django.db.models import F, Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.template.loader import render_to_string
 from django.shortcuts import get_object_or_404, redirect, render
 from django.templatetags.static import static
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
+from django.utils.text import slugify
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
@@ -59,6 +61,8 @@ from .forms import (
     LeadStatusForm,
     MediaEditForm,
     MediaUploadForm,
+    MediaPublicationForm,
+    ServiceForm,
     PublicPasswordResetForm,
     ProjectCreateForm,
     ProjectDocumentForm,
@@ -97,6 +101,7 @@ from .models import (
     Lead,
     LeadAttachment,
     MediaAsset,
+    MediaPublication,
     Milestone,
     ProcessStep,
     Project,
@@ -120,6 +125,7 @@ from .models import (
     sanitize_uploaded_name,
 )
 from .turnstile import get_turnstile_site_key, is_mobile_owner_login, is_mobile_webview
+from .publishing import client_is_live, media_presentation, publication_for, publish, unpublish, website_is_live
 from .security import (
     admin_ip_block,
     admin_user_block,
@@ -389,6 +395,7 @@ def _visible_tasks_for_user(user):
         Q(assigned_to=user)
         | Q(watchers=user)
         | Q(project__assigned_staff=user)
+        | Q(project__project_manager=user)
         | Q(lead__assigned_to=user)
     ).distinct()
 
@@ -421,7 +428,9 @@ def _visible_time_for_user(user):
 def _visible_clients_for_user(user):
     if _can_access_dashboard(user):
         return Client.objects.all()
-    return Client.objects.filter(projects__assigned_staff=user).distinct()
+    return Client.objects.filter(
+        Q(projects__assigned_staff=user) | Q(projects__project_manager=user)
+    ).distinct()
 
 
 def _operations_navigation_counts(user, *, team_mode=False):
@@ -531,7 +540,7 @@ def _public_context():
     services = list(Service.objects.filter(is_active=True))
     process_steps = list(ProcessStep.objects.all())
     for service in services:
-        service.display_image = _asset(service.image_path)
+        service.display_image = reverse("operations:service-image", kwargs={"pk": service.pk}) if service.image else _asset(service.image_path)
     projects = list(
         Project.objects.filter(is_published=True)
         .select_related("client")
@@ -556,12 +565,9 @@ def _public_context():
     }
 
 
-def _logout_admin_from_public_site(request):
-    if request.user.is_authenticated and request.user.is_superuser:
-        logout(request)
-
-
 def _public_dashboard_url(user):
+    if _can_access_dashboard(user):
+        return reverse("operations:dashboard")
     if _can_access_team(user) and not user.is_superuser:
         return reverse("operations:team")
     if _is_active_client(user):
@@ -570,7 +576,6 @@ def _public_dashboard_url(user):
 
 
 def public_page(request, page="home"):
-    _logout_admin_from_public_site(request)
     if page not in PUBLIC_PAGES:
         page = "home"
     context = _public_context()
@@ -971,12 +976,17 @@ def _content_form(instance, services, process_steps, data=None):
         "featured_title": instance.featured_title,
         "featured_body": instance.featured_body,
         "google_review_url": instance.google_review_url,
+        "services_title": instance.services_title,
+        "services_intro": instance.services_intro,
+        "services_note": instance.services_note,
     }
-    for service in services:
-        initial[f"service_{service.slug}_title"] = service.title
-        initial[f"service_{service.slug}_copy"] = service.description
     for step in process_steps:
         initial[f"step_{step.key}"] = step.title
+    if data is not None:
+        data = data.copy()
+        for field in ("services_title", "services_intro", "services_note"):
+            if field not in data:
+                data[field] = initial[field]
     return ContentStudioForm(data=data, initial=initial, services=services, process_steps=process_steps)
 
 
@@ -1065,14 +1075,19 @@ def _dashboard_context(request, section, form_overrides=None):
 
     media_visibility = request.GET.get("visibility", "all")
     media_project = request.GET.get("media_project", "all")
-    media_qs = MediaAsset.objects.select_related("project").all()
+    media_qs = MediaAsset.objects.select_related("project__client").prefetch_related("publications").all()
     if media_visibility in dict(MediaAsset.Visibility.choices):
         media_qs = media_qs.filter(visibility=media_visibility)
     if media_project != "all":
-        media_qs = media_qs.filter(project_id=media_project)
-    media_assets = list(media_qs)
+        try:
+            media_qs = media_qs.filter(project_id=uuid.UUID(media_project))
+        except (ValueError, TypeError):
+            media_project = "all"
+    media_assets = [] if section == "media" else list(media_qs)
     for media in media_assets:
         media.display_url = reverse("operations:media-file", kwargs={"pk": media.pk})
+
+    media_context = _media_library_context(request, form_overrides=form_overrides) if section == "media" else {}
 
     if selected_lead:
         selected_lead.estimate = selected_lead.estimates.order_by("-created_at").first()
@@ -1171,14 +1186,14 @@ def _dashboard_context(request, section, form_overrides=None):
     }
     dashboard_forms.update(form_overrides)
     content_form = dashboard_forms["content_form"]
-    content_service_fields = [
-        {
-            "service": service,
-            "title": content_form[f"service_{service.slug}_title"],
-            "copy": content_form[f"service_{service.slug}_copy"],
-        }
-        for service in services
+    service_rows = [
+        {"service": service, "form": ServiceForm(instance=service, prefix=f"service-{service.pk}")}
+        for service in Service.objects.all()
     ]
+    if form_overrides.get("service_error_id"):
+        for row in service_rows:
+            if row["service"].pk == form_overrides["service_error_id"]:
+                row["form"] = form_overrides["service_edit_form"]
     content_step_fields = [
         {"step": step, "field": content_form[f"step_{step.key}"]}
         for step in process_steps
@@ -1244,7 +1259,8 @@ def _dashboard_context(request, section, form_overrides=None):
         "media_visibility_choices": MediaAsset.Visibility.choices,
         "content_services": services,
         "content_process_steps": process_steps,
-        "content_service_fields": content_service_fields,
+        "service_rows": service_rows,
+        "service_create_form": form_overrides.get("service_create_form", ServiceForm(prefix="new-service")),
         "content_step_fields": content_step_fields,
         "site_settings": site_settings,
         "google_review_cache": google_review_cache,
@@ -1257,6 +1273,7 @@ def _dashboard_context(request, section, form_overrides=None):
         "last_invite_email_status": request.session.pop("last_invite_email_status", ""),
         "last_invite_recipient": request.session.pop("last_invite_recipient", ""),
         **dashboard_forms,
+        **media_context,
     }
 
 
@@ -1382,12 +1399,17 @@ def _execution_calendar_events(projects, *, include_completed=False):
             calendar_event_kind="Inspection",
             anchor="permits",
         ))
-    tasks_queryset = Task.objects.filter(
-        project_id__in=project_ids,
-        due_date__isnull=False,
-    ).select_related("project").prefetch_related("assigned_to")
-    if not include_completed:
-        tasks_queryset = tasks_queryset.exclude(status=Task.Status.COMPLETE)
+    # Completed work is represented by its completion timestamp, not as an
+    # outstanding due item in the calendar.
+    tasks_queryset = (
+        Task.objects.filter(
+            project_id__in=project_ids,
+            due_date__isnull=False,
+        )
+        .exclude(status=Task.Status.COMPLETE)
+        .select_related("project")
+        .prefetch_related("assigned_to")
+    )
     for task in tasks_queryset:
         project = project_by_id.get(task.project_id)
         if project is None:
@@ -1462,7 +1484,7 @@ def _admin_calendar_events(projects, tasks):
         if getattr(event, "task", None) is not None
     }
     for task in tasks:
-        if task.due_date and task.pk not in project_task_ids:
+        if task.due_date and task.pk not in project_task_ids and not task.completed:
             project = project_by_id.get(task.project_id)
             start = _calendar_at(task.due_date, 9)
             derived.append(_DerivedCalendarEvent(
@@ -1545,10 +1567,16 @@ def _admin_calendar_events(projects, tasks):
 
 def _calendar_conflicts(events, overrides):
     conflicts = []
-    for index, event in enumerate(events):
+    # Task due/completion markers are reminders, not booked calendar blocks.
+    watchable_events = [
+        event
+        for event in events
+        if getattr(event, "calendar_event_kind", None) not in {"Task due", "Task completed"}
+    ]
+    for index, event in enumerate(watchable_events):
         event_assignees = {str(user.pk) for user in event.assignees.all()}
         event_project_id = getattr(getattr(event, "project", None), "pk", None)
-        for other in events[index + 1:]:
+        for other in watchable_events[index + 1:]:
             if event.end_at <= other.start_at or other.end_at <= event.start_at:
                 continue
             other_assignees = {str(user.pk) for user in other.assignees.all()}
@@ -1560,7 +1588,7 @@ def _calendar_conflicts(events, overrides):
             else:
                 continue
             conflicts.append({"event": event, "other": other, "reason": reason})
-    for event in events:
+    for event in watchable_events:
         local_start = timezone.localtime(event.start_at, CALENDAR_TIME_ZONE)
         local_end = timezone.localtime(event.end_at, CALENDAR_TIME_ZONE)
         override = overrides.get(local_start.date())
@@ -1651,6 +1679,18 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
         month_anchor.month,
     )
     calendar_dates = [calendar_date for week in month_calendar for calendar_date in week]
+    selected_day_value = request.GET.get("day", "")
+    try:
+        selected_day_date = date.fromisoformat(selected_day_value)
+    except (TypeError, ValueError):
+        selected_day_date = None
+    default_selected_day = (
+        today
+        if (month_anchor.year, month_anchor.month) == (today.year, today.month)
+        else month_anchor
+    )
+    if selected_day_date not in calendar_dates:
+        selected_day_date = default_selected_day
     events_by_day = {}
     for event in events:
         for event_day in schedule_event_local_dates(event):
@@ -1701,15 +1741,10 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
     schedule_employees = []
     schedule_summaries = []
     selected_schedule_employee = None
-    schedule_week_days = []
-    schedule_week_anchor = today - timedelta(days=today.weekday())
+    weekly_schedule_days = []
+    schedule_day = selected_day_date
     schedule_override_form = None
     employee_calendar_days = {}
-    selected_day_value = request.GET.get("day", "")
-    try:
-        selected_day_date = date.fromisoformat(selected_day_value)
-    except ValueError:
-        selected_day_date = None
     if section == "calendar":
         if team_mode:
             selected_schedule_employee = request.user
@@ -1749,12 +1784,6 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
             schedule_day = date.fromisoformat(requested_schedule_day)
         except ValueError:
             schedule_day = selected_day_date or today
-        requested_schedule_week = request.GET.get("week", "")
-        try:
-            schedule_week_anchor = date.fromisoformat(requested_schedule_week)
-        except ValueError:
-            schedule_week_anchor = schedule_day
-        schedule_week_anchor -= timedelta(days=schedule_week_anchor.weekday())
 
         if selected_schedule_employee is not None:
             employee_calendar_days = {
@@ -1768,33 +1797,22 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
                 calendar_day_map[calendar_date]["effective_shift"] = employee_calendar_days[calendar_date]
 
             if _can_manage_schedule(request.user) and not team_mode:
-                schedule_week_dates = [
-                    schedule_week_anchor + timedelta(days=offset)
-                    for offset in range(7)
-                ]
-                weekly_form_override = form_overrides.get("weekly_form")
-                for weekly_date in schedule_week_dates:
+                weekly_forms_override = form_overrides.get("weekly_forms", {})
+                for weekday, weekday_label in EmployeeWeeklySchedule.Weekday.choices:
                     weekly_record = EmployeeWeeklySchedule.objects.filter(
                         employee=selected_schedule_employee,
-                        weekday=weekly_date.weekday(),
+                        weekday=weekday,
                     ).first()
-                    weekly_form = EmployeeWeeklyScheduleForm(
-                        instance=weekly_record,
-                        prefix=f"weekday-{weekly_date.weekday()}",
-                    )
-                    if (
-                        weekly_form_override is not None
-                        and getattr(weekly_form_override, "weekday", None) == weekly_date.weekday()
-                    ):
-                        weekly_form = weekly_form_override
-                    schedule_week_days.append(
+                    weekly_form = weekly_forms_override.get(weekday)
+                    if weekly_form is None:
+                        weekly_form = EmployeeWeeklyScheduleForm(
+                            instance=weekly_record,
+                            prefix=f"weekday-{weekday}",
+                        )
+                    weekly_schedule_days.append(
                         {
-                            "date": weekly_date,
-                            "weekday": weekly_date.weekday(),
-                            "shift": effective_employee_schedule(
-                                selected_schedule_employee,
-                                weekly_date,
-                            ),
+                            "weekday": weekday,
+                            "label": weekday_label,
                             "weekly_record": weekly_record,
                             "form": weekly_form,
                         }
@@ -1837,14 +1855,23 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
     previous_year = month_anchor.year - (1 if month_anchor.month == 1 else 0)
     next_month = month_anchor.month + 1 if month_anchor.month < 12 else 1
     next_year = month_anchor.year + (1 if month_anchor.month == 12 else 0)
-    selected_day_value = request.GET.get("day", "")
-    try:
-        selected_day_date = date.fromisoformat(selected_day_value)
-    except ValueError:
-        selected_day_date = None
     selected_day = calendar_day_map.get(selected_day_date)
     selected_day_events = selected_day["events"] if selected_day else []
     selected_day_override = selected_day["override"] if selected_day else None
+    selected_day_employee_shifts = []
+    if selected_day and _can_manage_schedule(request.user) and not team_mode:
+        for schedule_employee in schedule_employees:
+            if selected_schedule_employee and schedule_employee.pk == selected_schedule_employee.pk:
+                shift = selected_day.get("effective_shift")
+            else:
+                shift = effective_employee_schedule(schedule_employee, selected_day["date"])
+            if shift and (
+                shift["is_working"]
+                or (shift["employee_override"] and not shift["is_company_closed"])
+            ):
+                selected_day_employee_shifts.append(
+                    {"employee": schedule_employee, "shift": shift}
+                )
     event_id = request.GET.get("event")
     selected_event = next(
         (
@@ -2094,15 +2121,14 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
         "calendar_previous": f"{previous_year:04d}-{previous_month:02d}",
         "calendar_next": f"{next_year:04d}-{next_month:02d}",
         "selected_day": selected_day,
+        "selected_day_employee_shifts": selected_day_employee_shifts,
         "selected_day_events": selected_day_events,
         "selected_day_override": selected_day_override,
         "schedule_employees": schedule_employees,
         "schedule_summaries": schedule_summaries,
         "selected_schedule_employee": selected_schedule_employee,
-        "schedule_week_anchor": schedule_week_anchor,
-        "schedule_week_previous": schedule_week_anchor - timedelta(days=7),
-        "schedule_week_next": schedule_week_anchor + timedelta(days=7),
-        "schedule_week_days": schedule_week_days,
+        "schedule_day": schedule_day,
+        "weekly_schedule_days": weekly_schedule_days,
         "schedule_override_form": schedule_override_form,
         "selected_event": selected_event,
         "time_entries": time_entries,
@@ -2808,6 +2834,7 @@ def calendar_day_update(request):
     form = CalendarDayOverrideForm(request.POST)
     month_value = request.POST.get('month', '').strip()
     day_value = request.POST.get('date', '').strip()
+    schedule_employee_value = request.POST.get('schedule_employee', '').strip()
 
     def render_error():
         query = request.GET.copy()
@@ -2815,6 +2842,8 @@ def calendar_day_update(request):
             query['month'] = month_value
         if day_value:
             query['day'] = day_value
+        if schedule_employee_value:
+            query['schedule_employee'] = schedule_employee_value
         request.GET = query
         return render(
             request,
@@ -2866,6 +2895,7 @@ def calendar_day_update(request):
             'calendar',
             month=month_value,
             day=override_date.isoformat(),
+            schedule_employee=schedule_employee_value,
         )
 
     with transaction.atomic():
@@ -2935,6 +2965,7 @@ def calendar_day_update(request):
         'calendar',
         month=month_value,
         day=override_date.isoformat(),
+        schedule_employee=schedule_employee_value,
     )
 
 
@@ -3089,89 +3120,84 @@ def weekly_schedule_update(request):
         raise PermissionDenied
 
     employee = get_object_or_404(_staff_users(), pk=request.POST.get('employee'))
+    weekly_forms = {
+        weekday: EmployeeWeeklyScheduleForm(request.POST, prefix=f'weekday-{weekday}')
+        for weekday, _ in EmployeeWeeklySchedule.Weekday.choices
+    }
+    requested_schedule_day = request.POST.get('schedule_day', '')
     try:
-        weekday = int(request.POST.get('weekday', ''))
-    except (TypeError, ValueError):
-        weekday = -1
-    if weekday not in range(7):
-        raise Http404
-
-    prefix = f'weekday-{weekday}'
-    form = EmployeeWeeklyScheduleForm(request.POST, prefix=prefix)
-    form.weekday = weekday
-    requested_week = request.POST.get('week', '')
-    try:
-        week_anchor = date.fromisoformat(requested_week)
-        week_anchor -= timedelta(days=week_anchor.weekday())
+        schedule_day = date.fromisoformat(requested_schedule_day)
     except ValueError:
-        week_anchor = timezone.localtime(timezone.now(), CALENDAR_TIME_ZONE).date()
-        week_anchor -= timedelta(days=week_anchor.weekday())
+        schedule_day = timezone.localtime(timezone.now(), CALENDAR_TIME_ZONE).date()
 
-    if not form.is_valid():
+    forms_valid = True
+    for form in weekly_forms.values():
+        if not form.is_valid():
+            forms_valid = False
+
+    if not forms_valid:
         messages.error(request, 'Please correct the weekly shift details.')
         return _render_workspace_form_error(
             request,
             'calendar',
-            {'weekly_form': form},
+            {'weekly_forms': weekly_forms},
             selections={
                 'schedule_employee': employee.pk,
-                'week': week_anchor.isoformat(),
+                'schedule_day': schedule_day.isoformat(),
             },
         )
 
+    changed_weekdays = []
     with transaction.atomic():
-        schedule = EmployeeWeeklySchedule.objects.select_for_update().filter(
-            employee=employee,
-            weekday=weekday,
-        ).first()
-        previous_signature = _employee_schedule_signature(schedule)
-        is_working = form.cleaned_data['is_working']
-        if schedule is None and not is_working:
-            # Blank-by-default is the same effective state as an explicit
-            # not-scheduled record, so do not create noise or notify anyone.
-            changed = False
-        else:
+        for weekday, form in weekly_forms.items():
+            schedule = EmployeeWeeklySchedule.objects.select_for_update().filter(
+                employee=employee,
+                weekday=weekday,
+            ).first()
+            previous_signature = _employee_schedule_signature(schedule)
+            is_working = form.cleaned_data['is_working']
+            if schedule is None and not is_working:
+                # An unscheduled day is the default; do not create empty rows.
+                continue
             if schedule is None:
                 schedule = EmployeeWeeklySchedule(
                     employee=employee,
                     weekday=weekday,
                 )
             schedule.is_working = is_working
-            schedule.start_time = form.cleaned_data['start_time'] if schedule.is_working else None
-            schedule.end_time = form.cleaned_data['end_time'] if schedule.is_working else None
+            schedule.start_time = form.cleaned_data['start_time'] if is_working else None
+            schedule.end_time = form.cleaned_data['end_time'] if is_working else None
             schedule.full_clean()
-            schedule.save()
-            changed = previous_signature != _employee_schedule_signature(schedule)
-        if changed:
+            if previous_signature != _employee_schedule_signature(schedule):
+                schedule.save()
+                changed_weekdays.append(schedule.get_weekday_display())
+
+        if changed_weekdays:
             record_activity(
                 'Employee weekly schedule updated',
-                f'{employee.get_username()} · {schedule.get_weekday_display()}',
+                f'{employee.get_username()} · {", ".join(changed_weekdays)}',
                 actor=request.user,
             )
             queue_employee_notifications(
                 [employee],
                 kind='employee-schedule',
                 title='Your weekly schedule was updated',
-                body=f'{schedule.get_weekday_display()} hours were updated by your administrator.',
-                destination_url=_calendar_notification_url(week_anchor),
+                body=f'Your recurring weekly hours were updated for {", ".join(changed_weekdays)}.',
+                destination_url=_calendar_notification_url(schedule_day),
                 metadata={
                     'employee_id': employee.pk,
-                    'weekday': weekday,
-                    'week': week_anchor.isoformat(),
+                    'weekdays': changed_weekdays,
                 },
                 created_by=request.user,
                 exclude_users=[request.user],
             )
 
-    messages.success(
-        request,
-        f'{schedule.get_weekday_display()} was updated.' if changed else 'No weekly schedule changes were needed.',
-    )
+    messages.success(request, 'Weekly schedule saved.' if changed_weekdays else 'No weekly schedule changes were needed.')
     return _workspace_redirect(
         request,
         'calendar',
         schedule_employee=employee.pk,
-        week=week_anchor.isoformat(),
+        schedule_day=schedule_day.isoformat(),
     )
 
 
@@ -4682,6 +4708,74 @@ def project_create_invite(request, pk):
     return _dashboard_redirect("projects", project=project.pk)
 
 
+def _media_library_context(request, *, form_overrides=None):
+    form_overrides = form_overrides or {}
+    destination = request.GET.get("destination", "client")
+    if destination not in MediaPublication.Destination.values:
+        destination = "client"
+    project_filter = request.GET.get("media_project", "all")
+    state = request.GET.get("state", "all")
+    assets = MediaAsset.objects.select_related("project__client").prefetch_related("publications")
+    if project_filter != "all":
+        try:
+            assets = assets.filter(project_id=uuid.UUID(project_filter))
+        except (ValueError, TypeError):
+            project_filter = "all"
+    published = MediaPublication.objects.filter(destination=destination, published_at__isnull=False)
+    if destination == "client":
+        published = published.filter(shared_client__isnull=False, shared_client=F("asset__project__client"))
+    else:
+        published = published.filter(asset__project__is_published=True)
+    published_ids = published.values("asset_id")
+    if state == "published":
+        assets = assets.filter(pk__in=published_ids)
+    elif state == "draft":
+        assets = assets.exclude(pk__in=published_ids)
+    else:
+        state = "all"
+    page = Paginator(assets, 12).get_page(request.GET.get("page"))
+    rows = []
+    for asset in page:
+        publication = publication_for(asset, destination) or MediaPublication(
+            asset=asset, destination=destination,
+            title=asset.title if destination == "client" else "",
+            caption=asset.caption if destination == "client" else "",
+        )
+        form = MediaPublicationForm(instance=publication, prefix=f"media-{asset.pk}")
+        if str(asset.pk) == str(form_overrides.get("media_error_id")):
+            form = form_overrides["media_publication_form"]
+        website_publish_blocker = ""
+        if destination == "website":
+            if not asset.project_id:
+                website_publish_blocker = "Assign this file to a project before publishing it to the website."
+            elif not asset.project.is_published:
+                website_publish_blocker = "Publish the project page in Projects before publishing its media."
+            elif not asset.project.public_title.strip() and not publication.published_at:
+                website_publish_blocker = (
+                    "Add a public project title in Projects before publishing new media. The title on this form only names the photo or video."
+                )
+        rows.append({"asset": asset, "publication": publication, "form": form,
+                     "is_live": client_is_live(asset) if destination == "client" else website_is_live(asset),
+                     "website_publish_blocker": website_publish_blocker,
+                     "display_url": reverse("operations:media-file", kwargs={"pk": asset.pk})})
+    return {
+        "media_rows": rows, "media_page": page, "media_destination": destination,
+        "media_state": state, "media_project": project_filter,
+        "media_upload_form": form_overrides.get("media_upload_form") or MediaUploadForm(
+            project_queryset=Project.objects.all(),
+            initial={"destinations": [destination], "project": project_filter if project_filter != "all" else None},
+        ),
+    }
+
+
+def _media_error(request, form, asset=None):
+    overrides = {"media_publication_form": form, "media_error_id": asset.pk} if asset else {"media_upload_form": form}
+    return _render_dashboard_form_error(
+        request, "media", overrides,
+        selections={"destination": request.POST.get("destination", "client"), "media_project": asset.project_id if asset else request.POST.get("project")},
+    )
+
+
 @require_POST
 @workspace_staff_required
 @transaction.atomic
@@ -4693,33 +4787,30 @@ def media_upload(request):
     form = MediaUploadForm(request.POST, request.FILES, project_queryset=project_queryset)
     if form.is_valid():
         project = form.cleaned_data["project"]
-        visibility = MediaAsset.Visibility.INTERNAL if team_mode else form.cleaned_data["visibility"]
         created = []
         for upload in form.cleaned_data["files"]:
-            content_type = (getattr(upload, "content_type", "") or "").lower()
-            media_type = MediaAsset.MediaType.VIDEO if content_type.startswith("video/") else MediaAsset.MediaType.PHOTO
+            media_type = MediaAsset.MediaType.VIDEO if upload.name.lower().endswith((".mp4", ".mov", ".webm")) else MediaAsset.MediaType.PHOTO
             asset = MediaAsset.objects.create(
                 project=project,
                 title=upload.name.rsplit(".", 1)[0],
                 file=upload,
                 media_type=media_type,
-                visibility=visibility,
+                visibility=MediaAsset.Visibility.INTERNAL,
                 uploaded_by=request.user,
             )
             created.append(asset)
+            if not team_mode:
+                for destination in form.cleaned_data["destinations"]:
+                    MediaPublication.objects.create(
+                        asset=asset, destination=destination,
+                        title=asset.title if destination == "client" else "",
+                    )
         record_activity("Project media uploaded", f"{len(created)} file(s) · {project.title}", actor=request.user, project=project)
-        if not team_mode and visibility in {MediaAsset.Visibility.PUBLIC, MediaAsset.Visibility.CLIENT} and project.client_id:
-            _notify_project_client(
-                project,
-                kind="media-published",
-                title="New project media is available",
-                body=f"{len(created)} new photo or video file(s) were shared in your client portal.",
-                created_by=request.user,
-                metadata={"media_count": len(created)},
-            )
-        messages.success(request, f"{len(created)} media file(s) added to {project.title}.")
-        return _workspace_redirect(request, "media", media_project=project.pk)
+        messages.success(request, f"{len(created)} file(s) uploaded as drafts. Review each file before sharing or publishing.")
+        return _workspace_redirect(request, "media", media_project=project.pk, destination=request.POST.get("destination", "client"))
     messages.error(request, "Please choose a project and valid media files.")
+    if not team_mode:
+        return _media_error(request, form)
     return _render_workspace_form_error(
         request,
         "media",
@@ -4735,9 +4826,9 @@ def media_edit(request, pk):
     team_mode = request.path.startswith("/team/")
     if not team_mode and not _can_access_dashboard(request.user):
         raise PermissionDenied
-    asset = get_object_or_404(MediaAsset, pk=pk)
-    previous_visibility = asset.visibility
-    previous_project_id = asset.project_id
+    asset = get_object_or_404(MediaAsset.objects.select_for_update().select_related("project__client"), pk=pk)
+    if not team_mode:
+        return _edit_media_publication(request, asset)
     project_queryset = _visible_projects_for_user(request.user)
     if team_mode and (
         not asset.project_id
@@ -4746,28 +4837,9 @@ def media_edit(request, pk):
         raise PermissionDenied
     form = MediaEditForm(request.POST, instance=asset, project_queryset=project_queryset)
     if form.is_valid():
-        if team_mode:
-            asset.caption = form.cleaned_data["caption"]
-            asset.save(update_fields=["caption", "updated_at"])
-        else:
-            asset = form.save()
+        asset.caption = form.cleaned_data["caption"]
+        asset.save(update_fields=["caption", "updated_at"])
         record_activity("Media details updated", f"{asset.title} · {asset.get_visibility_display()}", actor=request.user, project=asset.project)
-        client_visible = {MediaAsset.Visibility.PUBLIC, MediaAsset.Visibility.CLIENT}
-        if (
-            not team_mode
-            and previous_visibility not in client_visible
-            and asset.visibility in client_visible
-            and asset.project_id
-            and asset.project.client_id
-        ):
-            _notify_project_client(
-                asset.project,
-                kind="media-published",
-                title="New project media is available",
-                body=f"{asset.title} was shared in your client portal.",
-                created_by=request.user,
-                metadata={"media_id": str(asset.pk), "previous_project_id": str(previous_project_id or "")},
-            )
         messages.success(request, "Media details saved.")
     else:
         messages.error(request, "Please correct the media details and try again.")
@@ -4778,6 +4850,135 @@ def media_edit(request, pk):
             selections={"media_project": asset.project_id},
         )
     return _workspace_redirect(request, "media", media_project=asset.project_id)
+
+
+def _edit_media_publication(request, asset):
+    destination = request.POST.get("destination")
+    if destination not in MediaPublication.Destination.values:
+        raise Http404
+    publication = asset.publications.filter(destination=destination).first() or MediaPublication(asset=asset, destination=destination)
+    action = request.POST.get("action", "save")
+    if action == "unpublish":
+        unpublish(publication)
+        record_activity("Media unpublished", destination, actor=request.user, project=asset.project)
+        messages.success(request, "Removed from this destination. The original file and draft are retained.")
+    elif action in {"save", "publish", "preview"}:
+        form = MediaPublicationForm(request.POST, instance=publication, prefix=f"media-{asset.pk}")
+        if not form.is_valid():
+            return _media_error(request, form, asset)
+        publication = form.save(commit=False)
+        if action == "publish":
+            try:
+                changed = publish(publication)
+            except ValidationError as exc:
+                if hasattr(exc, "error_dict"):
+                    for name, errors in exc.error_dict.items():
+                        form.add_error(name if name in form.fields else None, errors)
+                else:
+                    form.add_error(None, exc)
+                return _media_error(request, form, asset)
+            if changed:
+                record_activity("Media shared with client" if destination == "client" else "Media published to website", publication.title, actor=request.user, project=asset.project)
+                if destination == "client":
+                    _notify_project_client(asset.project, kind="media-published", title="New project media is available",
+                        body=f"{publication.title} was shared in your client portal.", created_by=request.user,
+                        metadata={"media_id": str(asset.pk)})
+            messages.success(request, "Shared with the client." if destination == "client" else "Published to the website.")
+        else:
+            publication.save()
+            if action == "preview":
+                return redirect(f"{reverse('operations:media-preview', kwargs={'pk': asset.pk})}?{urlencode({'destination': destination})}")
+            messages.success(request, "Draft saved. Published content has not changed.")
+    else:
+        raise Http404
+    return _dashboard_redirect("media", destination=destination, media_project=asset.project_id)
+
+
+@require_GET
+@staff_required
+@never_cache
+def media_preview(request, pk):
+    asset = get_object_or_404(MediaAsset.objects.select_related("project__client"), pk=pk)
+    destination = request.GET.get("destination", "website")
+    publication = get_object_or_404(MediaPublication, asset=asset, destination=destination)
+    return render(request, "operations/media_preview.html", {
+        "media": media_presentation(asset, destination, preview=True, publication=publication),
+        "asset": asset, "destination": destination,
+    })
+
+
+@require_http_methods(["GET", "POST"])
+@staff_required
+@transaction.atomic
+def media_delete(request, pk):
+    asset = get_object_or_404(MediaAsset.objects.select_for_update(), pk=pk)
+    destination = request.GET.get("destination", "client")
+    if destination not in MediaPublication.Destination.values:
+        destination = "client"
+    if request.method == "POST" and request.POST.get("confirm") == "delete":
+        project_id = asset.project_id
+        name, storage = asset.file.name, asset.file.storage
+        record_activity("Original media deleted", asset.title, actor=request.user, project=asset.project)
+        asset.delete()
+        if name:
+            transaction.on_commit(lambda: storage.delete(name))
+        messages.success(request, "Original file and all its publications deleted.")
+        return _dashboard_redirect("media", media_project=project_id, destination=destination)
+    return render(request, "operations/media_delete.html", {"asset": asset, "destination": destination})
+
+
+@require_POST
+@staff_required
+@transaction.atomic
+def service_save(request, pk=None):
+    instance = get_object_or_404(Service.objects.select_for_update(), pk=pk) if pk else Service()
+    form = ServiceForm(request.POST, request.FILES, instance=instance, prefix=f"service-{pk}" if pk else "new-service")
+    if form.is_valid():
+        service = form.save(commit=False)
+        if not service.slug:
+            service.slug = f"{slugify(service.title)[:65] or 'service'}-{uuid.uuid4().hex[:8]}"
+        service.save()
+        record_activity("Service saved", service.title, actor=request.user)
+        messages.success(request, "Service saved.")
+        return _dashboard_redirect("content")
+    overrides = {"service_error_id": pk, "service_edit_form": form} if pk else {"service_create_form": form}
+    return _render_dashboard_form_error(request, "content", overrides)
+
+
+@require_POST
+@staff_required
+@transaction.atomic
+def service_move(request, pk):
+    services = list(Service.objects.select_for_update().all())
+    index = next((i for i, item in enumerate(services) if item.pk == pk), None)
+    if index is None:
+        raise Http404
+    direction = request.POST.get("direction")
+    if direction not in {"up", "down"}:
+        raise Http404
+    neighbor = index + (-1 if direction == "up" else 1)
+    if 0 <= neighbor < len(services):
+        services[index], services[neighbor] = services[neighbor], services[index]
+        for position, item in enumerate(services):
+            item.sort_order = position
+        Service.objects.bulk_update(services, ["sort_order"])
+    return _dashboard_redirect("content")
+
+
+@require_GET
+def service_image(request, pk):
+    service = get_object_or_404(Service, pk=pk)
+    if not service.is_active and not _can_manage_content(request.user):
+        raise Http404
+    if not service.image:
+        raise Http404
+    try:
+        response = FileResponse(service.image.open("rb"), content_type=mimetypes.guess_type(service.image.name)[0] or "application/octet-stream")
+    except (FileNotFoundError, OSError) as exc:
+        raise Http404 from exc
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 @require_POST
@@ -4795,11 +4996,10 @@ def content_update(request):
         instance.featured_title = form.cleaned_data["featured_title"]
         instance.featured_body = form.cleaned_data["featured_body"]
         instance.google_review_url = form.cleaned_data["google_review_url"]
+        instance.services_title = form.cleaned_data["services_title"]
+        instance.services_intro = form.cleaned_data["services_intro"]
+        instance.services_note = form.cleaned_data["services_note"]
         instance.save()
-        for service in services:
-            service.title = form.cleaned_data[f"service_{service.slug}_title"]
-            service.description = form.cleaned_data[f"service_{service.slug}_copy"]
-            service.save(update_fields=["title", "description"])
         for step in process_steps:
             step.title = form.cleaned_data[f"step_{step.key}"]
             step.save(update_fields=["title"])
@@ -4831,21 +5031,22 @@ def google_reviews_sync(request):
 
 @require_GET
 def public_project_detail(request, pk):
-    _logout_admin_from_public_site(request)
     project = get_object_or_404(
         Project.objects.select_related("client").prefetch_related("milestones", "updates", "media_assets"),
         pk=pk,
         is_published=True,
     )
-    public_media = list(project.media_assets.filter(visibility=MediaAsset.Visibility.PUBLIC))
-    for media_item in public_media:
-        media_item.display_url = reverse("operations:media-file", kwargs={"pk": media_item.pk})
+    public_media = sorted(
+        [media_presentation(asset, "website") for asset in project.media_assets.prefetch_related("publications") if website_is_live(asset)],
+        key=lambda item: item["sort_order"],
+    )
     project.display_image = _project_image(project)
     return render(request, "operations/project_detail.html", {
         "project": project,
         "public_media": public_media,
         "site_settings": _site_settings(),
         "public_dashboard_url": _public_dashboard_url(request.user),
+        "page": "projects",
     })
 
 
@@ -4882,7 +5083,9 @@ def project_cover_file(request, pk):
         opened,
         content_type=mimetypes.guess_type(project.cover.name)[0] or "application/octet-stream",
     )
-    response["Content-Disposition"] = f'inline; filename="{project.cover.name.rsplit("/", 1)[-1]}"'
+    suffix = project.cover.name.rsplit(".", 1)[-1]
+    response["Content-Disposition"] = f'inline; filename="project-{project.pk}.{suffix}"'
+    response["Cache-Control"] = "private, no-store"
     return response
 
 
@@ -5103,10 +5306,9 @@ def portal(request, section="overview"):
     if selected_project is None and not requested_estimate and projects:
         selected_project = projects[0]
     updates = list(selected_project.updates.filter(visibility=ProjectUpdate.Visibility.CLIENT)[:8]) if selected_project else []
-    media = list(
-        selected_project.media_assets.filter(
-            visibility__in=[MediaAsset.Visibility.PUBLIC, MediaAsset.Visibility.CLIENT]
-        )[:8]
+    media = sorted(
+        [media_presentation(asset, "client") for asset in selected_project.media_assets.prefetch_related("publications") if client_is_live(asset)],
+        key=lambda item: item["sort_order"],
     ) if selected_project else []
     if selected_project:
         selected_project.progress = selected_project.progress_percent
@@ -5119,8 +5321,6 @@ def portal(request, section="overview"):
             ),
             None,
         )
-        for media_item in media:
-            media_item.display_url = reverse("operations:media-file", kwargs={"pk": media_item.pk})
     portal_estimate = requested_estimate
     if portal_estimate is None and selected_project and selected_project.estimate:
         portal_estimate = next(
@@ -5520,9 +5720,10 @@ def media_file(request, pk):
             raise Http404 from exc
         content_type = mimetypes.guess_type(asset.file.name)[0] or "application/octet-stream"
         response = FileResponse(opened, content_type=content_type)
-        response["Content-Disposition"] = f'inline; filename="{sanitize_uploaded_name(asset.file.name.rsplit("/", 1)[-1])}"'
-        if asset.visibility != MediaAsset.Visibility.PUBLIC:
-            response["Cache-Control"] = "private, no-store"
+        # Original filenames can contain internal client/address details.
+        suffix = asset.file.name.rsplit(".", 1)[-1]
+        response["Content-Disposition"] = f'inline; filename="media-{asset.pk}.{suffix}"'
+        response["Cache-Control"] = "private, no-store"
         response["X-Content-Type-Options"] = "nosniff"
         response["Cross-Origin-Resource-Policy"] = "same-origin"
         return response

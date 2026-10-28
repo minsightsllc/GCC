@@ -36,6 +36,7 @@ from .construction_services import (
     create_selection,
     create_site_visit,
     create_subcontractor_assignment,
+    initialize_readiness,
     initialize_warranty,
     project_financial_summary,
     record_cost,
@@ -341,7 +342,9 @@ def _run_construction(context, checks):
     project = context["project"]
     visit = context["visit"]
 
+    initialize_readiness(project, actor=owner)
     readiness_items = list(project.readiness_items.order_by("key"))
+    _check(checks, "project readiness items are initialized", bool(readiness_items))
     for item in readiness_items:
         complete_readiness_item(item, actor=manager, notes="Verified in the full lifecycle simulation.", idempotency_key=_key(f"readiness:{item.key}"))
     complete_readiness_item(readiness_items[0], actor=manager, idempotency_key=_key(f"readiness:{readiness_items[0].key}"))

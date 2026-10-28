@@ -613,7 +613,7 @@
     }
 
     function parseCalendarDate(value) {
-        var match = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(value || "");
+        var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || "");
         if (!match) {
             return null;
         }
@@ -633,7 +633,7 @@
     }
 
     function parseCalendarTime(value) {
-        var match = /^(\\d{2}):(\\d{2})$/.exec(value || "");
+        var match = /^(\d{2}):(\d{2})$/.exec(value || "");
         if (!match) {
             return null;
         }
@@ -706,6 +706,20 @@
                 closeCalendarPicker(shell._calendarPicker);
             }
         });
+    }
+
+    function disposeCalendarPickers(root) {
+        each(".calendar-picker", function (shell) {
+            var picker = shell._calendarPicker;
+            if (!picker) {
+                return;
+            }
+            closeCalendarPicker(picker);
+            if (picker.popover.parentNode) {
+                picker.popover.parentNode.removeChild(picker.popover);
+            }
+            shell._calendarPicker = null;
+        }, root);
     }
 
     function positionCalendarPicker(picker) {
@@ -856,6 +870,7 @@
             var next = createCalendarPickerButton("", "calendar-picker-nav is-next", "Next month");
             previous.addEventListener("click", function (event) {
                 event.preventDefault();
+                event.stopPropagation();
                 state.month -= 1;
                 if (state.month < 0) {
                     state.month = 11;
@@ -865,6 +880,7 @@
             });
             next.addEventListener("click", function (event) {
                 event.preventDefault();
+                event.stopPropagation();
                 state.month += 1;
                 if (state.month > 11) {
                     state.month = 0;
@@ -986,6 +1002,10 @@
         }
 
         function renderOptions() {
+            var scrollPositions = Array.prototype.map.call(
+                columns.querySelectorAll(".calendar-time-options"),
+                function (options) { return options.scrollTop; }
+            );
             while (columns.firstChild) {
                 columns.removeChild(columns.firstChild);
             }
@@ -1014,6 +1034,7 @@
                     option.setAttribute("role", "option");
                     option.addEventListener("click", function (event) {
                         event.preventDefault();
+                        event.stopPropagation();
                         state[definition.key] = definition.key === "period" ? value : Number(value);
                         renderOptions();
                     });
@@ -1021,6 +1042,11 @@
                 });
                 column.appendChild(options);
                 columns.appendChild(column);
+            });
+            Array.prototype.forEach.call(columns.querySelectorAll(".calendar-time-options"), function (options, index) {
+                if (scrollPositions[index] !== undefined) {
+                    options.scrollTop = scrollPositions[index];
+                }
             });
         }
 
@@ -1113,6 +1139,8 @@
             form.dataset.employeeScheduleInitialized = "true";
             var status = form.querySelector("[name='status']");
             var workingCheckbox = form.querySelector("input[type='checkbox'][name$='is_working']");
+            var workingCheckboxes = form.querySelectorAll("input[type='checkbox'][name$='is_working']");
+            var weeklyRows = form.querySelectorAll("[data-employee-schedule-row]");
             var timeFields = form.querySelectorAll(
                 "[data-employee-schedule-field='start_time'], [data-employee-schedule-field='end_time']"
             );
@@ -1134,6 +1162,21 @@
             }
 
             function syncFields() {
+                if (weeklyRows.length) {
+                    Array.prototype.forEach.call(weeklyRows, function (row) {
+                        var rowCheckbox = row.querySelector("input[type='checkbox'][name$='is_working']");
+                        var rowIsWorking = Boolean(rowCheckbox && rowCheckbox.checked);
+                        row.setAttribute("data-employee-schedule-status", rowIsWorking ? "working" : "off");
+                        setFieldVisibility(
+                            row.querySelectorAll(
+                                "[data-employee-schedule-field='start_time'], [data-employee-schedule-field='end_time']"
+                            ),
+                            rowIsWorking
+                        );
+                    });
+                    closeAllCalendarPickers();
+                    return;
+                }
                 var isWorking = status
                     ? status.value === "working"
                     : Boolean(workingCheckbox && workingCheckbox.checked);
@@ -1147,9 +1190,9 @@
             if (status) {
                 status.addEventListener("change", syncFields);
             }
-            if (workingCheckbox) {
-                workingCheckbox.addEventListener("change", syncFields);
-            }
+            Array.prototype.forEach.call(workingCheckboxes, function (checkbox) {
+                checkbox.addEventListener("change", syncFields);
+            });
             syncFields();
             initCalendarPickers(form);
         });
@@ -1794,6 +1837,7 @@
             return;
         }
 
+        var calendarHost = calendar.parentNode;
         var requestSequence = 0;
         var activeRequest = null;
 
@@ -1822,7 +1866,7 @@
             }
         }
 
-        function loadDay(url, updateHistory) {
+        function loadCalendar(url, updateHistory) {
             requestSequence += 1;
             var currentSequence = requestSequence;
             if (activeRequest) {
@@ -1831,7 +1875,7 @@
             activeRequest = typeof window.AbortController === "function" ? new window.AbortController() : null;
 
             calendar.setAttribute("aria-busy", "true");
-            setStatus("Loading day details…");
+            setStatus(url.searchParams.has("day") ? "Loading day details…" : "Loading month…");
 
             var options = {
                 credentials: "same-origin",
@@ -1870,28 +1914,43 @@
                         throw new Error("Calendar details were not present in the response.");
                     }
 
-                    var currentContent = calendar.querySelector("#calendar-day-selection-content");
-                    var freshContent = freshCalendar.querySelector("#calendar-day-selection-content");
-                    if (freshContent) {
-                        var updatedContent = document.importNode(freshContent, true);
+                    var requestedMonth = url.searchParams.get("month");
+                    var replacePanel = !url.searchParams.has("day")
+                        || !requestedMonth
+                        || requestedMonth !== calendar.dataset.month;
+                    if (replacePanel) {
+                        var updatedCalendar = document.importNode(freshCalendar, true);
+                        disposeCalendarPickers(calendar);
+                        calendar.replaceWith(updatedCalendar);
+                        calendar = updatedCalendar;
+                        initCalendarDayForms(calendar);
+                    } else {
+                        var currentContent = calendar.querySelector("#calendar-day-selection-content");
+                        var freshContent = freshCalendar.querySelector("#calendar-day-selection-content");
                         if (currentContent) {
-                            currentContent.replaceWith(updatedContent);
-                        } else {
-                            var mobileList = calendar.querySelector(".calendar-mobile-list");
-                            if (mobileList) {
-                                mobileList.insertAdjacentElement("afterend", updatedContent);
-                            } else {
-                                calendar.appendChild(updatedContent);
-                            }
+                            disposeCalendarPickers(currentContent);
                         }
-                        initCalendarDayForms(updatedContent);
-                    } else if (currentContent) {
-                        currentContent.remove();
+                        if (freshContent) {
+                            var updatedContent = document.importNode(freshContent, true);
+                            if (currentContent) {
+                                currentContent.replaceWith(updatedContent);
+                            } else {
+                                var mobileList = calendar.querySelector(".calendar-mobile-list");
+                                if (mobileList) {
+                                    mobileList.insertAdjacentElement("afterend", updatedContent);
+                                } else {
+                                    calendar.appendChild(updatedContent);
+                                }
+                            }
+                            initCalendarDayForms(updatedContent);
+                        } else if (currentContent) {
+                            currentContent.remove();
+                        }
                     }
 
                     setSelectedDay(url.searchParams.get("day") || "");
                     if (updateHistory && url.href !== window.location.href) {
-                        window.history.pushState({calendarDay: true}, "", url.href);
+                        window.history.pushState({calendarSelection: true}, "", url.href);
                     }
                     calendar.removeAttribute("aria-busy");
                     setStatus("");
@@ -1906,19 +1965,25 @@
                     setStatus(
                         error.status === 403
                             ? "You no longer have access to this calendar."
-                            : "Couldn’t load that day’s details. Select the day again to retry."
+                            : url.searchParams.has("day")
+                                ? "Couldn’t load that day’s details. Select the day again to retry."
+                                : "Couldn’t load that month. Select Previous or Next to retry."
                     );
                 });
         }
 
-        calendar.addEventListener("click", function (event) {
+        calendarHost.addEventListener("click", function (event) {
             var target = event.target;
-            var link = target && typeof target.closest === "function"
+            var monthLink = target && typeof target.closest === "function"
+                ? target.closest("[data-calendar-month-selection]")
+                : null;
+            var dayLink = target && typeof target.closest === "function"
                 ? target.closest("[data-calendar-day-selection]")
                 : null;
+            var link = monthLink || dayLink;
             if (
                 !link
-                || !calendar.contains(link)
+                || !calendarHost.contains(link)
                 || event.defaultPrevented
                 || event.button !== 0
                 || event.metaKey
@@ -1934,18 +1999,19 @@
             if (
                 url.origin !== window.location.origin
                 || url.pathname !== window.location.pathname
-                || !url.searchParams.has("day")
+                || (monthLink && !url.searchParams.has("month"))
+                || (dayLink && !url.searchParams.has("day"))
             ) {
                 return;
             }
 
             event.preventDefault();
-            loadDay(url, true);
+            loadCalendar(url, true);
         });
 
         window.addEventListener("popstate", function () {
             var url = new window.URL(window.location.href);
-            loadDay(url, false);
+            loadCalendar(url, false);
         });
     }
 
@@ -2253,7 +2319,105 @@
         });
     }
 
+    function initMediaPublishing() {
+        // Keep the clicked submitter's name/value in native form submission.
+        document.querySelectorAll("[data-publication-save]").forEach(function (form) {
+            form.addEventListener("submit", function (event) {
+                if (form.dataset.submitting === "true") {
+                    event.preventDefault();
+                    return;
+                }
+                form.dataset.submitting = "true";
+                form.setAttribute("aria-busy", "true");
+            });
+        });
+        window.addEventListener("pageshow", function () {
+            document.querySelectorAll("[data-publication-save]").forEach(function (form) {
+                delete form.dataset.submitting;
+                form.removeAttribute("aria-busy");
+            });
+        });
+        const dialog = document.querySelector("[data-media-delete-dialog]");
+        let deleteTrigger;
+        if (dialog && typeof dialog.showModal === "function") {
+            document.querySelectorAll("[data-media-delete]").forEach(function (link) {
+                link.addEventListener("click", function (event) {
+                    event.preventDefault();
+                    deleteTrigger = link;
+                    dialog.querySelector("[data-delete-form]").action = link.href;
+                    dialog.querySelector("[data-delete-name]").textContent = link.dataset.mediaName;
+                    dialog.showModal();
+                    dialog.querySelector("[data-delete-cancel]").focus();
+                });
+            });
+            dialog.querySelector("[data-delete-cancel]").addEventListener("click", function () { dialog.close(); });
+            dialog.addEventListener("close", function () { if (deleteTrigger) deleteTrigger.focus(); });
+        }
+        document.querySelectorAll("[data-publication-upload]").forEach(function (form) {
+            const input = form.querySelector('input[type="file"]');
+            const list = form.querySelector("[data-upload-file-list]");
+            const status = form.querySelector("[data-upload-status]");
+            let chosen = [];
+            const redraw = function () {
+                list.replaceChildren();
+                chosen.forEach(function (file, index) {
+                    const row = document.createElement("div");
+                    const name = document.createElement("span");
+                    name.textContent = file.name + " · " + (file.size / 1024 / 1024).toFixed(1) + " MB";
+                    const remove = document.createElement("button");
+                    remove.type = "button";
+                    remove.className = "text-link-button";
+                    remove.textContent = "Remove";
+                    remove.setAttribute("aria-label", "Remove " + file.name);
+                    remove.addEventListener("click", function () {
+                        chosen.splice(index, 1);
+                        const transfer = new DataTransfer();
+                        chosen.forEach(function (selected) { transfer.items.add(selected); });
+                        input.files = transfer.files;
+                        redraw();
+                    });
+                    row.append(name, remove);
+                    list.append(row);
+                });
+            };
+            input.addEventListener("change", function () { chosen = Array.from(input.files || []); redraw(); status.textContent = ""; });
+            form.addEventListener("submit", async function (event) {
+                event.preventDefault();
+                const invalid = chosen.find(function (file) { return file.size === 0 || file.size > 50 * 1024 * 1024 || !/\.(jpe?g|png|webp|gif|heic|mp4|mov|webm)$/i.test(file.name); });
+                if (!chosen.length || chosen.length > 20 || invalid) {
+                    status.textContent = invalid ? invalid.name + ": choose a supported photo or video under 50 MB." : "Choose between 1 and 20 files.";
+                    return;
+                }
+                const button = form.querySelector('button[type="submit"]');
+                if (button.disabled) return;
+                button.disabled = true;
+                form.setAttribute("aria-busy", "true");
+                status.textContent = "Uploading drafts…";
+                try {
+                    const response = await fetch(form.action, { method: "POST", body: new FormData(form), credentials: "same-origin" });
+                    if (response.redirected && new URL(response.url).pathname.includes("/dashboard/media")) {
+                        window.location.assign(response.url);
+                        return;
+                    }
+                    if (response.status === 403 || response.redirected) {
+                        status.textContent = "Your session needs attention. Sign in again, then retry this upload.";
+                    } else {
+                        const html = new DOMParser().parseFromString(await response.text(), "text/html");
+                        const errors = Array.from(html.querySelectorAll("[data-publication-upload] .errorlist")).map(function (item) { return item.textContent.trim(); });
+                        status.textContent = errors.join(" ") || "The upload could not be saved. Your selected files are still here; try again.";
+                    }
+                } catch (error) {
+                    status.textContent = "Connection lost. Your selected files are still here; retry when connected.";
+                } finally {
+                    button.disabled = false;
+                    form.removeAttribute("aria-busy");
+                }
+            });
+        });
+    }
+
     function init() {
+        initMediaPublishing();
         initNavigation();
         initTaskSearch();
         initTaskFilterDropdowns();

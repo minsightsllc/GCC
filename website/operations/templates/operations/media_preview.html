@@ -1,0 +1,9 @@
+{% extends 'operations/base.html' %}
+{% block title %}Media draft preview | Grand Coast{% endblock %}
+{% block body_class %}public-site{% endblock %}
+{% block body %}
+<main class="container publication-preview">
+    <div class="admin-heading-row"><div><span class="section-kicker">Private preview</span><h1>{% if destination == 'client' %}Client sharing{% else %}Website publishing{% endif %}</h1><p>Review this draft. It has not changed the live publication.</p></div><a class="button button-outline" href="{% url 'operations:dashboard-section' section='media' %}?destination={{ destination }}&amp;media_project={{ asset.project_id }}#media-{{ asset.pk }}">Back to editor</a></div>
+    <div class="public-gallery-grid gallery-layout-{{ asset.project.gallery_layout }} gallery-accent-{{ asset.project.gallery_accent }}">{% include 'operations/public_media_item.html' %}</div>
+</main>
+{% endblock %}

@@ -1,0 +1,13 @@
+<fieldset class="public-project-fields">
+    <legend>Public website</legend>
+    <p class="detail-value">Choose what website visitors see. The internal project name and address stay private.</p>
+    <label class="form-field">{{ project_form.public_title.label }}{{ project_form.public_title }}{{ project_form.public_title.errors }}</label>
+    <label class="form-field">{{ project_form.public_location.label }}{{ project_form.public_location }}{{ project_form.public_location.errors }}</label>
+    <label class="form-field">{{ project_form.public_summary.label }}{{ project_form.public_summary }}{{ project_form.public_summary.errors }}</label>
+    <div class="detail-columns">
+        <label class="form-field">Gallery layout{{ project_form.gallery_layout }}{{ project_form.gallery_layout.errors }}</label>
+        <label class="form-field">Gallery accent{{ project_form.gallery_accent }}{{ project_form.gallery_accent.errors }}</label>
+    </div>
+    <label class="form-check">{{ project_form.show_client_name }} {{ project_form.show_client_name.label }}</label>
+    <label class="form-check">{{ project_form.is_published }} Publish public project page</label>{{ project_form.is_published.errors }}
+</fieldset>
