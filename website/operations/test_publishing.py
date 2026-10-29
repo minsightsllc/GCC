@@ -1,7 +1,6 @@
 import importlib
-import json
 import tempfile
-from pathlib import Path
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.apps import apps
@@ -12,10 +11,20 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test import Client as Browser, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from .construction_policies import can_view_media
-from .forms import MediaUploadForm, ProjectForm, WebsiteMediaUploadForm
-from .models import Client, MediaAsset, MediaPublication, Project, Service, SiteSettings
+from .forms import MediaUploadForm
+from .models import (
+    Client,
+    MediaAsset,
+    MediaPublication,
+    Project,
+    Service,
+    SiteSettings,
+    WebsiteGalleryPost,
+    WebsiteGalleryPostItem,
+)
 from .publishing import client_is_live, media_presentation, publish, unpublish
 
 
@@ -55,24 +64,58 @@ class PublishingWorkflowTests(TestCase):
     def publication(self, destination, title="Reviewed title", **kwargs):
         return MediaPublication.objects.create(asset=self.asset, destination=destination, title=title, **kwargs)
 
-    def edit(self, destination="website", action="publish", **values):
-        prefix = "media" if destination == "client" else "website"
-        route = "media-update" if destination == "client" else "website-media-update"
+    def published_post(self, *, asset=None, title="Published post", caption="", **values):
+        asset = asset or self.asset
+        if not asset.file:
+            asset.file.save(
+                f"{asset.pk}.png",
+                SimpleUploadedFile(f"{asset.pk}.png", b"project image", content_type="image/png"),
+                save=True,
+            )
+        post = WebsiteGalleryPost.objects.create(
+            project=asset.project,
+            title=title,
+            caption=caption,
+            **values,
+        )
+        WebsiteGalleryPostItem.objects.create(post=post, asset=asset, sort_order=0)
+        publication, _ = MediaPublication.objects.get_or_create(
+            asset=asset,
+            destination=MediaPublication.Destination.WEBSITE,
+            defaults={"title": asset.title or title},
+        )
+        publish(publication)
+        post.published_data = post.draft_data()
+        post.published_at = timezone.now()
+        post.save(update_fields=["published_data", "published_at", "updated_at"])
+        return post, publication
+
+    def edit(self, destination="client", action="publish", **values):
+        if destination != "client":
+            raise ValueError("Website publishing uses project post forms.")
+        prefix = "media"
+        MediaPublication.objects.get_or_create(
+            asset=self.asset,
+            destination=MediaPublication.Destination.CLIENT,
+            defaults={"title": self.asset.title},
+        )
         data = {"action": action,
                 f"{prefix}-{self.asset.pk}-title": "Reviewed title", f"{prefix}-{self.asset.pk}-caption": "Reviewed caption",
                 f"{prefix}-{self.asset.pk}-sort_order": "0"}
         data.update({f"{prefix}-{self.asset.pk}-{name}": value for name, value in values.items()})
-        return self.browser.post(reverse(f"operations:{route}", args=[self.asset.pk]), data)
+        return self.browser.post(reverse("operations:media-update", args=[self.asset.pk]), data)
 
     def test_public_project_uses_shared_header_and_safe_fields(self):
-        for url in (reverse("operations:projects"), reverse("operations:project-detail", args=[self.project.pk])):
-            response = self.browser.get(url)
-            self.assertEqual(response.status_code, 200)
-            self.assertTemplateUsed(response, "operations/public_header.html")
-            self.assertContains(response, "Coastal renovation")
-            self.assertContains(response, "Ventura County")
-            for private in (self.project.title, self.project.location, self.project.summary, self.client_record.name):
-                self.assertNotContains(response, private)
+        self.published_post()
+        response = self.browser.get(reverse("operations:projects"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "operations/public_header.html")
+        self.assertContains(response, "Coastal renovation")
+        for private in (self.project.title, self.project.location, self.project.summary, self.client_record.name):
+            self.assertNotContains(response, private)
+        detail_response = self.browser.get(reverse("operations:project-detail", args=[self.project.pk]))
+        self.assertEqual(detail_response.status_code, 302)
+        self.assertIn(f"#public-project-{self.project.pk}", detail_response.url)
 
     def test_client_only_share_never_appears_in_public_project_gallery(self):
         publication = self.publication(
@@ -82,15 +125,15 @@ class PublishingWorkflowTests(TestCase):
         )
         publish(publication)
 
-        for url in (
-            reverse("operations:projects"),
-            reverse("operations:project-detail", args=[self.project.pk]),
-        ):
-            response = self.browser.get(url)
-            self.assertEqual(response.status_code, 200)
-            self.assertNotContains(response, "Private client filename")
-            self.assertNotContains(response, "Private client note")
-            self.assertNotContains(response, reverse("operations:media-file", args=[self.asset.pk]))
+        response = self.browser.get(reverse("operations:projects"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Private client filename")
+        self.assertNotContains(response, "Private client note")
+        self.assertNotContains(response, reverse("operations:media-file", args=[self.asset.pk]))
+        self.assertEqual(
+            self.browser.get(reverse("operations:project-detail", args=[self.project.pk])).status_code,
+            404,
+        )
         self.assertEqual(
             self.browser.get(reverse("operations:media-file", args=[self.asset.pk])).status_code,
             302,
@@ -98,26 +141,16 @@ class PublishingWorkflowTests(TestCase):
 
     def test_legacy_project_stays_live_with_generic_title_and_no_internal_location(self):
         Project.objects.filter(pk=self.project.pk).update(public_title="", public_location="", public_summary="")
-        response = self.browser.get(reverse("operations:project-detail", args=[self.project.pk]))
+        self.published_post()
+        response = self.browser.get(reverse("operations:projects"))
         self.assertContains(response, "A Grand Coast project")
         self.assertNotContains(response, self.project.title)
         self.assertNotContains(response, self.project.location)
 
     def test_client_name_is_explicit_opt_in(self):
-        self.project.show_client_name = True
-        self.project.save()
-        response = self.browser.get(reverse("operations:project-detail", args=[self.project.pk]))
+        self.published_post(show_client_name=True)
+        response = self.browser.get(reverse("operations:projects"))
         self.assertContains(response, self.client_record.name)
-
-    def test_new_projects_require_public_title_but_legacy_projects_remain_editable(self):
-        project = Project(title="New internal", is_published=True)
-        with self.assertRaises(ValidationError):
-            project.full_clean()
-        project.is_published = False
-        project.full_clean()
-        Project.objects.filter(pk=self.project.pk).update(public_title="")
-        self.project.refresh_from_db()
-        self.project.full_clean()
 
     def test_media_destinations_are_independent(self):
         website = self.publication("website")
@@ -135,21 +168,33 @@ class PublishingWorkflowTests(TestCase):
         self.assertEqual(media_presentation(self.asset, "client")["title"], "Client filename")
 
     def test_saved_drafts_do_not_change_live_data_or_order(self):
-        publication = self.publication(
-            "website", title="Live title", caption="Live caption", location="Item-specific location", sort_order=1
+        post, _ = self.published_post(title="Live title", caption="Live caption")
+        self.login_owner()
+        prefix = f"post-{post.pk}"
+        response = self.browser.post(
+            reverse("operations:website-post-update", args=[post.pk]),
+            {
+                "website_project": str(self.project.pk),
+                "action": "save",
+                f"{prefix}-title": "Draft title",
+                f"{prefix}-caption": "Draft caption",
+                f"{prefix}-label": "",
+                f"{prefix}-layout": WebsiteGalleryPost.Layout.WIDE,
+                f"{prefix}-accent": WebsiteGalleryPost.Accent.NAVY,
+                f"{prefix}-sort_order": "7",
+                f"{prefix}-items_to_keep": str(self.asset.pk),
+                f"{prefix}-slide_order_{self.asset.pk}": "7",
+            },
         )
-        publish(publication)
-        self.assertEqual(media_presentation(self.asset, "website")["location"], "")
-        publication.title = "Draft title"
-        publication.caption = "Draft caption"
-        publication.sort_order = 7
-        publication.save()
-        response = self.browser.get(reverse("operations:project-detail", args=[self.project.pk]))
+        self.assertEqual(response.status_code, 302)
+        post.refresh_from_db()
+        self.assertEqual(post.published_data["title"], "Live title")
+        self.assertEqual(post.published_data["slides"][0]["sort_order"], 0)
+        self.assertEqual(post.draft_data()["title"], "Draft title")
+        self.assertEqual(post.draft_data()["slides"][0]["sort_order"], 7)
+        response = self.browser.get(reverse("operations:projects"))
         self.assertContains(response, "Live title")
         self.assertNotContains(response, "Draft title")
-        self.assertEqual(media_presentation(self.asset, "website")["sort_order"], 1)
-        publish(publication)
-        self.assertEqual(media_presentation(self.asset, "website")["title"], "Draft title")
 
     def test_client_shares_do_not_move_to_a_different_client(self):
         publish(self.publication("client"))
@@ -169,11 +214,13 @@ class PublishingWorkflowTests(TestCase):
         with self.assertRaises(ValidationError):
             publish(publication)
         publication.title = "Reviewed"
-        self.project.public_title = ""
-        self.project.save()
+        self.asset.project = None
+        self.asset.save(update_fields=["project"])
         self.asset.refresh_from_db()
         with self.assertRaises(ValidationError):
             publish(publication)
+        self.asset.project = self.project
+        self.asset.save(update_fields=["project"])
         self.project.client = None
         self.project.save()
         self.asset.refresh_from_db()
@@ -197,20 +244,18 @@ class PublishingWorkflowTests(TestCase):
     @patch("operations.views._notify_project_client")
     def test_notifications_only_on_changed_client_publish(self, notify):
         self.login_owner()
-        self.assertEqual(self.edit().status_code, 302)
+        self.assertEqual(self.edit(action="save").status_code, 302)
         notify.assert_not_called()
-        self.assertEqual(self.edit(destination="client", action="save").status_code, 302)
-        notify.assert_not_called()
-        self.assertEqual(self.edit(destination="client").status_code, 302)
+        self.assertEqual(self.edit(action="publish").status_code, 302)
         self.assertEqual(notify.call_count, 1)
-        self.edit(destination="client")
+        self.edit(action="publish")
         self.assertEqual(notify.call_count, 1)
         self.project.client = self.other_client
         self.project.save()
-        self.edit(destination="client")
+        self.edit(action="publish")
         self.assertEqual(notify.call_count, 2)
         self.assertEqual(notify.call_args.args[0].client_id, self.other_client.pk)
-        self.edit(destination="client", action="unpublish")
+        self.edit(action="unpublish")
         self.assertFalse(client_is_live(self.asset))
         self.assertEqual(notify.call_count, 2)
 
@@ -284,248 +329,230 @@ class PublishingWorkflowTests(TestCase):
         notify.assert_not_called()
 
     @patch("operations.views._notify_project_client")
-    def test_website_upload_is_website_only_draft_and_does_not_notify(self, notify):
-        self.login_owner()
-        upload = SimpleUploadedFile("website-only.png", b"\x89PNG\r\n\x1a\nimage", content_type="image/png")
-        response = self.browser.post(
-            reverse("operations:website-media-upload"),
-            {
-                "project": self.project.pk,
-                "files": [upload],
-                "publication_details": json.dumps([{
-                    "title": "Website-only photo",
-                    "caption": "",
-                    "label": "",
-                    "show_client_name": False,
-                    "sort_order": 0,
-                }]),
-            },
+    def test_project_post_reuses_client_shared_file_without_changing_client_share(self, notify):
+        self.asset.file.save(
+            "shared-original.png",
+            SimpleUploadedFile("shared-original.png", b"image bytes", content_type="image/png"),
+            save=True,
         )
-        self.assertEqual(response.status_code, 302)
-        asset = MediaAsset.objects.get(title="website-only")
-        publication = MediaPublication.objects.get(asset=asset)
-        self.assertEqual(publication.destination, "website")
-        self.assertEqual(publication.title, "Website-only photo")
-        self.assertIsNone(publication.published_at)
-        self.assertFalse(MediaPublication.objects.filter(asset=asset, destination="client").exists())
-        notify.assert_not_called()
-
-    @patch("operations.views._notify_project_client")
-    def test_website_upload_saves_reviewed_public_details_before_publishing(self, notify):
-        self.login_owner()
-        upload = SimpleUploadedFile("room-progress.png", b"\x89PNG\r\n\x1a\nimage", content_type="image/png")
-        details = [{
-            "title": "Kitchen framing",
-            "caption": "Cabinet layout is taking shape.",
-            "label": "In progress",
-            "show_client_name": True,
-            "sort_order": 4,
-        }]
-
-        response = self.browser.post(
-            reverse("operations:website-media-upload"),
-            {
-                "project": self.project.pk,
-                "files": [upload],
-                "publication_details": json.dumps(details),
-            },
+        client_publication = self.publication(
+            "client",
+            title="Client-facing file",
+            caption="Private client note",
         )
-
-        self.assertEqual(response.status_code, 302)
-        asset = MediaAsset.objects.get(title="room-progress")
-        publication = MediaPublication.objects.get(asset=asset, destination="website")
-        self.assertEqual(publication.title, "Kitchen framing")
-        self.assertEqual(publication.caption, "Cabinet layout is taking shape.")
-        self.assertEqual(publication.label, "In progress")
-        self.assertEqual(publication.location, "")
-        self.assertTrue(publication.show_client_name)
-        self.assertEqual(publication.sort_order, 4)
-        self.assertIsNone(publication.published_at)
-        notify.assert_not_called()
-
-    def test_website_upload_details_must_match_selected_files(self):
-        upload = SimpleUploadedFile("room-progress.png", b"\x89PNG\r\n\x1a\nimage", content_type="image/png")
-        form = WebsiteMediaUploadForm(
-            data={"project": self.project.pk, "publication_details": json.dumps([])},
-            files={"files": [upload]},
-            project_queryset=Project.objects.all(),
-        )
-
-        self.assertFalse(form.is_valid())
-        self.assertIn("publication_details", form.errors)
-
-    def test_website_upload_requires_reviewed_public_details(self):
-        upload = SimpleUploadedFile("room-progress.png", b"\x89PNG\r\n\x1a\nimage", content_type="image/png")
-        form = WebsiteMediaUploadForm(
-            data={"project": self.project.pk},
-            files={"files": [upload]},
-            project_queryset=Project.objects.all(),
-        )
-
-        self.assertFalse(form.is_valid())
-        self.assertIn("publication_details", form.errors)
-        self.assertIn("before uploading", form.errors["publication_details"][0])
-
-    @patch("operations.views._notify_project_client")
-    def test_website_publication_reuses_original_independently_from_client_share(self, notify):
-        client_publication = self.publication("client", title="Client filename", caption="Private client note")
         publish(client_publication)
+        website_publication = self.publication("website", title="Website draft file")
         self.login_owner()
-        prefix = f"website-{self.asset.pk}"
-        fields = {
-            f"{prefix}-title": "Public gallery title",
-            f"{prefix}-caption": "Public gallery caption",
-            f"{prefix}-label": "Before and after",
-            f"{prefix}-sort_order": "2",
-        }
+
         response = self.browser.post(
-            reverse("operations:website-media-update", args=[self.asset.pk]),
-            {**fields, "action": "save"},
+            reverse("operations:website-post-create"),
+            {
+                "website_project": str(self.project.pk),
+                "action": "save",
+                "new-post-title": "Kitchen progress",
+                "new-post-caption": "The new layout is taking shape.",
+                "new-post-label": "In progress",
+                "new-post-layout": WebsiteGalleryPost.Layout.WIDE,
+                "new-post-accent": WebsiteGalleryPost.Accent.NAVY,
+                "new-post-sort_order": "2",
+                "new-post-existing_assets": str(self.asset.pk),
+            },
         )
         self.assertEqual(response.status_code, 302)
-        website_publication = MediaPublication.objects.get(asset=self.asset, destination="website")
+        post = WebsiteGalleryPost.objects.get(project=self.project)
+        self.assertIsNone(post.published_at)
+        self.assertEqual(post.items.count(), 1)
+        website_publication.refresh_from_db()
         self.assertIsNone(website_publication.published_at)
+
+        prefix = f"post-{post.pk}"
+        response = self.browser.post(
+            reverse("operations:website-post-update", args=[post.pk]),
+            {
+                "website_project": str(self.project.pk),
+                "action": "publish",
+                f"{prefix}-title": "Kitchen progress",
+                f"{prefix}-caption": "The new layout is taking shape.",
+                f"{prefix}-label": "In progress",
+                f"{prefix}-layout": WebsiteGalleryPost.Layout.WIDE,
+                f"{prefix}-accent": WebsiteGalleryPost.Accent.NAVY,
+                f"{prefix}-sort_order": "2",
+                f"{prefix}-items_to_keep": str(self.asset.pk),
+                f"{prefix}-slide_order_{self.asset.pk}": "0",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        post.refresh_from_db()
+        website_publication.refresh_from_db()
         client_publication.refresh_from_db()
-        self.assertEqual(client_publication.title, "Client filename")
-        self.assertEqual(client_publication.caption, "Private client note")
-        notify.assert_not_called()
-
-        response = self.browser.post(
-            reverse("operations:website-media-update", args=[self.asset.pk]),
-            {**fields, "action": "publish"},
-        )
-        self.assertEqual(response.status_code, 302)
-        website_publication.refresh_from_db()
+        self.assertIsNotNone(post.published_at)
+        self.assertEqual(post.published_data["title"], "Kitchen progress")
         self.assertIsNotNone(website_publication.published_at)
-        self.assertEqual(website_publication.published_data["title"], "Public gallery title")
-        self.assertEqual(client_publication.title, "Client filename")
-        notify.assert_not_called()
-
-        response = self.browser.post(
-            reverse("operations:website-media-update", args=[self.asset.pk]),
-            {"action": "unpublish"},
-        )
-        self.assertEqual(response.status_code, 302)
-        website_publication.refresh_from_db()
-        self.assertIsNone(website_publication.published_at)
+        self.assertEqual(client_publication.title, "Client-facing file")
+        self.assertEqual(client_publication.caption, "Private client note")
         self.assertIsNotNone(client_publication.published_at)
         notify.assert_not_called()
 
-    def test_public_project_settings_live_in_project_pages_and_gallery_media_in_content_studio(self):
+    def test_publish_content_uses_project_post_workflow(self):
         self.login_owner()
-        projects_response = self.browser.get(reverse("operations:dashboard-section", args=["projects"]))
-        self.assertNotContains(projects_response, 'name="website-project-public_title"')
-        self.assertNotContains(projects_response, 'name="website-project-public_location"')
-        project_pages_response = self.browser.get(reverse("operations:dashboard-section", args=["project-pages"]))
-        self.assertContains(project_pages_response, 'name="website-project-public_title"')
-        self.assertContains(project_pages_response, 'name="website-project-public_location"')
-        self.assertContains(project_pages_response, 'name="website-project-public_summary"')
-        self.assertContains(project_pages_response, 'name="website-project-is_published"')
-        content_response = self.browser.get(reverse("operations:dashboard-section", args=["content"]))
-        self.assertContains(content_response, "Project photo galleries")
-        self.assertNotContains(content_response, 'name="website-project-public_title"')
-        self.assertNotContains(content_response, "Public city or region")
-        self.assertContains(content_response, 'name="publication_details"')
-        self.assertNotContains(content_response, "Public description")
-        self.assertNotContains(content_response, 'name="website-{}-location"'.format(self.asset.pk))
-        response = self.browser.post(
-            reverse("operations:project-website-save", args=[self.project.pk]),
-            {
-                "website-project-public_title": "Published title",
-                "website-project-public_location": "Oxnard, CA",
-                "website-project-public_summary": "A public-safe project description.",
-                "website-project-gallery_layout": "feature",
-                "website-project-gallery_accent": "blue",
-                "website-project-is_published": "on",
-                "website-project-show_client_name": "on",
-            },
-        )
-        self.assertEqual(response.status_code, 302)
-        self.assertIn(reverse("operations:dashboard-section", args=["project-pages"]), response.url)
-        self.project.refresh_from_db()
-        self.assertEqual(self.project.public_title, "Published title")
-        self.assertEqual(self.project.public_location, "Oxnard, CA")
-        self.assertEqual(self.project.gallery_layout, "feature")
-        self.assertEqual(self.project.gallery_accent, "blue")
-        self.assertTrue(self.project.is_published)
-        self.assertTrue(self.project.show_client_name)
+        response = self.browser.get(reverse("operations:dashboard-section", args=["content"]))
+        self.assertContains(response, 'data-website-post-create')
+        self.assertContains(response, 'data-website-post-save')
+        self.assertNotContains(response, 'name="publication_details"')
+        self.assertNotContains(response, 'name="website-project-public_title"')
+        self.assertNotContains(response, 'name="website-project-public_location"')
 
-    def test_invalid_public_listing_save_keeps_the_selected_project_open(self):
-        self.login_owner()
-        project = Project.objects.create(title="Second private project")
-
-        response = self.browser.post(
-            reverse("operations:project-website-save", args=[project.pk]),
-            {
-                "website-project-public_title": "",
-                "website-project-is_published": "on",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["active_section"], "project-pages")
-        self.assertEqual(response.context["selected_project"].pk, project.pk)
-        self.assertIn("public_title", response.context["website_project_form"].errors)
-
-    def test_public_projects_page_shows_published_gallery_inline_with_project_details(self):
-        self.project.show_client_name = False
-        self.project.save(update_fields=["show_client_name"])
-        publication = self.publication(
-            "website",
+    def test_public_projects_page_shows_published_post_and_hides_private_metadata(self):
+        self.published_post(
             title="Kitchen progress",
             caption="The new layout is taking shape.",
             label="In progress",
-            location="Item-specific location",
-            show_client_name=True,
         )
-        publish(publication)
-
         response = self.browser.get(reverse("operations:projects"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Coastal renovation")
-        self.assertContains(response, "Ventura County")
         self.assertContains(response, "Kitchen progress")
         self.assertContains(response, "The new layout is taking shape.")
-        self.assertNotContains(response, "Item-specific location")
+        self.assertContains(response, "In progress")
         self.assertNotContains(response, self.client_record.name)
-        self.assertNotContains(response, "View project")
-        self.assertNotContains(response, reverse("operations:project-detail", args=[self.project.pk]))
         self.assertNotContains(response, self.project.title)
         self.assertNotContains(response, self.project.location)
 
-        self.project.show_client_name = True
-        self.project.save(update_fields=["show_client_name"])
+    def test_unpublished_project_gallery_and_media_remain_private(self):
+        self.published_post(title="Private project post")
+        Project.objects.filter(pk=self.project.pk).update(is_published=False)
+        self.project.refresh_from_db()
+
+        self.assertFalse(can_view_media(AnonymousUser(), self.asset))
         response = self.browser.get(reverse("operations:projects"))
-        self.assertContains(response, self.client_record.name)
+        self.assertNotContains(response, "Private project post")
+        self.assertEqual(
+            self.browser.get(reverse("operations:media-file", args=[self.asset.pk])).status_code,
+            302,
+        )
 
-    def test_delete_requires_confirmation_and_removes_file_and_both_publications(self):
+    def test_legacy_website_media_on_unpublished_project_migrates_as_draft(self):
+        migration = importlib.import_module("operations.migrations.0035_website_gallery_posts")
+        Project.objects.filter(pk=self.project.pk).update(is_published=False)
+        publication = self.publication("website", title="Legacy website item")
+        publication.published_at = timezone.now()
+        publication.published_data = publication.draft_data()
+        publication.save()
+
+        migration.migrate_website_publications(apps, connection.schema_editor())
+
+        publication.refresh_from_db()
+        post = WebsiteGalleryPost.objects.get(project=self.project)
+        self.assertIsNone(publication.published_at)
+        self.assertEqual(publication.published_data, {})
+        self.assertIsNone(post.published_at)
+        self.assertEqual(post.published_data, {})
+
+    def test_private_media_repair_migration_clears_legacy_live_snapshots(self):
+        migration = importlib.import_module("operations.migrations.0036_unpublish_private_project_media")
+        Project.objects.filter(pk=self.project.pk).update(is_published=False)
+        publication = self.publication("website", title="Legacy website item")
+        publication.published_at = timezone.now()
+        publication.published_data = publication.draft_data()
+        publication.save()
+        post = WebsiteGalleryPost.objects.create(
+            project=self.project,
+            title="Legacy live post",
+            published_at=timezone.now(),
+            published_data={"title": "Private snapshot"},
+        )
+
+        migration.unpublish_private_project_media(apps, connection.schema_editor())
+
+        publication.refresh_from_db()
+        post.refresh_from_db()
+        self.assertIsNone(publication.published_at)
+        self.assertEqual(publication.published_data, {})
+        self.assertIsNone(post.published_at)
+        self.assertEqual(post.published_data, {})
+
+    def test_slide_keep_checkboxes_are_bound_by_asset_id(self):
+        second_asset = MediaAsset.objects.create(
+            project=self.project,
+            title="Second asset",
+            fallback_image="operations/images/project-bathroom.png",
+        )
+        now = timezone.now()
+        MediaAsset.objects.filter(pk=self.asset.pk).update(created_at=now - timedelta(days=1))
+        MediaAsset.objects.filter(pk=second_asset.pk).update(created_at=now)
+        post = WebsiteGalleryPost.objects.create(project=self.project, title="Two slides")
+        second_item = WebsiteGalleryPostItem.objects.create(post=post, asset=second_asset, sort_order=0)
+        first_item = WebsiteGalleryPostItem.objects.create(post=post, asset=self.asset, sort_order=0)
+        WebsiteGalleryPostItem.objects.filter(pk=second_item.pk).update(created_at=now - timedelta(days=1))
+        WebsiteGalleryPostItem.objects.filter(pk=first_item.pk).update(created_at=now)
         self.login_owner()
-        self.asset.file.save("original.png", SimpleUploadedFile("original.png", b"image"))
-        name = self.asset.file.path
-        publish(self.publication("website"))
-        publish(self.publication("client"))
-        url = reverse("operations:website-media-delete", args=[self.asset.pk]) + f"?website_project={self.project.pk}"
-        self.assertEqual(self.browser.get(url).status_code, 200)
-        self.browser.post(url, {})
-        self.assertTrue(Path(name).exists())
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self.browser.post(url, {"confirm": "delete"})
-            self.assertEqual(response.status_code, 302)
-            self.assertIn(f"website_project={self.project.pk}", response.url)
-        self.assertFalse(Path(name).exists())
-        self.assertFalse(MediaAsset.objects.filter(pk=self.asset.pk).exists())
-        self.assertFalse(MediaPublication.objects.exists())
 
-    def test_client_and_employee_cannot_publish_or_delete(self):
+        response = self.browser.get(
+            reverse("operations:dashboard-section", args=["content"]),
+            {"website_project": str(self.project.pk)},
+        )
+
+        row = response.context["website_post_rows"][0]
+        self.assertEqual(
+            [str(item.asset_id) for item in row.items_for_editor],
+            [str(second_asset.pk), str(self.asset.pk)],
+        )
+        for item in row.items_for_editor:
+            self.assertEqual(item.keep_checkbox.data["value"], str(item.asset_id))
+
+    def test_deleting_website_draft_keeps_original_and_client_share(self):
+        self.asset.file.save(
+            "original.png",
+            SimpleUploadedFile("original.png", b"image bytes", content_type="image/png"),
+            save=True,
+        )
+        client_publication = self.publication("client", title="Client copy")
+        publish(client_publication)
+        self.publication("website", title="Website draft")
+        post = WebsiteGalleryPost.objects.create(project=self.project, title="Draft post")
+        WebsiteGalleryPostItem.objects.create(post=post, asset=self.asset)
+        self.login_owner()
+
+        url = reverse("operations:website-post-delete", args=[post.pk])
+        self.assertEqual(self.browser.get(url).status_code, 200)
+        response = self.browser.post(url, {"action": "delete"})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(WebsiteGalleryPost.objects.filter(pk=post.pk).exists())
+        self.assertTrue(MediaAsset.objects.filter(pk=self.asset.pk).exists())
+        self.assertTrue(self.asset.file.storage.exists(self.asset.file.name))
+        client_publication.refresh_from_db()
+        self.assertIsNotNone(client_publication.published_at)
+        self.assertEqual(client_publication.title, "Client copy")
+        self.assertFalse(
+            MediaPublication.objects.filter(
+                asset=self.asset,
+                destination=MediaPublication.Destination.WEBSITE,
+            ).exists()
+        )
+
+    def test_client_and_employee_cannot_publish_or_delete_website_posts(self):
         employee = get_user_model().objects.create_user("field-publishing", is_staff=True)
         employee.groups.add(Group.objects.get_or_create(name="Field")[0])
         self.project.assigned_staff.add(employee)
+        post = WebsiteGalleryPost.objects.create(project=self.project, title="Draft post")
         for user in (self.client_user, employee):
             self.browser.force_login(user)
             self.assertEqual(self.edit().status_code, 403)
-            self.assertEqual(self.browser.post(reverse("operations:website-media-delete", args=[self.asset.pk]), {"confirm": "delete"}).status_code, 403)
-
+            self.assertEqual(
+                self.browser.post(
+                    reverse("operations:website-post-update", args=[post.pk]),
+                    {"website_project": str(self.project.pk), "action": "publish"},
+                ).status_code,
+                403,
+            )
+            self.assertEqual(
+                self.browser.post(
+                    reverse("operations:website-post-delete", args=[post.pk]),
+                    {"action": "delete"},
+                ).status_code,
+                403,
+            )
     def test_services_empty_state_and_crud_order(self):
         response = self.browser.get(reverse("operations:services"))
         self.assertNotContains(response, 'class="section service-detail-section"')

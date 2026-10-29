@@ -26,6 +26,7 @@ def migrate_website_publications(apps, schema_editor):
     for publication in publications.iterator():
         asset = publication.asset
         project = asset.project
+        is_live = bool(publication.published_at and project.is_published)
         layout = layout_map.get(project.gallery_layout, "split")
         accent = accent_map.get(project.gallery_accent, "gold")
         post = WebsiteGalleryPost.objects.using(database).create(
@@ -38,7 +39,7 @@ def migrate_website_publications(apps, schema_editor):
             layout=layout,
             accent=accent,
             sort_order=publication.sort_order,
-            published_at=publication.published_at,
+            published_at=publication.published_at if is_live else None,
         )
         WebsiteGalleryPostItem.objects.using(database).create(
             post_id=post.pk,
@@ -47,7 +48,7 @@ def migrate_website_publications(apps, schema_editor):
             is_in_draft=True,
         )
 
-        if publication.published_at:
+        if is_live:
             live_data = publication.published_data or {}
             show_client_name = bool(
                 publication.show_client_name
@@ -66,6 +67,10 @@ def migrate_website_publications(apps, schema_editor):
                 "slides": [{"asset_id": str(asset.pk), "sort_order": 0}],
             }
             post.save(update_fields=["published_data"])
+        elif publication.published_at:
+            publication.published_at = None
+            publication.published_data = {}
+            publication.save(update_fields=["published_at", "published_data"])
 
 
 def remove_migrated_posts(apps, schema_editor):

@@ -493,24 +493,6 @@ class ProjectForm(forms.ModelForm):
         return cleaned
 
 
-class ProjectGallerySettingsForm(forms.ModelForm):
-    public_title = forms.CharField(
-        required=False,
-        max_length=180,
-        label="Public project title",
-        help_text="Shown above this gallery on the public Projects page. The internal project name stays private.",
-    )
-
-    class Meta:
-        model = Project
-        fields = ["public_title", "gallery_layout", "gallery_accent"]
-        labels = {
-            "public_title": "Public project title",
-            "gallery_layout": "Gallery layout",
-            "gallery_accent": "Gallery accent",
-        }
-
-
 class ProjectCreateForm(ProjectForm):
     """Create a project from its converted client record.
 
@@ -591,62 +573,6 @@ class MediaUploadForm(forms.Form):
         project = cleaned.get("project")
         if self.require_client and project and not project.client_id:
             self.add_error("project", "Choose a project linked to a client before preparing client media.")
-        return cleaned
-
-
-class WebsiteMediaUploadForm(MediaUploadForm):
-    publication_details = forms.CharField(required=False, widget=forms.HiddenInput)
-
-    def clean(self):
-        cleaned = super().clean()
-        uploads = cleaned.get("files")
-        if not uploads:
-            return cleaned
-
-        raw_details = cleaned.get("publication_details", "")
-        if not raw_details:
-            self.add_error(
-                "publication_details",
-                "Review public details for every selected file before uploading.",
-            )
-            return cleaned
-        try:
-            details = json.loads(raw_details)
-        except (TypeError, ValueError):
-            self.add_error("publication_details", "Review the details for each selected file.")
-            return cleaned
-
-        if not isinstance(details, list) or len(details) != len(uploads):
-            self.add_error("publication_details", "Add website details for every selected file.")
-            return cleaned
-
-        title_field = forms.CharField(max_length=180)
-        caption_field = forms.CharField(required=False)
-        label_field = forms.CharField(required=False, max_length=60)
-        client_name_field = forms.BooleanField(required=False)
-        order_field = forms.IntegerField(min_value=0)
-        validated_details = []
-        errors = []
-
-        for index, (upload, item) in enumerate(zip(uploads, details)):
-            if not isinstance(item, dict):
-                errors.append(f"File {index + 1}: enter a title and review its website details.")
-                continue
-            try:
-                validated_details.append({
-                    "title": title_field.clean(item.get("title", "")),
-                    "caption": caption_field.clean(item.get("caption", "")),
-                    "label": label_field.clean(item.get("label", "")),
-                    "show_client_name": client_name_field.clean(item.get("show_client_name", False)),
-                    "sort_order": order_field.clean(item.get("sort_order", index)),
-                })
-            except ValidationError as exc:
-                errors.extend(f"File {index + 1}: {message}" for message in exc.messages)
-
-        if errors:
-            self.add_error("publication_details", errors)
-        else:
-            cleaned["publication_details_items"] = validated_details
         return cleaned
 
 

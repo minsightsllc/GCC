@@ -13,7 +13,12 @@ def publication_for(asset, destination):
 
 def website_is_live(asset):
     publication = publication_for(asset, "website")
-    return bool(publication and publication.published_at and asset.project_id)
+    return bool(
+        publication
+        and publication.published_at
+        and asset.project_id
+        and asset.project.is_published
+    )
 
 
 def client_is_live(asset):
