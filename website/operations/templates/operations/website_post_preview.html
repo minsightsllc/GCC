@@ -1,0 +1,20 @@
+{% extends "operations/base.html" %}
+{% block title %}Private post preview - {{ post.title }}{% endblock %}
+{% block body_class %}website-post-preview-page{% endblock %}
+{% block body %}
+<main class="private-post-preview container">
+    <header class="private-post-preview-heading">
+        <div>
+            <span class="section-kicker">Private preview</span>
+            <h1>Project post</h1>
+            <p>Draft preview for {{ project.title }}. This view is private and has not changed the live website.</p>
+        </div>
+        <a class="button button-outline" href="{% url 'operations:dashboard-section' section='content' %}?content_page_focus=projects&amp;website_project={{ project.pk }}#publish-page-projects">Back to Publish Content</a>
+    </header>
+    {% if post.slides %}
+        {% include "operations/public_gallery_post.html" with post=post %}
+    {% else %}
+        <div class="media-empty-state"><strong>This post has no slides yet</strong><p>Add photos or videos in Publish Content, save the draft, then preview it here.</p></div>
+    {% endif %}
+</main>
+{% endblock %}

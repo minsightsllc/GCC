@@ -1,0 +1,27 @@
+<section class="content-page-panel" id="publish-page-process" aria-labelledby="publish-process-title">
+    <header class="content-page-heading">
+        <div>
+            <span class="section-kicker">Process</span>
+            <h3 id="publish-process-title">Process steps</h3>
+            <p>Edit the step names shown on the Process page.</p>
+        </div>
+        <a class="button button-outline" href="{% url 'operations:process' %}" target="_blank" rel="noopener">Preview Process ↗</a>
+    </header>
+
+    <form class="content-page-editor" method="post" action="{% url 'operations:content-update' %}">
+        {% csrf_token %}
+        <input type="hidden" name="content_page" value="process">
+        <div class="content-process-list">
+            {% for fields in content_step_fields %}
+            <label class="content-process-step" for="{{ fields.field.id_for_label }}">
+                <span class="content-process-number">{{ forloop.counter|stringformat:'02d' }}</span>
+                <span class="content-process-label">Step {{ forloop.counter }}{{ fields.field }}{{ fields.field.errors }}</span>
+            </label>
+            {% endfor %}
+        </div>
+        <footer class="content-page-save-row">
+            <span>Changes appear on the Process page when saved.</span>
+            <button class="button button-primary" type="submit">Save Process page</button>
+        </footer>
+    </form>
+</section>

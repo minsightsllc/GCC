@@ -1,8 +1,31 @@
 {% if active_section == 'media' %}
-<section class='admin-view is-active'>
-    <div class='admin-heading-row'><div><span class='section-kicker'>Project story</span><h2>{% if team_mode %}Media reports{% else %}Media library{% endif %}</h2><p class='admin-intro'>Capture the images and videos that make progress tangible.</p></div><span class='media-security-note'>Gallery infrastructure ready for project photography.</span></div>
-    {% if team_mode or can_manage_documents %}<form class='media-upload-panel workspace-form' method='post' action='{% if team_mode %}/team/media/upload/{% else %}/dashboard/media/upload/{% endif %}' enctype='multipart/form-data'>{% csrf_token %}<div class='workspace-form-grid'>{% for field in media_upload_form %}{% if not team_mode or field.name != 'destinations' %}<label class='form-field'>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endif %}{% endfor %}{% if team_mode %}<input type='hidden' name='visibility' value='internal'><p class='detail-value'>Team reports are saved as internal until the Owner publishes them.</p>{% endif %}</div><button class='button button-primary' type='submit'>Upload media</button></form>{% endif %}
-    <form class='admin-toolbar' method='get'><label class='select-field'><span>Visibility</span><select name='media_visibility'><option value='all'>All media</option>{% for value,label in media_visibility_choices %}<option value='{{ value }}' {% if media_visibility == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label><button class='button button-quiet' type='submit'>Filter</button></form>
-    <div class='media-grid'>{% for media in media_assets %}<article class='media-item'><div class='media-preview'>{% if media.media_type == 'video' and media.file %}<video src='{{ media.display_url }}' controls preload='metadata'></video>{% else %}<img src='{{ media.display_url }}' alt='{{ media.caption|default:media.title }}'>{% endif %}<a class='media-preview-open' href='{{ media.display_url }}' target='_blank' rel='noreferrer' aria-label='Open {{ media.title }}'>&rarr;</a></div><div class='media-item-body'><strong>{{ media.title }}</strong><small>{% if media.project %}{{ media.project.title }}{% else %}Unassigned{% endif %} &middot; {{ media.get_visibility_display }}</small>{% if not team_mode or media.uploaded_by_id == request.user.id %}<form class='media-controls' method='post' action='{% if team_mode %}/team/media/{{ media.pk }}/update/{% else %}/dashboard/media/{{ media.pk }}/update/{% endif %}'>{% csrf_token %}<input type='hidden' name='project' value='{{ media.project.pk }}'><label class='form-field'>Caption<textarea name='caption' rows='2'>{{ media.caption }}</textarea></label>{% if team_mode %}<input type='hidden' name='visibility' value='internal'><small class='detail-value'>Owner controls publication visibility.</small>{% else %}<label class='form-field'>Visibility<select name='visibility'>{% for value,label in media_visibility_choices %}<option value='{{ value }}' {% if media.visibility == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>{% endif %}<button class='button button-quiet' type='submit'>Save media details</button></form>{% endif %}</div></article>{% empty %}<div class='empty-detail'>No media matches this filter. Add project photography when it is ready.</div>{% endfor %}</div>
+<section class="admin-view is-active">
+    <div class="admin-heading-row">
+        <div><span class="section-kicker">Project workspace</span><h2>Media reports</h2><p class="admin-intro">Upload project photos and videos for the team. These originals remain private until an Owner prepares a separate client share or website publication.</p></div>
+    </div>
+    {% if team_mode %}
+    <form class="media-upload-panel workspace-form" method="post" action="{% url 'operations:team-media-upload' %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="workspace-form-grid">{% for field in media_upload_form %}<label class="form-field">{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}</div>
+        <button class="button button-primary" type="submit">Upload project media</button>
+    </form>
+    {% endif %}
+    <div class="media-grid">
+        {% for media in media_assets %}
+        <article class="media-item">
+            <div class="media-preview">{% if media.media_type == 'video' and media.file %}<video src="{{ media.display_url }}" controls preload="metadata"></video>{% else %}<img src="{{ media.display_url }}" alt="{{ media.caption|default:media.title }}">{% endif %}<a class="media-preview-open" href="{{ media.display_url }}" target="_blank" rel="noreferrer" aria-label="Open {{ media.title }}">&rarr;</a></div>
+            <div class="media-item-body">
+                <strong>{{ media.title }}</strong><small>{% if media.project %}{{ media.project.title }}{% else %}Unassigned{% endif %} · Project workspace file</small>
+                {% if team_mode and media.uploaded_by_id == request.user.id %}
+                <form class="media-controls" method="post" action="{% url 'operations:team-media-update' pk=media.pk %}">
+                    {% csrf_token %}
+                    <label class="form-field">Project note<textarea name="caption" rows="2">{{ media.caption }}</textarea></label>
+                    <button class="button button-quiet" type="submit">Save note</button>
+                </form>
+                {% endif %}
+            </div>
+        </article>
+        {% empty %}<div class="empty-detail">No project media is available to this role yet.</div>{% endfor %}
+    </div>
 </section>
 {% endif %}

@@ -586,7 +586,21 @@ class WorkflowContractTests(TestCase):
         self.assertEqual(
             self.http.post(
                 reverse("operations:media-upload"),
-                {"project": project.pk, "visibility": MediaAsset.Visibility.CLIENT, "files": media_file},
+                {"project": project.pk, "files": media_file},
+            ).status_code,
+            302,
+        )
+        media = MediaAsset.objects.get(project=project, title="progress")
+        self.assertFalse(ClientNotification.objects.filter(kind="media-published", project=project).exists())
+        self.assertEqual(
+            self.http.post(
+                reverse("operations:media-update", kwargs={"pk": media.pk}),
+                {
+                    "action": "publish",
+                    f"media-{media.pk}-title": "Progress photo",
+                    f"media-{media.pk}-caption": "A progress image for your project.",
+                    f"media-{media.pk}-sort_order": "0",
+                },
             ).status_code,
             302,
         )

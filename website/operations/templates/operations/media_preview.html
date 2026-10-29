@@ -3,7 +3,23 @@
 {% block body_class %}public-site{% endblock %}
 {% block body %}
 <main class="container publication-preview">
-    <div class="admin-heading-row"><div><span class="section-kicker">Private preview</span><h1>{% if destination == 'client' %}Client sharing{% else %}Website publishing{% endif %}</h1><p>Review this draft. It has not changed the live publication.</p></div><a class="button button-outline" href="{% url 'operations:dashboard-section' section='media' %}?destination={{ destination }}&amp;media_project={{ asset.project_id }}#media-{{ asset.pk }}">Back to editor</a></div>
+    <div class="admin-heading-row">
+        <div>
+            <span class="section-kicker">Private preview</span>
+            <h1>{% if destination == 'client' %}Client Media{% else %}Projects page preview{% endif %}</h1>
+            <p>{% if destination == 'client' %}Review this draft. It has not changed the client portal.{% else %}See this draft in its project gallery. It has not changed the live website.{% endif %}</p>
+        </div>
+        {% if destination == 'client' %}<a class="button button-outline" href="{% url 'operations:dashboard-section' section='media' %}?media_project={{ asset.project_id }}#media-{{ asset.pk }}">Back to Client Media</a>{% else %}<a class="button button-outline" href="{% url 'operations:dashboard-section' section='content' %}?website_project={{ asset.project_id }}#website-media-{{ asset.pk }}">Back to Publish Content</a>{% endif %}
+    </div>
+    {% if destination == 'website' %}
+    <article class="public-project-listing publication-preview-project">
+        <header class="public-project-listing-header"><div><h2>{{ asset.project.public_title|default:"A Grand Coast project" }}</h2></div></header>
+        <div class="public-gallery-grid gallery-layout-{{ asset.project.gallery_layout }} gallery-accent-{{ asset.project.gallery_accent }}">
+            {% for media in preview_gallery %}{% include 'operations/public_media_item.html' %}{% endfor %}
+        </div>
+    </article>
+    {% else %}
     <div class="public-gallery-grid gallery-layout-{{ asset.project.gallery_layout }} gallery-accent-{{ asset.project.gallery_accent }}">{% include 'operations/public_media_item.html' %}</div>
+    {% endif %}
 </main>
 {% endblock %}

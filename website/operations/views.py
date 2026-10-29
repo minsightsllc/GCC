@@ -55,6 +55,7 @@ from .forms import (
     CalendarDayOverrideForm,
     EmployeeScheduleOverrideForm,
     EmployeeWeeklyScheduleForm,
+    ClientMediaPrepareForm,
     LeadForm,
     LeadAssignmentForm,
     LeadNoteForm,
@@ -62,11 +63,14 @@ from .forms import (
     MediaEditForm,
     MediaUploadForm,
     MediaPublicationForm,
+    WebsiteMediaUploadForm,
+    WebsiteGalleryPostForm,
     ServiceForm,
     PublicPasswordResetForm,
     ProjectCreateForm,
     ProjectDocumentForm,
     ProjectForm,
+    ProjectGallerySettingsForm,
     ProjectUpdateForm,
     ProjectUpdateDraftForm,
     PublicAuthenticationForm,
@@ -102,6 +106,8 @@ from .models import (
     LeadAttachment,
     MediaAsset,
     MediaPublication,
+    WebsiteGalleryPost,
+    WebsiteGalleryPostItem,
     Milestone,
     ProcessStep,
     Project,
@@ -125,7 +131,16 @@ from .models import (
     sanitize_uploaded_name,
 )
 from .turnstile import get_turnstile_site_key, is_mobile_owner_login, is_mobile_webview
-from .publishing import client_is_live, media_presentation, publication_for, publish, unpublish, website_is_live
+from .publishing import (
+    client_is_live,
+    media_presentation,
+    publication_for,
+    publish,
+    sync_legacy_visibility,
+    unpublish,
+    website_is_live,
+    website_post_presentation,
+)
 from .security import (
     admin_ip_block,
     admin_user_block,
@@ -534,20 +549,36 @@ def _project_image(project):
     return _asset(project.fallback_image) if project else ""
 
 
-def _public_context():
+def _public_context(*, include_project_galleries=False):
     site_settings = _site_settings()
     google_reviews = list(GoogleReview.objects.all()[:5])
     services = list(Service.objects.filter(is_active=True))
     process_steps = list(ProcessStep.objects.all())
     for service in services:
         service.display_image = reverse("operations:service-image", kwargs={"pk": service.pk}) if service.image else _asset(service.image_path)
-    projects = list(
-        Project.objects.filter(is_published=True)
-        .select_related("client")
-        .prefetch_related("media_assets")
-    )
-    for project in projects:
-        project.display_image = _project_image(project)
+    projects = []
+    if include_project_galleries:
+        website_posts = (
+            WebsiteGalleryPost.objects.filter(published_at__isnull=False)
+            .order_by("sort_order", "created_at")
+            .prefetch_related(Prefetch(
+                "items",
+                queryset=WebsiteGalleryPostItem.objects.select_related("asset").prefetch_related("asset__publications"),
+            ))
+        )
+        project_queryset = Project.objects.filter(
+            website_gallery_posts__published_at__isnull=False,
+        ).distinct().select_related("client").prefetch_related(
+            Prefetch("website_gallery_posts", queryset=website_posts)
+        )
+        projects = list(project_queryset)
+        for project in projects:
+            project.public_posts = [
+                presentation
+                for post in project.website_gallery_posts.all()
+                if (presentation := website_post_presentation(post))["slides"]
+            ]
+            project.public_posts.sort(key=lambda item: item["sort_order"])
     featured_project = site_settings.featured_project
     public_featured_project = featured_project if featured_project and featured_project.is_published else None
     return {
@@ -578,7 +609,7 @@ def _public_dashboard_url(user):
 def public_page(request, page="home"):
     if page not in PUBLIC_PAGES:
         page = "home"
-    context = _public_context()
+    context = _public_context(include_project_galleries=page == "projects")
     context["page"] = page
     context["public_dashboard_url"] = _public_dashboard_url(request.user)
     context["contact_form"] = ContactLeadForm(request=request)
@@ -965,6 +996,12 @@ def _dashboard_redirect(section, **params):
     return redirect(f"{url}?{urlencode(clean_params)}" if clean_params else url)
 
 
+def _content_page_redirect(page, **params):
+    response = _dashboard_redirect("content", **params)
+    response["Location"] += f"#publish-page-{page}"
+    return response
+
+
 def _active_lead_or_404(pk):
     return get_object_or_404(Lead, pk=pk, deleted_at__isnull=True)
 
@@ -984,9 +1021,9 @@ def _content_form(instance, services, process_steps, data=None):
         initial[f"step_{step.key}"] = step.title
     if data is not None:
         data = data.copy()
-        for field in ("services_title", "services_intro", "services_note"):
+        for field, value in initial.items():
             if field not in data:
-                data[field] = initial[field]
+                data[field] = value
     return ContentStudioForm(data=data, initial=initial, services=services, process_steps=process_steps)
 
 
@@ -1088,6 +1125,11 @@ def _dashboard_context(request, section, form_overrides=None):
         media.display_url = reverse("operations:media-file", kwargs={"pk": media.pk})
 
     media_context = _media_library_context(request, form_overrides=form_overrides) if section == "media" else {}
+    website_publishing_context = (
+        _website_publishing_context(request, projects, form_overrides=form_overrides)
+        if section == "content"
+        else {}
+    )
 
     if selected_lead:
         selected_lead.estimate = selected_lead.estimates.order_by("-created_at").first()
@@ -1262,6 +1304,9 @@ def _dashboard_context(request, section, form_overrides=None):
         "service_rows": service_rows,
         "service_create_form": form_overrides.get("service_create_form", ServiceForm(prefix="new-service")),
         "content_step_fields": content_step_fields,
+        "content_page_focus": request.GET.get("content_page_focus", "")
+        if request.GET.get("content_page_focus") in {"home", "services", "projects", "process", "contact"}
+        else "",
         "site_settings": site_settings,
         "google_review_cache": google_review_cache,
         "google_places_configured": bool(
@@ -1274,6 +1319,7 @@ def _dashboard_context(request, section, form_overrides=None):
         "last_invite_recipient": request.session.pop("last_invite_recipient", ""),
         **dashboard_forms,
         **media_context,
+        **website_publishing_context,
     }
 
 
@@ -1281,6 +1327,8 @@ def _dashboard_context(request, section, form_overrides=None):
 def dashboard(request, section="overview"):
     if section not in DASHBOARD_SECTIONS:
         section = "overview"
+    if section == "media" and not _can_access_dashboard(request.user):
+        raise PermissionDenied
     if section == "content" and not _can_manage_content(request.user):
         raise PermissionDenied
     if section in {"clients", "tasks", "calendar", "time", "documents", "team", "notifications"}:
@@ -4434,10 +4482,6 @@ def project_update(request, pk):
         if field_name not in form_data:
             value = getattr(project, field_name)
             form_data[field_name] = str(value or "")
-    if "is_published" not in form_data:
-        # An unchecked checkbox is intentionally absent from POST data. The
-        # owner must be able to take a published project off the public site.
-        form_data["is_published"] = ""
     if "assigned_staff" not in form_data:
         # An empty multi-select is intentionally absent from POST data too;
         # treat it as clearing assignments rather than preserving stale ones.
@@ -4714,69 +4758,154 @@ def project_create_invite(request, pk):
 
 def _media_library_context(request, *, form_overrides=None):
     form_overrides = form_overrides or {}
-    destination = request.GET.get("destination", "client")
-    if destination not in MediaPublication.Destination.values:
-        destination = "client"
     project_filter = request.GET.get("media_project", "all")
     state = request.GET.get("state", "all")
-    assets = MediaAsset.objects.select_related("project__client").prefetch_related("publications")
+    assets = (
+        MediaAsset.objects.select_related("project__client")
+        .prefetch_related("publications")
+        .filter(publications__destination=MediaPublication.Destination.CLIENT)
+        .distinct()
+    )
     if project_filter != "all":
         try:
             assets = assets.filter(project_id=uuid.UUID(project_filter))
         except (ValueError, TypeError):
             project_filter = "all"
-    published = MediaPublication.objects.filter(destination=destination, published_at__isnull=False)
-    if destination == "client":
-        published = published.filter(shared_client__isnull=False, shared_client=F("asset__project__client"))
-    else:
-        published = published.filter(asset__project__is_published=True)
-    published_ids = published.values("asset_id")
+    currently_shared = MediaPublication.objects.filter(
+        destination=MediaPublication.Destination.CLIENT,
+        published_at__isnull=False,
+        shared_client__isnull=False,
+        shared_client=F("asset__project__client"),
+    )
+    currently_shared_ids = currently_shared.values("asset_id")
     if state == "published":
-        assets = assets.filter(pk__in=published_ids)
+        assets = assets.filter(pk__in=currently_shared_ids)
     elif state == "draft":
-        assets = assets.exclude(pk__in=published_ids)
+        assets = assets.exclude(pk__in=currently_shared_ids)
     else:
         state = "all"
     page = Paginator(assets, 12).get_page(request.GET.get("page"))
     rows = []
     for asset in page:
-        publication = publication_for(asset, destination) or MediaPublication(
-            asset=asset, destination=destination,
-            title=asset.title if destination == "client" else "",
-            caption=asset.caption if destination == "client" else "",
-        )
+        publication = publication_for(asset, MediaPublication.Destination.CLIENT)
         form = MediaPublicationForm(instance=publication, prefix=f"media-{asset.pk}")
         if str(asset.pk) == str(form_overrides.get("media_error_id")):
             form = form_overrides["media_publication_form"]
-        website_publish_blocker = ""
-        if destination == "website":
-            if not asset.project_id:
-                website_publish_blocker = "Assign this file to a project before publishing it to the website."
-            elif not asset.project.is_published:
-                website_publish_blocker = "Publish the project page in Projects before publishing its media."
-            elif not asset.project.public_title.strip() and not publication.published_at:
-                website_publish_blocker = (
-                    "Add a public project title in Projects before publishing new media. The title on this form only names the photo or video."
-                )
         rows.append({"asset": asset, "publication": publication, "form": form,
-                     "is_live": client_is_live(asset) if destination == "client" else website_is_live(asset),
-                     "website_publish_blocker": website_publish_blocker,
+                     "is_live": client_is_live(asset),
                      "display_url": reverse("operations:media-file", kwargs={"pk": asset.pk})})
+    client_projects = Project.objects.filter(client__isnull=False).order_by("title")
+    prepare_form = form_overrides.get("client_media_prepare_form") or ClientMediaPrepareForm()
     return {
-        "media_rows": rows, "media_page": page, "media_destination": destination,
+        "media_rows": rows, "media_page": page, "media_destination": "client",
         "media_state": state, "media_project": project_filter,
+        "client_sharing_projects": client_projects,
         "media_upload_form": form_overrides.get("media_upload_form") or MediaUploadForm(
-            project_queryset=Project.objects.all(),
-            initial={"destinations": [destination], "project": project_filter if project_filter != "all" else None},
+            project_queryset=client_projects,
+            require_client=True,
+            initial={"project": project_filter if project_filter != "all" else None},
         ),
+        "client_media_prepare_form": prepare_form,
+        "client_media_prepare_available": prepare_form.fields["asset"].queryset.exists(),
     }
 
 
-def _media_error(request, form, asset=None):
-    overrides = {"media_publication_form": form, "media_error_id": asset.pk} if asset else {"media_upload_form": form}
+def _website_publishing_context(request, projects, *, form_overrides=None):
+    form_overrides = form_overrides or {}
+    website_projects = sorted(projects, key=lambda item: item.title.casefold())
+    selected_project = None
+    requested_project = request.GET.get("website_project")
+    if requested_project:
+        selected_project = next((project for project in website_projects if str(project.pk) == requested_project), None)
+    if selected_project is None and website_projects:
+        selected_project = website_projects[0]
+
+    state = request.GET.get("website_state", "all")
+    if state not in {"all", "draft", "published"}:
+        state = "all"
+
+    rows = []
+    if selected_project:
+        posts = list(
+            WebsiteGalleryPost.objects.filter(project=selected_project)
+            .prefetch_related(Prefetch(
+                "items",
+                queryset=WebsiteGalleryPostItem.objects.select_related("asset").prefetch_related("asset__publications"),
+            ))
+            .order_by("sort_order", "created_at")
+        )
+        for post in posts:
+            post.is_live = bool(post.published_at)
+            post.has_draft_changes = post.has_unpublished_changes
+            post.live_asset_ids = {
+                str(slide.get("asset_id"))
+                for slide in (post.published_data or {}).get("slides", [])
+                if slide.get("asset_id")
+            }
+            if state == "draft" and post.is_live and not post.has_draft_changes:
+                continue
+            if state == "published" and not post.is_live:
+                continue
+            for item in post.items.all():
+                item.display_url = reverse("operations:media-file", kwargs={"pk": item.asset_id})
+            post.form = WebsiteGalleryPostForm(
+                instance=post,
+                project=selected_project,
+                prefix=f"post-{post.pk}",
+            )
+            if str(post.pk) == str(form_overrides.get("website_post_error_id")):
+                post.form = form_overrides["website_post_form"]
+            post.items_for_editor = list(post.items.all())
+            post.draft_slide_count = sum(1 for item in post.items_for_editor if item.is_in_draft)
+            keep_field = post.form["items_to_keep"]
+            for index, item in enumerate(post.items_for_editor):
+                item.is_in_live = str(item.asset_id) in post.live_asset_ids
+                item.keep_checkbox = keep_field[index]
+                item.order_field = post.form[f"slide_order_{item.asset_id}"]
+            post.preview = website_post_presentation(post, preview=True)
+            rows.append(post)
+
+    page = Paginator(rows, 10).get_page(request.GET.get("website_page"))
+    page_rows = list(page)
+    create_form = form_overrides.get("website_post_create_form") or WebsiteGalleryPostForm(
+        project=selected_project,
+        initial={"sort_order": len(rows)},
+        prefix="new-post",
+    )
+    return {
+        "website_projects": website_projects,
+        "website_project": selected_project,
+        "website_post_create_form": create_form,
+        "website_post_rows": page_rows,
+        "website_post_page": page,
+        "website_post_state": state,
+    }
+
+
+def _media_error(request, form, asset=None, *, destination, gallery_settings_form=None):
+    if destination == MediaPublication.Destination.CLIENT:
+        overrides = {"media_publication_form": form, "media_error_id": asset.pk} if asset else {"media_upload_form": form}
+        return _render_dashboard_form_error(
+            request,
+            "media",
+            overrides,
+            selections={"media_project": asset.project_id if asset else request.POST.get("project")},
+        )
+    overrides = {"website_media_publication_form": form, "website_media_error_id": asset.pk} if asset else {"website_media_upload_form": form}
+    if asset and gallery_settings_form is not None:
+        overrides["website_gallery_settings_form"] = gallery_settings_form
+        overrides["website_gallery_settings_error_id"] = asset.pk
+    overrides["content_page_error"] = "projects"
     return _render_dashboard_form_error(
-        request, "media", overrides,
-        selections={"destination": request.POST.get("destination", "client"), "media_project": asset.project_id if asset else request.POST.get("project")},
+        request,
+        "content",
+        overrides,
+        selections={
+            "website_project": asset.project_id if asset else request.POST.get("project"),
+            "website_state": request.POST.get("website_state", "all"),
+            "website_page": request.POST.get("website_page", "1"),
+            "content_page_focus": "projects",
+        },
     )
 
 
@@ -4788,7 +4917,14 @@ def media_upload(request):
     if not team_mode and not _can_access_dashboard(request.user):
         raise PermissionDenied
     project_queryset = _visible_projects_for_user(request.user)
-    form = MediaUploadForm(request.POST, request.FILES, project_queryset=project_queryset)
+    if not team_mode:
+        project_queryset = project_queryset.filter(client__isnull=False)
+    form = MediaUploadForm(
+        request.POST,
+        request.FILES,
+        project_queryset=project_queryset,
+        require_client=not team_mode,
+    )
     if form.is_valid():
         project = form.cleaned_data["project"]
         created = []
@@ -4804,17 +4940,20 @@ def media_upload(request):
             )
             created.append(asset)
             if not team_mode:
-                for destination in form.cleaned_data["destinations"]:
-                    MediaPublication.objects.create(
-                        asset=asset, destination=destination,
-                        title=asset.title if destination == "client" else "",
-                    )
+                MediaPublication.objects.create(
+                    asset=asset,
+                    destination=MediaPublication.Destination.CLIENT,
+                    title=asset.title,
+                )
         record_activity("Project media uploaded", f"{len(created)} file(s) · {project.title}", actor=request.user, project=project)
-        messages.success(request, f"{len(created)} file(s) uploaded as drafts. Review each file before sharing or publishing.")
-        return _workspace_redirect(request, "media", media_project=project.pk, destination=request.POST.get("destination", "client"))
+        if team_mode:
+            messages.success(request, f"{len(created)} file(s) uploaded to the project workspace.")
+            return _workspace_redirect(request, "media", media_project=project.pk)
+        messages.success(request, f"{len(created)} file(s) uploaded as client media drafts.")
+        return _dashboard_redirect("media", media_project=project.pk)
     messages.error(request, "Please choose a project and valid media files.")
     if not team_mode:
-        return _media_error(request, form)
+        return _media_error(request, form, destination=MediaPublication.Destination.CLIENT)
     return _render_workspace_form_error(
         request,
         "media",
@@ -4832,18 +4971,18 @@ def media_edit(request, pk):
         raise PermissionDenied
     asset = get_object_or_404(MediaAsset.objects.select_for_update().select_related("project__client"), pk=pk)
     if not team_mode:
-        return _edit_media_publication(request, asset)
+        return _edit_media_publication(request, asset, MediaPublication.Destination.CLIENT)
     project_queryset = _visible_projects_for_user(request.user)
     if team_mode and (
         not asset.project_id
         or not project_queryset.filter(pk=asset.project_id).exists()
     ):
         raise PermissionDenied
-    form = MediaEditForm(request.POST, instance=asset, project_queryset=project_queryset)
+    form = MediaEditForm(request.POST, instance=asset)
     if form.is_valid():
         asset.caption = form.cleaned_data["caption"]
         asset.save(update_fields=["caption", "updated_at"])
-        record_activity("Media details updated", f"{asset.title} · {asset.get_visibility_display()}", actor=request.user, project=asset.project)
+        record_activity("Project media note updated", asset.title, actor=request.user, project=asset.project)
         messages.success(request, "Media details saved.")
     else:
         messages.error(request, "Please correct the media details and try again.")
@@ -4856,21 +4995,53 @@ def media_edit(request, pk):
     return _workspace_redirect(request, "media", media_project=asset.project_id)
 
 
-def _edit_media_publication(request, asset):
-    destination = request.POST.get("destination")
-    if destination not in MediaPublication.Destination.values:
-        raise Http404
-    publication = asset.publications.filter(destination=destination).first() or MediaPublication(asset=asset, destination=destination)
+def _edit_media_publication(request, asset, destination):
+    publication = get_object_or_404(
+        MediaPublication.objects.select_for_update(),
+        asset=asset,
+        destination=destination,
+    )
     action = request.POST.get("action", "save")
     if action == "unpublish":
         unpublish(publication)
         record_activity("Media unpublished", destination, actor=request.user, project=asset.project)
         messages.success(request, "Removed from this destination. The original file and draft are retained.")
     elif action in {"save", "publish", "preview"}:
-        form = MediaPublicationForm(request.POST, instance=publication, prefix=f"media-{asset.pk}")
-        if not form.is_valid():
-            return _media_error(request, form, asset)
+        prefix = "media" if destination == MediaPublication.Destination.CLIENT else "website"
+        form = MediaPublicationForm(request.POST, instance=publication, prefix=f"{prefix}-{asset.pk}")
+        gallery_settings_form = None
+        gallery_project = None
+        if destination == MediaPublication.Destination.WEBSITE:
+            if not asset.project_id:
+                raise Http404
+            gallery_project = Project.objects.select_for_update().get(pk=asset.project_id)
+            gallery_settings_form = ProjectGallerySettingsForm(
+                request.POST,
+                instance=gallery_project,
+                prefix=f"project-gallery-{asset.pk}",
+            )
+        publication_valid = form.is_valid()
+        gallery_settings_valid = (
+            gallery_settings_form.is_valid()
+            if gallery_settings_form is not None
+            else True
+        )
+        if not publication_valid or not gallery_settings_valid:
+            return _media_error(
+                request,
+                form,
+                asset,
+                destination=destination,
+                gallery_settings_form=gallery_settings_form,
+            )
+        gallery_settings_changed = bool(
+            gallery_settings_form and gallery_settings_form.has_changed()
+        )
         publication = form.save(commit=False)
+        if gallery_settings_form is not None:
+            gallery_project = gallery_settings_form.save(commit=False)
+            asset.project = gallery_project
+            publication.asset = asset
         if action == "publish":
             try:
                 changed = publish(publication)
@@ -4880,22 +5051,667 @@ def _edit_media_publication(request, asset):
                         form.add_error(name if name in form.fields else None, errors)
                 else:
                     form.add_error(None, exc)
-                return _media_error(request, form, asset)
+                return _media_error(
+                    request,
+                    form,
+                    asset,
+                    destination=destination,
+                    gallery_settings_form=gallery_settings_form,
+                )
+            if gallery_settings_form is not None:
+                gallery_settings_form.save()
+                if gallery_settings_changed:
+                    record_activity(
+                        "Project gallery settings updated",
+                        gallery_project.title,
+                        actor=request.user,
+                        project=gallery_project,
+                    )
             if changed:
-                record_activity("Media shared with client" if destination == "client" else "Media published to website", publication.title, actor=request.user, project=asset.project)
-                if destination == "client":
+                if destination == MediaPublication.Destination.CLIENT:
+                    record_activity("Media shared with client", publication.title, actor=request.user, project=asset.project)
                     _notify_project_client(asset.project, kind="media-published", title="New project media is available",
                         body=f"{publication.title} was shared in your client portal.", created_by=request.user,
                         metadata={"media_id": str(asset.pk)})
-            messages.success(request, "Shared with the client." if destination == "client" else "Published to the website.")
+                else:
+                    record_activity("Media published to website", publication.title, actor=request.user, project=asset.project)
+            messages.success(request, "Shared with the client." if destination == MediaPublication.Destination.CLIENT else "Published to the website.")
         else:
             publication.save()
+            if gallery_settings_form is not None:
+                gallery_settings_form.save()
+                if gallery_settings_changed:
+                    record_activity(
+                        "Project gallery settings updated",
+                        gallery_project.title,
+                        actor=request.user,
+                        project=gallery_project,
+                    )
             if action == "preview":
                 return redirect(f"{reverse('operations:media-preview', kwargs={'pk': asset.pk})}?{urlencode({'destination': destination})}")
-            messages.success(request, "Draft saved. Published content has not changed.")
+            messages.success(
+                request,
+                "Draft and project gallery settings saved. Published content has not changed."
+                if gallery_settings_form is not None
+                else "Draft saved. Published content has not changed.",
+            )
     else:
         raise Http404
-    return _dashboard_redirect("media", destination=destination, media_project=asset.project_id)
+    if destination == MediaPublication.Destination.CLIENT:
+        return _dashboard_redirect("media", media_project=asset.project_id)
+    return _content_page_redirect(
+        "projects",
+        website_project=asset.project_id,
+        website_state=request.POST.get("website_state", "all"),
+        website_page=request.POST.get("website_page", "1"),
+    )
+
+
+@require_POST
+@staff_required
+@transaction.atomic
+def client_media_prepare(request):
+    if not _can_access_dashboard(request.user):
+        raise PermissionDenied
+    form = ClientMediaPrepareForm(request.POST)
+    if form.is_valid():
+        asset = form.cleaned_data["asset"]
+        MediaPublication.objects.create(
+            asset=asset,
+            destination=MediaPublication.Destination.CLIENT,
+            title=asset.title,
+            caption=asset.caption,
+        )
+        record_activity("Client media draft prepared", asset.title, actor=request.user, project=asset.project)
+        messages.success(request, "Existing project media is ready for client media review.")
+        return _dashboard_redirect("media", media_project=asset.project_id)
+    messages.error(request, "Choose an eligible project file to prepare for client media.")
+    return _render_dashboard_form_error(request, "media", {"client_media_prepare_form": form})
+
+
+def _website_post_form_error(request, form, *, project, post=None):
+    selection = {
+        "website_project": project.pk if project else request.POST.get("website_project"),
+        "website_state": request.POST.get("website_state", "all"),
+        "website_page": request.POST.get("website_page", "1"),
+        "content_page_focus": "projects",
+    }
+    if post:
+        overrides = {
+            "website_post_form": form,
+            "website_post_error_id": str(post.pk),
+        }
+    else:
+        overrides = {"website_post_create_form": form}
+    response = _render_dashboard_form_error(
+        request,
+        "content",
+        overrides,
+        selections=selection,
+    )
+    response.status_code = 422
+    return response
+
+
+def _remove_unpublished_website_publications(asset_ids):
+    asset_ids = set(asset_ids)
+    if not asset_ids:
+        return
+    publications = list(
+        MediaPublication.objects.select_for_update().filter(
+            asset_id__in=asset_ids,
+            destination=MediaPublication.Destination.WEBSITE,
+            published_at__isnull=True,
+        )
+    )
+    if not publications:
+        return
+    MediaPublication.objects.filter(
+        pk__in=[publication.pk for publication in publications]
+    ).delete()
+    assets = MediaAsset.objects.select_for_update().filter(pk__in=asset_ids)
+    for asset in assets:
+        sync_legacy_visibility(asset)
+
+
+def _remove_website_asset_from_publishing(request, project, asset_id, *, state, page):
+    try:
+        asset_id = uuid.UUID(asset_id)
+    except (ValueError, TypeError, AttributeError):
+        raise Http404 from None
+    asset = get_object_or_404(
+        MediaAsset.objects.select_for_update(),
+        pk=asset_id,
+        project=project,
+    )
+    if WebsiteGalleryPostItem.objects.filter(asset=asset).exists():
+        messages.error(request, "Remove this file from its project post before removing it from the website file list.")
+        return _content_page_redirect(
+            "projects",
+            website_project=project.pk,
+            website_state=state,
+            website_page=page,
+            content_page_focus="projects",
+        )
+
+    publication = MediaPublication.objects.select_for_update().filter(
+        asset=asset,
+        destination=MediaPublication.Destination.WEBSITE,
+    ).first()
+    if not publication:
+        raise Http404
+    if publication.published_at:
+        unpublish(publication)
+    publication.delete()
+    sync_legacy_visibility(asset)
+    record_activity(
+        "File removed from Publish Content",
+        asset.title,
+        actor=request.user,
+        project=project,
+    )
+    messages.success(
+        request,
+        "Removed from Publish Content. The original file and any Client Media share remain unchanged.",
+    )
+
+    return _content_page_redirect(
+        "projects",
+        website_project=project.pk,
+        website_state=state,
+        website_page=page,
+        content_page_focus="projects",
+    )
+
+
+def _save_website_gallery_post(request, *, post=None):
+    if not _can_manage_content(request.user):
+        raise PermissionDenied
+
+    is_new_post = post is None
+    action = request.POST.get("action", "save")
+    if action not in {"save", "publish", "unpublish"}:
+        raise Http404
+    if is_new_post:
+        try:
+            project_id = uuid.UUID(request.POST.get("website_project", ""))
+        except (ValueError, TypeError, AttributeError):
+            raise Http404 from None
+        project = get_object_or_404(Project.objects.select_for_update().select_related("client"), pk=project_id)
+        post = WebsiteGalleryPost(project=project)
+    else:
+        post = get_object_or_404(
+            WebsiteGalleryPost.objects.select_for_update().select_related("project__client"),
+            pk=post.pk,
+        )
+        if str(request.POST.get("website_project", "")) != str(post.project_id):
+            raise PermissionDenied
+        project = Project.objects.select_for_update().select_related("client").get(pk=post.project_id)
+
+    remove_asset_id = request.POST.get("website_asset_remove")
+    if remove_asset_id:
+        state = request.POST.get("website_state", "all")
+        if state not in {"all", "draft", "published"}:
+            state = "all"
+        return _remove_website_asset_from_publishing(
+            request,
+            project,
+            remove_asset_id,
+            state=state,
+            page=request.POST.get("website_page", "1"),
+        )
+
+    form = WebsiteGalleryPostForm(
+        request.POST,
+        request.FILES,
+        instance=post,
+        project=project,
+        prefix="new-post" if is_new_post else f"post-{post.pk}",
+    )
+    if not form.is_valid():
+        return _website_post_form_error(request, form, project=project, post=None if is_new_post else post)
+
+    existing_assets = list(form.cleaned_data["existing_assets"])
+    selected_asset_ids = {asset.pk for asset in existing_assets}
+    current_items = []
+    retained_ids = set()
+    if not is_new_post:
+        current_items = list(
+            WebsiteGalleryPostItem.objects.select_for_update()
+            .filter(post=post)
+            .select_related("asset")
+        )
+        retained_ids = {asset.pk for asset in form.cleaned_data["items_to_keep"]}
+
+    if existing_assets:
+        locked_assets = list(
+            MediaAsset.objects.select_for_update()
+            .filter(pk__in=selected_asset_ids, project=project)
+            .order_by("pk")
+        )
+        linked_asset_ids = set(
+            WebsiteGalleryPostItem.objects.filter(asset_id__in=selected_asset_ids)
+            .exclude(post=post)
+            .values_list("asset_id", flat=True)
+        )
+        if len(locked_assets) != len(selected_asset_ids) or linked_asset_ids:
+            form.add_error(
+                "existing_assets",
+                "One or more selected files were added to another post. Reload the gallery and choose them again.",
+            )
+            return _website_post_form_error(request, form, project=project, post=None if is_new_post else post)
+
+    removed_item_ids = {item.asset_id for item in current_items if item.asset_id not in retained_ids}
+    for item in current_items:
+        keep = item.asset_id in retained_ids
+        item.is_in_draft = keep
+        if keep:
+            submitted_order = form.cleaned_data.get(f"slide_order_{item.asset_id}")
+            if submitted_order is not None:
+                item.sort_order = submitted_order
+        item.save(update_fields=["is_in_draft", "sort_order"])
+
+    previous_live_ids = {
+        str(slide.get("asset_id"))
+        for slide in (post.published_data or {}).get("slides", [])
+        if slide.get("asset_id")
+    }
+    post = form.save(commit=False)
+    post.project = project
+    post.save()
+
+    if post.pk:
+        current_order = max(
+            WebsiteGalleryPostItem.objects.filter(post=post).values_list("sort_order", flat=True),
+            default=-1,
+        ) + 1
+    else:
+        current_order = 0
+
+    ordered_existing = []
+    submitted_existing_ids = request.POST.getlist(form.add_prefix("existing_assets"))
+    by_id = {str(asset.pk): asset for asset in existing_assets}
+    for asset_id in submitted_existing_ids:
+        if asset_id in by_id and by_id[asset_id] not in ordered_existing:
+            ordered_existing.append(by_id[asset_id])
+    ordered_existing.extend(asset for asset in existing_assets if asset not in ordered_existing)
+    for asset in ordered_existing:
+        WebsiteGalleryPostItem.objects.create(
+            post=post,
+            asset=asset,
+            sort_order=current_order,
+            is_in_draft=True,
+        )
+        current_order += 1
+
+    for upload in form.cleaned_data["files"]:
+        filename = upload.name.replace("\\", "/").rsplit("/", 1)[-1]
+        title = filename.rsplit(".", 1)[0][:180] or "Project media"
+        media_type = (
+            MediaAsset.MediaType.VIDEO
+            if filename.lower().endswith((".mp4", ".mov", ".webm"))
+            else MediaAsset.MediaType.PHOTO
+        )
+        asset = MediaAsset.objects.create(
+            project=project,
+            title=title,
+            file=upload,
+            media_type=media_type,
+            visibility=MediaAsset.Visibility.INTERNAL,
+            uploaded_by=request.user,
+        )
+        WebsiteGalleryPostItem.objects.create(
+            post=post,
+            asset=asset,
+            sort_order=current_order,
+            is_in_draft=True,
+        )
+        MediaPublication.objects.get_or_create(
+            asset=asset,
+            destination=MediaPublication.Destination.WEBSITE,
+            defaults={"title": asset.title},
+        )
+        current_order += 1
+
+    active_items = list(
+        WebsiteGalleryPostItem.objects.filter(post=post, is_in_draft=True)
+        .select_related("asset")
+        .order_by("sort_order", "created_at", "pk")
+    )
+    if action == "publish" and not active_items:
+        form.add_error("items_to_keep", "Add at least one photo or video before publishing this post.")
+        return _website_post_form_error(request, form, project=project, post=None if is_new_post else post)
+
+    if action == "publish":
+        active_ids = {str(item.asset_id) for item in active_items}
+        try:
+            with transaction.atomic():
+                for item in active_items:
+                    publication, _ = MediaPublication.objects.select_for_update().get_or_create(
+                        asset=item.asset,
+                        destination=MediaPublication.Destination.WEBSITE,
+                        defaults={"title": item.asset.title},
+                    )
+                    if not publication.title.strip():
+                        publication.title = item.asset.title or post.title
+                    publish(publication)
+                for asset_id in previous_live_ids - active_ids:
+                    publication = MediaPublication.objects.select_for_update().filter(
+                        asset_id=asset_id,
+                        destination=MediaPublication.Destination.WEBSITE,
+                    ).first()
+                    if publication and publication.published_at:
+                        unpublish(publication)
+        except ValidationError as exc:
+            form.add_error(None, exc)
+            return _website_post_form_error(request, form, project=project, post=post)
+
+        post.published_data = post.draft_data()
+        post.published_at = timezone.now()
+        post.save(update_fields=["published_data", "published_at", "updated_at"])
+        WebsiteGalleryPostItem.objects.filter(post=post, is_in_draft=False).delete()
+        _remove_unpublished_website_publications(removed_item_ids | {
+            asset_id for asset_id in previous_live_ids - active_ids
+        })
+        record_activity(
+            "Project gallery post published",
+            post.title,
+            actor=request.user,
+            project=project,
+        )
+        messages.success(request, "Project post published with its photos and videos.")
+    elif action == "unpublish":
+        for asset_id in previous_live_ids:
+            publication = MediaPublication.objects.select_for_update().filter(
+                asset_id=asset_id,
+                destination=MediaPublication.Destination.WEBSITE,
+            ).first()
+            if publication and publication.published_at:
+                unpublish(publication)
+        post.published_at = None
+        post.published_data = {}
+        post.save(update_fields=["published_data", "published_at", "updated_at"])
+        WebsiteGalleryPostItem.objects.filter(post=post, is_in_draft=False).delete()
+        _remove_unpublished_website_publications(removed_item_ids)
+        record_activity(
+            "Project gallery post unpublished",
+            post.title,
+            actor=request.user,
+            project=project,
+        )
+        messages.success(request, "Post unpublished. Its original photos and videos are retained.")
+    else:
+        if not post.published_at:
+            # An excluded slide in an unpublished post is no longer part of that
+            # post. Keep its original MediaAsset available for reuse elsewhere.
+            WebsiteGalleryPostItem.objects.filter(post=post, is_in_draft=False).delete()
+            _remove_unpublished_website_publications(removed_item_ids)
+        record_activity(
+            "Project gallery post draft saved",
+            post.title,
+            actor=request.user,
+            project=project,
+        )
+        messages.success(request, "Post draft saved. The live post is unchanged.")
+
+    state = request.POST.get("website_state", "all")
+    if state not in {"all", "draft", "published"}:
+        state = "all"
+    return _content_page_redirect(
+        "projects",
+        website_project=project.pk,
+        website_state=state,
+        website_page=request.POST.get("website_page", "1"),
+        content_page_focus="projects",
+    )
+
+
+@require_POST
+@staff_required
+@transaction.atomic
+def website_gallery_post_create(request):
+    return _save_website_gallery_post(request)
+
+
+@require_POST
+@staff_required
+@transaction.atomic
+def website_gallery_post_update(request, pk):
+    post = get_object_or_404(WebsiteGalleryPost, pk=pk)
+    return _save_website_gallery_post(request, post=post)
+
+
+@require_http_methods(["GET", "POST"])
+@staff_required
+@transaction.atomic
+def website_gallery_post_delete(request, pk):
+    if not _can_manage_content(request.user):
+        raise PermissionDenied
+
+    post = get_object_or_404(
+        WebsiteGalleryPost.objects.select_for_update().select_related("project"),
+        pk=pk,
+    )
+    if post.published_at:
+        messages.error(request, "Unpublish this post before deleting its draft.")
+        return _content_page_redirect(
+            "projects",
+            website_project=post.project_id,
+            website_state=request.POST.get("website_state", request.GET.get("website_state", "all")),
+            website_page=request.POST.get("website_page", request.GET.get("website_page", "1")),
+            content_page_focus="projects",
+        )
+
+    if request.method == "GET":
+        return render(
+            request,
+            "operations/website_post_delete_confirm.html",
+            {"post": post},
+        )
+    if request.POST.get("action") != "delete":
+        raise Http404
+
+    asset_ids = list(
+        WebsiteGalleryPostItem.objects.filter(post=post)
+        .order_by("asset_id")
+        .values_list("asset_id", flat=True)
+    )
+    assets = list(
+        MediaAsset.objects.select_for_update().filter(pk__in=asset_ids).order_by("pk")
+    )
+    website_publications = list(
+        MediaPublication.objects.select_for_update()
+        .filter(
+            asset_id__in=asset_ids,
+            destination=MediaPublication.Destination.WEBSITE,
+            published_at__isnull=True,
+        )
+        .order_by("pk")
+    )
+    if website_publications:
+        MediaPublication.objects.filter(
+            pk__in=[publication.pk for publication in website_publications]
+        ).delete()
+
+    post_title = post.title
+    project = post.project
+    post.delete()
+    for asset in assets:
+        sync_legacy_visibility(asset)
+    record_activity(
+        "Project gallery post draft deleted",
+        post_title,
+        actor=request.user,
+        project=project,
+    )
+    messages.success(
+        request,
+        "Draft post deleted. Original files and any Client Media shares remain unchanged.",
+    )
+    return _content_page_redirect(
+        "projects",
+        website_project=project.pk,
+        website_state=request.POST.get("website_state", "all"),
+        website_page=request.POST.get("website_page", "1"),
+        content_page_focus="projects",
+    )
+
+
+@require_GET
+@staff_required
+@never_cache
+def website_gallery_post_preview(request, pk):
+    if not _can_manage_content(request.user):
+        raise PermissionDenied
+    post = get_object_or_404(
+        WebsiteGalleryPost.objects.select_related("project__client").prefetch_related(
+            Prefetch(
+                "items",
+                queryset=WebsiteGalleryPostItem.objects.select_related("asset").prefetch_related("asset__publications"),
+            )
+        ),
+        pk=pk,
+    )
+    return render(
+        request,
+        "operations/website_post_preview.html",
+        {"post": website_post_presentation(post, preview=True), "project": post.project},
+    )
+
+
+@require_POST
+@staff_required
+@transaction.atomic
+def website_media_upload(request):
+    if not _can_manage_content(request.user):
+        raise PermissionDenied
+    form = WebsiteMediaUploadForm(request.POST, request.FILES, project_queryset=Project.objects.all())
+    if form.is_valid():
+        project = form.cleaned_data["project"]
+        created = []
+        for upload, publication_details in zip(
+            form.cleaned_data["files"],
+            form.cleaned_data["publication_details_items"],
+        ):
+            media_type = MediaAsset.MediaType.VIDEO if upload.name.lower().endswith((".mp4", ".mov", ".webm")) else MediaAsset.MediaType.PHOTO
+            asset = MediaAsset.objects.create(
+                project=project,
+                title=upload.name.rsplit(".", 1)[0],
+                file=upload,
+                media_type=media_type,
+                visibility=MediaAsset.Visibility.INTERNAL,
+                uploaded_by=request.user,
+            )
+            MediaPublication.objects.create(
+                asset=asset,
+                destination=MediaPublication.Destination.WEBSITE,
+                **publication_details,
+            )
+            created.append(asset)
+        record_activity("Website media drafts uploaded", f"{len(created)} file(s) · {project.title}", actor=request.user, project=project)
+        messages.success(request, f"{len(created)} website draft(s) uploaded. Review each file before publishing.")
+        return _content_page_redirect(
+            "projects",
+            website_project=project.pk,
+            website_state="draft",
+            website_page=1,
+        )
+    messages.error(request, "Please choose a project and valid media files.")
+    return _media_error(request, form, destination=MediaPublication.Destination.WEBSITE)
+
+
+@require_POST
+@staff_required
+@transaction.atomic
+def website_media_publish_batch(request):
+    if not _can_manage_content(request.user):
+        raise PermissionDenied
+
+    state = request.POST.get("website_state", "all")
+    page = request.POST.get("website_page", "1")
+    try:
+        project_id = uuid.UUID(request.POST.get("website_project", ""))
+    except (ValueError, TypeError, AttributeError):
+        messages.error(request, "Choose a project before publishing gallery drafts.")
+        return _content_page_redirect("projects", content_page_focus="projects")
+
+    def gallery_redirect():
+        return _content_page_redirect(
+            "projects",
+            website_project=project_id,
+            website_state=state,
+            website_page=page,
+            content_page_focus="projects",
+        )
+
+    selected_ids = request.POST.getlist("asset_ids")
+    try:
+        asset_ids = list(dict.fromkeys(uuid.UUID(value) for value in selected_ids))
+    except (ValueError, TypeError, AttributeError):
+        messages.error(request, "The selected gallery items are invalid. Select the drafts again.")
+        return gallery_redirect()
+    if not asset_ids:
+        messages.error(request, "Select at least one website draft to publish.")
+        return gallery_redirect()
+
+    project = get_object_or_404(Project, pk=project_id)
+    assets = list(
+        MediaAsset.objects.select_for_update()
+        .filter(pk__in=asset_ids, project=project)
+        .order_by("pk")
+    )
+    publications = list(
+        MediaPublication.objects.select_for_update()
+        .select_related("asset__project__client")
+        .filter(
+            asset_id__in=asset_ids,
+            asset__project=project,
+            destination=MediaPublication.Destination.WEBSITE,
+            published_at__isnull=True,
+        )
+        .order_by("asset_id")
+    )
+    if len(assets) != len(asset_ids) or len(publications) != len(asset_ids):
+        messages.error(
+            request,
+            "Nothing was published. Refresh the gallery and select only unpublished website drafts for this project.",
+        )
+        return gallery_redirect()
+
+    try:
+        with transaction.atomic():
+            for publication in publications:
+                try:
+                    publish(publication)
+                except ValidationError as exc:
+                    detail = " ".join(exc.messages)
+                    raise ValidationError(f"{publication.asset.title}: {detail}") from exc
+                record_activity(
+                    "Media published to website",
+                    publication.title,
+                    actor=request.user,
+                    project=project,
+                )
+    except ValidationError as exc:
+        messages.error(request, f"The batch was not published. {' '.join(exc.messages)}")
+        return gallery_redirect()
+
+    count = len(publications)
+    messages.success(
+        request,
+        f"{count} gallery item{'s' if count != 1 else ''} published to the website together.",
+    )
+    return gallery_redirect()
+
+
+@require_POST
+@staff_required
+@transaction.atomic
+def website_media_edit(request, pk):
+    if not _can_manage_content(request.user):
+        raise PermissionDenied
+    asset = get_object_or_404(MediaAsset.objects.select_for_update().select_related("project__client"), pk=pk)
+    return _edit_media_publication(request, asset, MediaPublication.Destination.WEBSITE)
 
 
 @require_GET
@@ -4903,32 +5719,71 @@ def _edit_media_publication(request, asset):
 @never_cache
 def media_preview(request, pk):
     asset = get_object_or_404(MediaAsset.objects.select_related("project__client"), pk=pk)
-    destination = request.GET.get("destination", "website")
+    destination = request.GET.get("destination", MediaPublication.Destination.WEBSITE)
+    if destination == MediaPublication.Destination.CLIENT:
+        if not _can_access_dashboard(request.user):
+            raise PermissionDenied
+    elif destination == MediaPublication.Destination.WEBSITE:
+        if not _can_manage_content(request.user):
+            raise PermissionDenied
+    else:
+        raise Http404
     publication = get_object_or_404(MediaPublication, asset=asset, destination=destination)
-    return render(request, "operations/media_preview.html", {
+    context = {
         "media": media_presentation(asset, destination, preview=True, publication=publication),
         "asset": asset, "destination": destination,
-    })
+    }
+    if destination == MediaPublication.Destination.WEBSITE and asset.project_id:
+        gallery_assets = list(
+            MediaAsset.objects.filter(
+                project_id=asset.project_id,
+                publications__destination=MediaPublication.Destination.WEBSITE,
+                publications__published_at__isnull=False,
+            )
+            .select_related("project__client")
+            .prefetch_related("publications")
+            .order_by("publications__sort_order", "created_at")
+        )
+        ordered_preview_items = []
+        selected_in_gallery = False
+        for gallery_asset in gallery_assets:
+            if gallery_asset.pk == asset.pk:
+                item = context["media"]
+                selected_in_gallery = True
+            else:
+                if not website_is_live(gallery_asset):
+                    continue
+                item = media_presentation(gallery_asset, MediaPublication.Destination.WEBSITE)
+            ordered_preview_items.append((item["sort_order"], gallery_asset.created_at, item))
+        if not selected_in_gallery:
+            ordered_preview_items.append((context["media"]["sort_order"], asset.created_at, context["media"]))
+        context["preview_gallery"] = [item for _, _, item in sorted(ordered_preview_items, key=lambda row: (row[0], row[1]))]
+    return render(request, "operations/media_preview.html", context)
 
 
 @require_http_methods(["GET", "POST"])
 @staff_required
 @transaction.atomic
 def media_delete(request, pk):
+    if not _can_manage_content(request.user):
+        raise PermissionDenied
     asset = get_object_or_404(MediaAsset.objects.select_for_update(), pk=pk)
-    destination = request.GET.get("destination", "client")
-    if destination not in MediaPublication.Destination.values:
-        destination = "client"
-    if request.method == "POST" and request.POST.get("confirm") == "delete":
+    publication = get_object_or_404(
+        MediaPublication.objects.select_for_update(),
+        asset=asset,
+        destination=MediaPublication.Destination.WEBSITE,
+    )
+    if request.method == "POST" and request.POST.get("confirm") == "remove-website":
         project_id = asset.project_id
-        name, storage = asset.file.name, asset.file.storage
-        record_activity("Original media deleted", asset.title, actor=request.user, project=asset.project)
-        asset.delete()
-        if name:
-            transaction.on_commit(lambda: storage.delete(name))
-        messages.success(request, "Original file and all its publications deleted.")
-        return _dashboard_redirect("media", media_project=project_id, destination=destination)
-    return render(request, "operations/media_delete.html", {"asset": asset, "destination": destination})
+        publication.delete()
+        sync_legacy_visibility(asset)
+        record_activity("Website publication removed", asset.title, actor=request.user, project=asset.project)
+        messages.success(
+            request,
+            "Removed from Publish Content. The original file and any Client Media share were left unchanged.",
+        )
+        return _content_page_redirect("projects", website_project=project_id)
+    return render(request, "operations/media_delete.html", {"asset": asset})
 
 
 @require_POST
@@ -4944,8 +5799,9 @@ def service_save(request, pk=None):
         service.save()
         record_activity("Service saved", service.title, actor=request.user)
         messages.success(request, "Service saved.")
-        return _dashboard_redirect("content")
+        return _content_page_redirect("services")
     overrides = {"service_error_id": pk, "service_edit_form": form} if pk else {"service_create_form": form}
+    overrides["content_page_error"] = "services"
     return _render_dashboard_form_error(request, "content", overrides)
 
 
@@ -4966,7 +5822,7 @@ def service_move(request, pk):
         for position, item in enumerate(services):
             item.sort_order = position
         Service.objects.bulk_update(services, ["sort_order"])
-    return _dashboard_redirect("content")
+    return _content_page_redirect("services")
 
 
 @require_GET
@@ -4999,26 +5855,36 @@ def content_update(request):
     instance = _site_settings()
     services = list(Service.objects.filter(is_active=True))
     process_steps = list(ProcessStep.objects.all())
+    content_page = request.POST.get("content_page", "all")
+    if content_page not in {"home", "services", "process", "all"}:
+        raise Http404
     form = _content_form(instance, services, process_steps, data=request.POST)
     if form.is_valid():
-        instance.headline = form.cleaned_data["headline"]
-        instance.subheadline = form.cleaned_data["subheadline"]
-        instance.featured_title = form.cleaned_data["featured_title"]
-        instance.featured_body = form.cleaned_data["featured_body"]
-        instance.google_review_url = form.cleaned_data["google_review_url"]
-        instance.services_title = form.cleaned_data["services_title"]
-        instance.services_intro = form.cleaned_data["services_intro"]
-        instance.services_note = form.cleaned_data["services_note"]
-        instance.save()
-        for step in process_steps:
-            step.title = form.cleaned_data[f"step_{step.key}"]
-            step.save(update_fields=["title"])
-        record_activity("Public content updated", "Content studio", actor=request.user)
-        messages.success(request, "Public website content updated.")
+        if content_page in {"home", "all"}:
+            for field in ("headline", "subheadline", "featured_title", "featured_body", "google_review_url"):
+                setattr(instance, field, form.cleaned_data[field])
+        if content_page in {"services", "all"}:
+            for field in ("services_title", "services_intro", "services_note"):
+                setattr(instance, field, form.cleaned_data[field])
+        if content_page in {"home", "services", "all"}:
+            instance.save()
+        if content_page in {"process", "all"}:
+            for step in process_steps:
+                step.title = form.cleaned_data[f"step_{step.key}"]
+                step.save(update_fields=["title"])
+        page_label = {
+            "home": "Home page",
+            "services": "Services page",
+            "process": "Process page",
+            "all": "Website content",
+        }[content_page]
+        record_activity("Public content updated", page_label, actor=request.user)
+        messages.success(request, f"{page_label} content saved.")
     else:
         messages.error(request, "Please correct the content fields and try again.")
+        form.content_page = content_page
         return _render_dashboard_form_error(request, "content", {"content_form": form})
-    return _dashboard_redirect("content")
+    return _content_page_redirect(content_page) if content_page != "all" else _dashboard_redirect("content")
 
 
 
@@ -5037,27 +5903,17 @@ def google_reviews_sync(request):
             request,
             f"Synced {result['review_count_cached']} reviews for {place_name}.",
         )
-    return _dashboard_redirect("content")
+    return _content_page_redirect("home")
 
 @require_GET
 def public_project_detail(request, pk):
     project = get_object_or_404(
-        Project.objects.select_related("client").prefetch_related("milestones", "updates", "media_assets"),
+        Project.objects.filter(
+            website_gallery_posts__published_at__isnull=False,
+        ).distinct(),
         pk=pk,
-        is_published=True,
     )
-    public_media = sorted(
-        [media_presentation(asset, "website") for asset in project.media_assets.prefetch_related("publications") if website_is_live(asset)],
-        key=lambda item: item["sort_order"],
-    )
-    project.display_image = _project_image(project)
-    return render(request, "operations/project_detail.html", {
-        "project": project,
-        "public_media": public_media,
-        "site_settings": _site_settings(),
-        "public_dashboard_url": _public_dashboard_url(request.user),
-        "page": "projects",
-    })
+    return redirect(f"{reverse('operations:projects')}#public-project-{project.pk}")
 
 
 @require_GET

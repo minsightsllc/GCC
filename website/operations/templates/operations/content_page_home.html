@@ -1,0 +1,44 @@
+<section class="content-page-panel" id="publish-page-home" aria-labelledby="publish-home-title">
+    <header class="content-page-heading">
+        <div>
+            <span class="section-kicker">Home</span>
+            <h3 id="publish-home-title">Homepage content</h3>
+            <p>Update the opening message and featured work.</p>
+        </div>
+        <a class="button button-outline" href="{% url 'operations:home' %}" target="_blank" rel="noopener">Preview Home ↗</a>
+    </header>
+
+    <form class="content-page-editor" method="post" action="{% url 'operations:content-update' %}">
+        {% csrf_token %}
+        <input type="hidden" name="content_page" value="home">
+        <div class="content-page-field-grid">
+            <label class="form-field" for="{{ content_form.headline.id_for_label }}">Headline{{ content_form.headline }}{{ content_form.headline.errors }}</label>
+            <label class="form-field" for="{{ content_form.featured_title.id_for_label }}">Featured project title{{ content_form.featured_title }}{{ content_form.featured_title.errors }}</label>
+            <label class="form-field content-page-field-wide" for="{{ content_form.subheadline.id_for_label }}">Supporting copy{{ content_form.subheadline }}{{ content_form.subheadline.errors }}</label>
+            <label class="form-field content-page-field-wide" for="{{ content_form.featured_body.id_for_label }}">Featured project copy{{ content_form.featured_body }}{{ content_form.featured_body.errors }}</label>
+            <label class="form-field content-page-field-wide" for="{{ content_form.google_review_url.id_for_label }}">Google reviews link{{ content_form.google_review_url }}{{ content_form.google_review_url.errors }}</label>
+        </div>
+        <footer class="content-page-save-row">
+            <span>Changes appear on the Home page when saved.</span>
+            <button class="button button-primary" type="submit">Save Home page</button>
+        </footer>
+    </form>
+
+    <section class="content-page-subpanel" aria-labelledby="home-reviews-title">
+        <div class="content-page-subpanel-heading">
+            <div>
+                <span class="section-kicker">Home page</span>
+                <h4 id="home-reviews-title">Google reviews</h4>
+            </div>
+            <form method="post" action="{% url 'operations:google-reviews-sync' %}">
+                {% csrf_token %}
+                <button class="button button-outline" type="submit">Sync reviews</button>
+            </form>
+        </div>
+        {% if google_review_cache %}
+        <p class="detail-value">{{ google_review_cache|length }} review{{ google_review_cache|length|pluralize }} cached{% if site_settings.google_places_rating %} · {{ site_settings.google_places_rating|floatformat:1 }}/5{% endif %}{% if site_settings.google_reviews_synced_at %} · Updated {{ site_settings.google_reviews_synced_at|date:'M j, Y' }}{% endif %}.</p>
+        {% else %}
+        <p class="detail-value">No reviews synced yet.{% if not google_places_configured %} Google Places needs to be configured by an administrator.{% endif %}</p>
+        {% endif %}
+    </section>
+</section>

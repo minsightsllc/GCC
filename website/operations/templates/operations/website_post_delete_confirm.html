@@ -1,0 +1,20 @@
+{% extends 'operations/base.html' %}
+{% block title %}Delete project post draft | Grand Coast{% endblock %}
+{% block body %}
+<main class="container publication-preview website-post-delete-confirm">
+    <section class="content-editor-panel">
+        <span class="section-kicker">Publish Content · Projects</span>
+        <h1>Delete “{{ post.title }}”?</h1>
+        <p>This removes the unpublished post and its website draft details. The original photos and videos stay stored, and any Client Media shares remain unchanged.</p>
+        <form method="post" action="{% url 'operations:website-post-delete' pk=post.pk %}" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="website_project" value="{{ post.project_id }}">
+            <div class="detail-actions">
+                <a class="button button-outline" href="{% url 'operations:dashboard-section' section='content' %}?website_project={{ post.project_id }}&amp;content_page_focus=projects#publish-page-projects">Keep draft</a>
+                <button class="button button-danger" type="submit">Delete draft</button>
+            </div>
+        </form>
+    </section>
+</main>
+{% endblock %}

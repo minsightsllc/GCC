@@ -5,6 +5,56 @@
         (root || document).querySelectorAll(selector).forEach(callback);
     }
 
+    var activeAdminToast = null;
+
+    function showAdminToast(message, isError, actionHref, actionLabel) {
+        var text = String(message || "").trim();
+        var region = document.querySelector(".toast-region");
+        if (!text || !region) return;
+
+        if (!activeAdminToast || !activeAdminToast.isConnected) {
+            var toast = document.createElement("div");
+            toast.className = "toast admin-operation-toast";
+            toast.dataset.persistent = "true";
+            var content = document.createElement("span");
+            content.className = "toast-content";
+            var dismiss = document.createElement("button");
+            dismiss.className = "toast-dismiss";
+            dismiss.type = "button";
+            dismiss.setAttribute("aria-label", "Dismiss notification");
+            dismiss.title = "Dismiss";
+            dismiss.textContent = "×";
+            dismiss.addEventListener("click", function () {
+                if (toast.dataset.dismissed === "true") return;
+                toast.dataset.dismissed = "true";
+                toast.classList.add("is-dismissing");
+                window.setTimeout(function () {
+                    toast.remove();
+                    if (activeAdminToast === toast) activeAdminToast = null;
+                }, 220);
+            });
+            toast.append(content, dismiss);
+            region.appendChild(toast);
+            activeAdminToast = toast;
+        }
+
+        activeAdminToast.classList.remove("is-dismissing");
+        activeAdminToast.dataset.dismissed = "false";
+        activeAdminToast.querySelector(".toast-content").textContent = text;
+        activeAdminToast.classList.toggle("is-error", Boolean(isError));
+        var existingAction = activeAdminToast.querySelector(".toast-action");
+        if (existingAction) existingAction.remove();
+        if (actionHref) {
+            var action = document.createElement("a");
+            action.className = "toast-action";
+            action.href = actionHref;
+            action.target = "_blank";
+            action.rel = "noopener";
+            action.textContent = actionLabel || "Open link";
+            activeAdminToast.appendChild(action);
+        }
+    }
+
     function initNavigation() {
         var toggle = document.querySelector("[data-mobile-nav-toggle]");
         var nav = document.querySelector(".site-nav");
@@ -34,6 +84,52 @@
                     adminToggle.setAttribute("aria-expanded", "false");
                 });
             });
+        }
+    }
+
+    function initContentPageNavigation() {
+        var nav = document.querySelector(".admin-view.is-active .content-page-nav");
+        if (!nav) return;
+        var links = Array.prototype.slice.call(nav.querySelectorAll("[data-content-page-link]"));
+
+        function pageHashFor(hash) {
+            if (links.some(function (link) { return link.getAttribute("href") === hash; })) return hash;
+            var target = hash && document.getElementById(hash.slice(1));
+            var panel = target && target.closest(".content-page-panel");
+            return panel ? "#" + panel.id : "";
+        }
+
+        function selectPage(hash) {
+            var currentPageHash = pageHashFor(hash);
+            links.forEach(function (link) {
+                if (link.getAttribute("href") === currentPageHash) {
+                    link.setAttribute("aria-current", "location");
+                } else {
+                    link.removeAttribute("aria-current");
+                }
+            });
+        }
+
+        links.forEach(function (link) {
+            link.addEventListener("click", function () {
+                selectPage(link.getAttribute("href"));
+            });
+        });
+        window.addEventListener("hashchange", function () {
+            selectPage(window.location.hash);
+        });
+        selectPage(window.location.hash || (links[0] && links[0].getAttribute("href")));
+
+        var view = nav.closest(".admin-view");
+        var focusPage = view && (view.dataset.contentPageError || view.dataset.contentPageFocus);
+        if (focusPage && links.some(function (link) { return link.getAttribute("href") === "#publish-page-" + focusPage; })) {
+            var target = document.getElementById("publish-page-" + focusPage);
+            if (target) {
+                selectPage("#publish-page-" + focusPage);
+                window.requestAnimationFrame(function () {
+                    target.scrollIntoView({ block: "start", behavior: "auto" });
+                });
+            }
         }
     }
 
@@ -1350,6 +1446,7 @@
                 status.textContent = text;
                 status.classList.toggle("is-error", Boolean(isError));
             }
+            showAdminToast(text, isError);
         }
 
         function prepareGrant(file) {
@@ -1631,10 +1728,54 @@
                 actionField.value = "keep";
                 return;
             }
-            Array.prototype.forEach.call(form.querySelectorAll("button"), function (button) {
-                button.disabled = true;
-                button.setAttribute("aria-busy", "true");
-            });
+        });
+
+        form.addEventListener("admin:submission-complete", function (event) {
+            if (!event.detail || !event.detail.success || !activeTrigger) return;
+            var row = activeTrigger.closest("[data-project-update-entry]");
+            var draftAction = actionField.value;
+            if (draftAction === "keep") {
+                savedDraft = true;
+                activeTrigger.dataset.projectUpdateDraftSaved = "true";
+                if (row) {
+                    var template = row.querySelector("template[data-saved-client-draft]");
+                    if (!template) {
+                        template = document.createElement("template");
+                        template.dataset.savedClientDraft = "";
+                        row.appendChild(template);
+                    }
+                    template.content.replaceChildren();
+                    var savedTitleNode = document.createElement("span");
+                    savedTitleNode.dataset.savedDraftTitle = "";
+                    savedTitleNode.textContent = titleField.value;
+                    var savedBodyNode = document.createElement("span");
+                    savedBodyNode.dataset.savedDraftBody = "";
+                    savedBodyNode.textContent = bodyField.value;
+                    template.content.append(savedTitleNode, savedBodyNode);
+                }
+            } else if (draftAction === "send") {
+                if (row) {
+                    var draftLink = row.querySelector(".project-update-draft-link");
+                    if (draftLink) draftLink.remove();
+                    var heading = row.querySelector(".project-update-entry-heading");
+                    if (heading && !heading.querySelector(".status-badge.green")) {
+                        var badge = document.createElement("span");
+                        badge.className = "status-badge green";
+                        badge.textContent = "Client copy sent";
+                        heading.appendChild(badge);
+                    }
+                    var savedTemplate = row.querySelector("template[data-saved-client-draft]");
+                    if (savedTemplate) savedTemplate.remove();
+                }
+                activeTrigger.dataset.projectUpdateDraftSaved = "false";
+            } else if (draftAction === "delete") {
+                if (row) {
+                    var deletedTemplate = row.querySelector("template[data-saved-client-draft]");
+                    if (deletedTemplate) deletedTemplate.remove();
+                }
+                activeTrigger.dataset.projectUpdateDraftSaved = "false";
+            }
+            dialog.close();
         });
 
         dialog.addEventListener("close", function () {
@@ -1684,6 +1825,18 @@
                 if (error) error.hidden = true;
                 dialog.showModal();
             });
+
+            form.addEventListener("admin:submission-complete", function (event) {
+                if (!submitting || pendingForm !== form) return;
+                submitting = false;
+                if (!event.detail || !event.detail.success) {
+                    pendingCheckbox.checked = !pendingValue;
+                }
+                confirmButton.disabled = false;
+                confirmButton.removeAttribute("aria-busy");
+                confirmButton.textContent = pendingValue ? "Mark complete" : "Reopen milestone";
+                dialog.close();
+            });
         });
 
         dialogForm.addEventListener("submit", function (event) {
@@ -1701,7 +1854,7 @@
                 if (typeof pendingForm.requestSubmit === "function") {
                     pendingForm.requestSubmit();
                 } else {
-                    pendingForm.submit();
+                    pendingForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
                 }
             } catch (submissionError) {
                 submitting = false;
@@ -1738,7 +1891,7 @@
         each("[data-notification-read]", function (form) {
             form.addEventListener("submit", function (event) {
                 event.preventDefault();
-                fetch(form.action, {
+                fetch(form.getAttribute("action") || window.location.href, {
                     method: "POST",
                     credentials: "same-origin",
                     headers: {"X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest"},
@@ -1751,8 +1904,9 @@
                         card.classList.remove("is-unread");
                     }
                     form.remove();
+                    showAdminToast("Notification marked as read.", false);
                 }).catch(function () {
-                    form.submit();
+                    showAdminToast("Could not update the notification. Try again.", true);
                 });
             });
         });
@@ -1760,7 +1914,7 @@
         each("[data-notification-clear]", function (form) {
             form.addEventListener("submit", function (event) {
                 event.preventDefault();
-                fetch(form.action, {
+                fetch(form.getAttribute("action") || window.location.href, {
                     method: "POST",
                     credentials: "same-origin",
                     headers: {"X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest"},
@@ -1773,15 +1927,16 @@
                         card.remove();
                     }
                     showNotificationEmptyState();
+                    showAdminToast("Notification cleared.", false);
                 }).catch(function () {
-                    form.submit();
+                    showAdminToast("Could not clear the notification. Try again.", true);
                 });
             });
         });
         each("[data-notification-clear-all]", function (form) {
             form.addEventListener("submit", function (event) {
                 event.preventDefault();
-                fetch(form.action, {
+                fetch(form.getAttribute("action") || window.location.href, {
                     method: "POST",
                     credentials: "same-origin",
                     headers: {"X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest"},
@@ -1793,8 +1948,9 @@
                         card.remove();
                     });
                     showNotificationEmptyState();
+                    showAdminToast("Notifications cleared.", false);
                 }).catch(function () {
-                    form.submit();
+                    showAdminToast("Could not clear notifications. Try again.", true);
                 });
             });
         });
@@ -1802,7 +1958,7 @@
         each("[data-notification-read-all]", function (form) {
             form.addEventListener("submit", function (event) {
                 event.preventDefault();
-                fetch(form.action, {
+                fetch(form.getAttribute("action") || window.location.href, {
                     method: "POST",
                     credentials: "same-origin",
                     headers: {"X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest"},
@@ -1817,8 +1973,9 @@
                             readForm.remove();
                         }
                     });
+                    showAdminToast("Notifications marked as read.", false);
                 }).catch(function () {
-                    form.submit();
+                    showAdminToast("Could not update notifications. Try again.", true);
                 });
             });
         });
@@ -2256,6 +2413,9 @@
                     dialog.close();
                     window.location.assign(smsHref);
                 });
+                form.addEventListener("admin:submission-complete", function (event) {
+                    if (event.detail && event.detail.success && dialog.open) dialog.close();
+                });
                 form.addEventListener("change", function (event) {
                     if (event.target.matches('input[name="delivery_mode"]')) {
                         syncAllThreeChoice(false);
@@ -2319,6 +2479,149 @@
         });
     }
 
+    function initAdminAsyncForms() {
+        if (!document.body.classList.contains("admin-site")) return;
+
+        document.addEventListener("submit", function (event) {
+            var form = event.target;
+            if (
+                event.defaultPrevented
+                || !form
+                || form.tagName !== "FORM"
+                || (form.getAttribute("method") || "get").toLowerCase() !== "post"
+                || form.matches("[data-website-publication-save], [data-publication-upload], [data-website-batch-publish], [data-website-post-create], [data-website-post-save]")
+                || form.hasAttribute("onsubmit")
+                || form.hasAttribute("target")
+                || form.matches("[data-delete-form], .calendar-delete-form, .lead-detail-delete-form")
+            ) return;
+
+            var submitter = event.submitter || null;
+            var clientMediaEditor = form.matches("[data-publication-save]");
+            var clientMediaCard = clientMediaEditor ? form.closest(".publication-editor") : null;
+            var clientMediaCardId = clientMediaCard ? clientMediaCard.id : "";
+            if (
+                (submitter && submitter.formTarget)
+                || (submitter && submitter.name === "action" && submitter.value === "preview")
+                || (submitter && submitter.dataset.projectUpdateDraftSubmit === "delete")
+                || (form.querySelector('[name="draft_action"][value="delete"]'))
+            ) return;
+
+            var action = submitter && submitter.hasAttribute("formaction")
+                ? submitter.formAction
+                : (form.getAttribute("action") || window.location.href);
+            var method = submitter && submitter.hasAttribute("formmethod")
+                ? submitter.formMethod
+                : (form.getAttribute("method") || "get");
+            var requestUrl;
+            try {
+                requestUrl = new URL(action || window.location.href, window.location.href);
+            } catch (error) {
+                return;
+            }
+            if (
+                method.toLowerCase() !== "post"
+                || requestUrl.origin !== window.location.origin
+                || /(?:^|\/)(?:logout|delete)(?:\/|$)/i.test(requestUrl.pathname)
+            ) return;
+
+            event.preventDefault();
+            if (form.dataset.adminAsyncPending === "true") return;
+            form.dataset.adminAsyncPending = "true";
+            form.setAttribute("aria-busy", "true");
+
+            var wasDisabled = Boolean(submitter && "disabled" in submitter && submitter.disabled);
+            if (submitter && "disabled" in submitter) {
+                submitter.disabled = true;
+                submitter.setAttribute("aria-busy", "true");
+            }
+            var payload = new FormData(form);
+            if (submitter && submitter.name) payload.append(submitter.name, submitter.value);
+            var hasFiles = Array.prototype.some.call(form.querySelectorAll('input[type="file"]'), function (input) {
+                return input.files && input.files.length > 0;
+            });
+            showAdminToast(hasFiles ? "Uploading files…" : "Saving changes…", false);
+
+            (async function () {
+                var success = false;
+                var responseMessage = "";
+                var responseAction = null;
+                try {
+                    var response = await fetch(requestUrl.href, {
+                        method: "POST",
+                        body: payload,
+                        credentials: "same-origin",
+                        headers: { "X-Requested-With": "XMLHttpRequest" }
+                    });
+                    var finalUrl = new URL(response.url || requestUrl.href, window.location.href);
+                    if (response.status === 403 || finalUrl.pathname.indexOf("/accounts/login") === 0) {
+                        responseMessage = "Your session needs attention. Sign in again, then retry this change.";
+                    } else {
+                        var markup = await response.text();
+                        var responseDocument = new DOMParser().parseFromString(markup, "text/html");
+                        var serverToast = responseDocument.querySelector(".toast-region .toast");
+                        var serverMessage = serverToast && serverToast.querySelector(".toast-content");
+                        var errorScope = clientMediaCardId
+                            ? responseDocument.getElementById(clientMediaCardId) || responseDocument
+                            : responseDocument;
+                        var serverErrors = Array.from(errorScope.querySelectorAll(".errorlist"))
+                            .map(function (item) { return item.textContent.trim(); })
+                            .filter(Boolean)
+                            .filter(function (message, index, all) { return all.indexOf(message) === index; });
+                        var serverFailed = Boolean(serverToast && (serverToast.classList.contains("toast-error") || serverToast.classList.contains("toast-danger")));
+                        success = response.ok && !serverErrors.length && !serverFailed;
+                        responseMessage = serverErrors.join(" ") || (serverMessage && serverMessage.textContent.trim()) || (success
+                            ? "Changes saved."
+                            : response.status >= 500
+                                ? "The server could not finish this change (HTTP " + response.status + "). Check the server log for the exact cause."
+                                : "The server rejected this change (HTTP " + response.status + "). Review the form and try again.");
+                        if (clientMediaCardId) {
+                            var updatedClientMediaCard = responseDocument.getElementById(clientMediaCardId);
+                            var currentClientMediaCard = document.getElementById(clientMediaCardId);
+                            if (updatedClientMediaCard && currentClientMediaCard) {
+                                currentClientMediaCard.replaceWith(updatedClientMediaCard);
+                            }
+                        }
+                        if (success && /invite|reset/i.test(requestUrl.pathname)) {
+                            var handoff = responseDocument.querySelector(".dashboard-alert");
+                            if (handoff && handoff.textContent.trim()) {
+                                var handoffLink = handoff.querySelector("a[href]");
+                                var handoffUrl = handoffLink && new URL(handoffLink.href, window.location.href);
+                                responseMessage = Array.from(handoff.querySelectorAll("strong, span"))
+                                    .map(function (node) { return node.textContent.replace(/\s+/g, " ").trim(); })
+                                    .filter(Boolean)
+                                    .join(" ") || "One-time setup link created.";
+                                if (handoffUrl && handoffUrl.origin === window.location.origin) {
+                                    responseAction = { href: handoffUrl.href, label: "Open one-time link" };
+                                }
+                            }
+                        }
+                    }
+                } catch (error) {
+                    responseMessage = "Connection lost. Your changes are still in the form; retry when connected.";
+                }
+
+                showAdminToast(responseMessage, !success, responseAction && responseAction.href, responseAction && responseAction.label);
+                if (success && hasFiles) {
+                    Array.prototype.forEach.call(form.querySelectorAll('input[type="file"]'), function (input) {
+                        input.value = "";
+                        input.dispatchEvent(new Event("change", { bubbles: true }));
+                    });
+                }
+                form.dispatchEvent(new CustomEvent("admin:submission-complete", {
+                    detail: { success: success, message: responseMessage, submitter: submitter }
+                }));
+
+                delete form.dataset.adminAsyncPending;
+                delete form.dataset.submitting;
+                form.removeAttribute("aria-busy");
+                if (submitter && submitter.isConnected && "disabled" in submitter) {
+                    submitter.disabled = wasDisabled;
+                    submitter.removeAttribute("aria-busy");
+                }
+            }());
+        });
+    }
+
     function initMediaPublishing() {
         // Keep the clicked submitter's name/value in native form submission.
         document.querySelectorAll("[data-publication-save]").forEach(function (form) {
@@ -2337,18 +2640,563 @@
                 form.removeAttribute("aria-busy");
             });
         });
+        const websiteMutation = { busy: false };
+        const setWebsiteStatus = function (message, isError) {
+            showAdminToast(message, isError);
+        };
+        const galleryPostFormKey = function (form) {
+            if (form.matches("[data-website-post-create]")) return "create";
+            if (form.dataset.websitePostKey) return form.dataset.websitePostKey;
+            const card = form.closest("[data-website-post-id]");
+            return card ? card.dataset.websitePostId : "";
+        };
+        const captureGalleryPostForms = function (library, excludedKey) {
+            return Array.from(library.querySelectorAll("[data-website-post-create], [data-website-post-save]"))
+                .filter(function (form) { return !form.hasAttribute("data-website-post-delete-form"); })
+                .map(function (form) {
+                    const key = galleryPostFormKey(form);
+                    if (key === excludedKey) return null;
+                    return {
+                        key: key,
+                        values: Array.from(form.elements).filter(function (control) {
+                            return control.name && !["submit", "button", "reset"].includes(control.type);
+                        }).map(function (control, index, controls) {
+                            return {
+                                name: control.name,
+                                index: controls.slice(0, index).filter(function (previous) { return previous.name === control.name; }).length,
+                                type: control.type,
+                                value: control.value,
+                                checked: control.checked,
+                                files: control.type === "file" ? Array.from(control.files || []) : [],
+                                selected: control.multiple && control.options
+                                    ? Array.from(control.selectedOptions).map(function (option) { return option.value; })
+                                    : null
+                            };
+                        })
+                    };
+                }).filter(Boolean);
+        };
+        const restoreGalleryPostForms = function (library, snapshots) {
+            snapshots.forEach(function (snapshot) {
+                const form = Array.from(library.querySelectorAll("[data-website-post-create], [data-website-post-save]"))
+                    .find(function (candidate) { return galleryPostFormKey(candidate) === snapshot.key; });
+                if (!form) return;
+                snapshot.values.forEach(function (saved) {
+                    const namedControls = Array.from(form.elements).filter(function (candidate) {
+                        return candidate.name === saved.name;
+                    });
+                    const control = saved.type === "checkbox" || saved.type === "radio"
+                        ? namedControls.find(function (candidate) { return candidate.value === saved.value; })
+                            || namedControls[saved.index]
+                        : namedControls[saved.index];
+                    if (!control) return;
+                    if (saved.type === "checkbox" || saved.type === "radio") control.checked = saved.checked;
+                    else if (saved.type === "file" && saved.files.length && typeof DataTransfer === "function") {
+                        const transfer = new DataTransfer();
+                        saved.files.forEach(function (file) { transfer.items.add(file); });
+                        control.files = transfer.files;
+                        control.dispatchEvent(new Event("change", { bubbles: true }));
+                    } else if (control.multiple && saved.selected) {
+                        Array.from(control.options).forEach(function (option) {
+                            option.selected = saved.selected.includes(option.value);
+                        });
+                    } else if (saved.type !== "file") control.value = saved.value;
+                });
+            });
+        };
+        document.addEventListener("change", function (event) {
+            const input = event.target;
+            if (!input.matches || !input.matches("[data-website-post-create] input[type='file'], [data-website-post-save] input[type='file']")) return;
+            const form = input.closest("form");
+            const review = form && form.querySelector("[data-website-post-file-review]");
+            if (!review) return;
+            review.querySelectorAll("[data-object-url]").forEach(function (element) {
+                URL.revokeObjectURL(element.dataset.objectUrl);
+            });
+            review.replaceChildren();
+            const files = Array.from(input.files || []);
+            if (!files.length) {
+                const empty = document.createElement("span");
+                empty.textContent = review.dataset.emptyMessage || "No new files selected.";
+                review.appendChild(empty);
+                return;
+            }
+            files.forEach(function (file, index) {
+                const card = document.createElement("div");
+                card.className = "website-post-file-chip";
+                const previewUrl = URL.createObjectURL(file);
+                const isVideo = file.type.indexOf("video/") === 0 || /\.(mp4|mov|webm)$/i.test(file.name);
+                const preview = isVideo
+                    ? document.createElement("video")
+                    : document.createElement("img");
+                preview.src = previewUrl;
+                preview.dataset.objectUrl = previewUrl;
+                if (preview.tagName === "VIDEO") {
+                    preview.controls = true;
+                    preview.preload = "metadata";
+                } else {
+                    preview.alt = "Preview of " + file.name;
+                }
+                const label = document.createElement("span");
+                label.textContent = (index + 1) + ". " + file.name;
+                const remove = document.createElement("button");
+                remove.type = "button";
+                remove.className = "text-link-button website-post-file-remove";
+                remove.dataset.removeWebsitePostFile = String(index);
+                remove.setAttribute("aria-label", "Remove " + file.name + " from this post");
+                remove.textContent = "Remove file";
+                card.append(preview, label, remove);
+                review.appendChild(card);
+            });
+        });
+        document.addEventListener("click", function (event) {
+            const removeButton = event.target.closest && event.target.closest("[data-remove-website-post-file]");
+            if (removeButton) {
+                event.preventDefault();
+                const form = removeButton.closest("form");
+                const input = form && form.querySelector("input[type='file']");
+                if (!input || typeof DataTransfer !== "function") {
+                    setWebsiteStatus("This browser cannot remove one selected file. Clear the selection and choose the files again.", true);
+                    return;
+                }
+                const removeIndex = Number(removeButton.dataset.removeWebsitePostFile);
+                const transfer = new DataTransfer();
+                Array.from(input.files || []).forEach(function (file, index) {
+                    if (index !== removeIndex) transfer.items.add(file);
+                });
+                input.files = transfer.files;
+                input.dispatchEvent(new Event("change", { bubbles: true }));
+                return;
+            }
+
+            const removeExistingAsset = event.target.closest && event.target.closest("[data-website-asset-remove-trigger]");
+            if (removeExistingAsset && !window.confirm("Remove this file from Publish Content? The original file and any Client Media share will remain unchanged.")) {
+                event.preventDefault();
+                return;
+            }
+
+            const cancelDelete = event.target.closest && event.target.closest("[data-website-post-delete-cancel]");
+            if (cancelDelete) {
+                const dialog = cancelDelete.closest("dialog");
+                if (dialog && dialog.open) dialog.close();
+                return;
+            }
+
+            const deleteTrigger = event.target.closest && event.target.closest("[data-website-post-delete-trigger]");
+            if (!deleteTrigger) return;
+            const card = deleteTrigger.closest("[data-website-post-id]");
+            const dialog = card && card.querySelector("[data-website-post-delete-dialog]");
+            if (!dialog || typeof dialog.showModal !== "function") return;
+            event.preventDefault();
+            dialog._websitePostDeleteTrigger = deleteTrigger;
+            if (!dialog.dataset.focusRestorationBound) {
+                dialog.dataset.focusRestorationBound = "true";
+                dialog.addEventListener("close", function () {
+                    const trigger = dialog._websitePostDeleteTrigger;
+                    if (trigger && trigger.isConnected) trigger.focus();
+                });
+            }
+            dialog.showModal();
+            const cancel = dialog.querySelector("[data-website-post-delete-cancel]");
+            if (cancel) cancel.focus();
+        });
+        document.addEventListener("submit", async function (event) {
+            const form = event.target;
+            if (!form.matches || !form.matches("[data-website-post-create], [data-website-post-save]")) return;
+            event.preventDefault();
+            if (websiteMutation.busy) {
+                setWebsiteStatus("Wait for the current post save or upload to finish.", true);
+                return;
+            }
+            const submitter = event.submitter || null;
+            const action = submitter && submitter.name === "action"
+                ? submitter.value
+                : submitter && submitter.name === "website_asset_remove"
+                    ? "remove_asset"
+                    : "save";
+            const requestUrl = submitter && submitter.hasAttribute("formaction")
+                ? submitter.formAction
+                : (form.getAttribute("action") || window.location.href);
+            const key = galleryPostFormKey(form);
+            const hasFiles = Array.from(form.querySelectorAll("input[type='file']")).some(function (input) {
+                return input.files && input.files.length > 0;
+            });
+            websiteMutation.busy = true;
+            form.setAttribute("aria-busy", "true");
+            if (submitter && "disabled" in submitter) submitter.disabled = true;
+            setWebsiteStatus(
+                action === "delete" ? "Deleting project post draft…"
+                    : action === "remove_asset" ? "Removing file from Publish Content…"
+                            : hasFiles ? "Uploading post media…"
+                                : action === "publish" ? "Publishing project post…" : "Saving project post…",
+                false
+            );
+            try {
+                const payload = new FormData(form);
+                if (action === "remove_asset") {
+                    form.querySelectorAll("input[type='file'][name]").forEach(function (input) {
+                        payload.delete(input.name);
+                    });
+                }
+                if (submitter && submitter.name) payload.append(submitter.name, submitter.value);
+                const response = await fetch(requestUrl, {
+                    method: "POST",
+                    body: payload,
+                    credentials: "same-origin",
+                    cache: "no-store",
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                const finalUrl = new URL(response.url || requestUrl, window.location.href);
+                if (response.status === 403 || finalUrl.pathname.indexOf("/accounts/login") === 0) {
+                    setWebsiteStatus("Your session needs attention. Sign in again, then retry this post.", true);
+                    return;
+                }
+                const responseDocument = new DOMParser().parseFromString(await response.text(), "text/html");
+                const currentLibrary = form.closest("[data-website-media-library]");
+                const incomingLibrary = responseDocument.querySelector("[data-website-media-library]");
+                const incomingForm = key === "create"
+                    ? responseDocument.querySelector("[data-website-post-create]")
+                    : Array.from(responseDocument.querySelectorAll("[data-website-post-save]"))
+                        .find(function (candidate) { return galleryPostFormKey(candidate) === key; });
+                const errors = incomingForm
+                    ? Array.from(incomingForm.querySelectorAll(".errorlist")).map(function (item) { return item.textContent.trim(); }).filter(Boolean)
+                    : [];
+                const toast = responseDocument.querySelector(".toast-region .toast");
+                const toastContent = toast && toast.querySelector(".toast-content");
+                const toastIsError = Boolean(toast && (toast.classList.contains("toast-error") || toast.classList.contains("toast-danger")));
+                const success = response.ok && response.redirected && !errors.length && !toastIsError
+                    && currentLibrary && incomingLibrary;
+                if (!success) {
+                    const errorText = errors.join(" ") || (toastContent && toastContent.textContent.trim())
+                        || (response.status >= 500
+                            ? "The server could not finish this post. Check the server log and retry."
+                            : "The post could not be saved. Review the details and try again.");
+                    const errorBox = form.querySelector("[data-website-post-response-errors]");
+                    if (errorBox) {
+                        errorBox.textContent = errorText;
+                        errorBox.hidden = false;
+                    }
+                    setWebsiteStatus(errorText, true);
+                    return;
+                }
+                const snapshots = captureGalleryPostForms(
+                    currentLibrary,
+                    action === "remove_asset" ? "" : key
+                );
+                currentLibrary.replaceWith(incomingLibrary);
+                restoreGalleryPostForms(incomingLibrary, snapshots);
+                const defaultSuccessText = action === "remove_asset"
+                    ? "Removed from Publish Content. The original and any Client Media share remain unchanged."
+                    : action === "publish"
+                        ? "Project post published with its photos and videos."
+                        : action === "unpublish"
+                            ? "Post unpublished. Its original photos and videos are retained."
+                            : action === "delete"
+                                ? "Draft post deleted. Original files and Client Media shares are unchanged."
+                                : hasFiles ? "Post draft and media saved." : "Post draft saved. The live post is unchanged.";
+                const successText = toastContent && toastContent.textContent.trim() || defaultSuccessText;
+                setWebsiteStatus(successText, false);
+            } catch (error) {
+                setWebsiteStatus("Connection lost. Your post edits and selected files are still in the form; retry when connected.", true);
+            } finally {
+                websiteMutation.busy = false;
+                if (form.isConnected) form.removeAttribute("aria-busy");
+                if (submitter && submitter.isConnected && "disabled" in submitter) submitter.disabled = false;
+            }
+        });
+        document.addEventListener("click", function (event) {
+            const button = event.target.closest && event.target.closest("[data-gallery-prev], [data-gallery-next]");
+            if (!button) return;
+            const carousel = button.closest("[data-gallery-carousel]");
+            if (!carousel) return;
+            const slides = Array.from(carousel.querySelectorAll("[data-gallery-slide]"));
+            if (slides.length < 2) return;
+            const current = Math.max(0, slides.findIndex(function (slide) { return !slide.hidden; }));
+            const offset = button.matches("[data-gallery-next]") ? 1 : -1;
+            const next = (current + offset + slides.length) % slides.length;
+            slides.forEach(function (slide, index) {
+                slide.hidden = index !== next;
+                slide.setAttribute("aria-hidden", index === next ? "false" : "true");
+                if (index !== next) {
+                    const video = slide.querySelector("video");
+                    if (video) video.pause();
+                }
+            });
+            const counter = carousel.querySelector("[data-gallery-counter]");
+            if (counter) counter.textContent = (next + 1) + " / " + slides.length;
+        });
+        const snapshotWebsiteEditors = function (library, submittedItemId, action, syncGallerySettings) {
+            return Array.from(library.querySelectorAll("[data-website-publication-save]"))
+                .map(function (form) {
+                    const item = form.closest("[data-website-media-item]");
+                    const sameItem = item && item.dataset.websiteMediaItem === submittedItemId;
+                    const controls = Array.from(form.elements).filter(function (control) {
+                        if (!control.name || control.name.startsWith("gallery-")) return false;
+                        const isGallerySettings = control.name.startsWith("project-gallery-");
+                        if (sameItem && action === "unpublish") {
+                            return control.name.startsWith("website-") || isGallerySettings;
+                        }
+                        if (sameItem) return false;
+                        if (syncGallerySettings && isGallerySettings) return false;
+                        return true;
+                    });
+                    return {
+                        itemId: item ? item.dataset.websiteMediaItem : "",
+                        values: controls.map(function (control, index) {
+                            return {
+                                name: control.name,
+                                index: controls.slice(0, index).filter(function (previous) { return previous.name === control.name; }).length,
+                                type: control.type,
+                                value: control.value,
+                                checked: control.checked,
+                                selected: control.multiple ? Array.from(control.selectedOptions).map(function (option) { return option.value; }) : null
+                            };
+                        })
+                    };
+                });
+        };
+        const restoreWebsiteEditors = function (library, snapshots) {
+            snapshots.forEach(function (snapshot) {
+                const item = library.querySelector('[data-website-media-item="' + snapshot.itemId + '"]');
+                const form = item && item.querySelector("[data-website-publication-save]");
+                if (!form) return;
+                snapshot.values.forEach(function (saved) {
+                    const controls = Array.from(form.elements).filter(function (control) { return control.name === saved.name; });
+                    const control = controls[saved.index];
+                    if (!control) return;
+                    if (saved.type === "checkbox" || saved.type === "radio") control.checked = saved.checked;
+                    else if (control.multiple && saved.selected) {
+                        Array.from(control.options).forEach(function (option) { option.selected = saved.selected.includes(option.value); });
+                    } else control.value = saved.value;
+                });
+            });
+        };
+        const replaceWebsiteLibrary = function (responseDocument, submittedItemId, action, syncGallerySettings) {
+            const current = document.querySelector("[data-website-media-library]");
+            const incoming = responseDocument.querySelector("[data-website-media-library]");
+            if (!current || !incoming) return false;
+            const snapshots = snapshotWebsiteEditors(current, submittedItemId, action, syncGallerySettings);
+            restoreWebsiteEditors(incoming, snapshots);
+            current.replaceWith(incoming);
+            return true;
+        };
+        const websiteResponseErrors = function (responseDocument) {
+            return Array.from(responseDocument.querySelectorAll("[data-website-media-library] .errorlist"))
+                .map(function (item) { return item.textContent.trim(); })
+                .filter(Boolean)
+                .join(" ");
+        };
+        const websiteGallerySettingsMatch = function (form, responseDocument, itemId) {
+            const prefix = "project-gallery-" + itemId + "-";
+            const submittedControls = Array.from(form.elements).filter(function (control) {
+                return control.name && control.name.startsWith(prefix);
+            });
+            const responseItem = responseDocument.querySelector('[data-website-media-item="' + itemId + '"]');
+            const responseForm = responseItem && responseItem.querySelector("[data-website-publication-save]");
+            if (!submittedControls.length || !responseForm) return false;
+
+            return submittedControls.every(function (submittedControl) {
+                const savedControl = Array.from(responseForm.elements).find(function (control) {
+                    return control.name === submittedControl.name;
+                });
+                return savedControl && savedControl.value === submittedControl.value;
+            });
+        };
+        const updateWebsiteBatchSelection = function () {
+            const form = document.querySelector("[data-website-batch-publish]");
+            if (!form) return;
+            const checkboxes = Array.from(document.querySelectorAll("[data-website-draft-select]"));
+            const selectedCount = checkboxes.filter(function (checkbox) { return checkbox.checked; }).length;
+            const selectAll = form.querySelector("[data-website-select-all]");
+            const count = form.querySelector("[data-website-selection-count]");
+            const submit = form.querySelector("[data-website-batch-submit]");
+            if (selectAll) {
+                selectAll.checked = checkboxes.length > 0 && selectedCount === checkboxes.length;
+                selectAll.indeterminate = selectedCount > 0 && selectedCount < checkboxes.length;
+            }
+            if (count) count.textContent = selectedCount ? selectedCount + " draft" + (selectedCount === 1 ? "" : "s") + " selected" : "No drafts selected";
+            if (submit) submit.disabled = selectedCount === 0 || websiteMutation.busy;
+        };
+        const websiteFormHasUnsavedEdits = function (form) {
+            return Array.from(form.elements).some(function (control) {
+                if (!control.name || control.disabled || ["hidden", "submit", "button", "reset"].includes(control.type)) return false;
+                if (control.type === "checkbox" || control.type === "radio") return control.checked !== control.defaultChecked;
+                if (control.tagName === "SELECT") {
+                    return Array.from(control.options).some(function (option) { return option.selected !== option.defaultSelected; });
+                }
+                return "defaultValue" in control && control.value !== control.defaultValue;
+            });
+        };
+        document.addEventListener("change", function (event) {
+            if (event.target.matches && event.target.matches("[data-website-select-all]")) {
+                document.querySelectorAll("[data-website-draft-select]").forEach(function (checkbox) {
+                    checkbox.checked = event.target.checked;
+                });
+                updateWebsiteBatchSelection();
+            } else if (event.target.matches && event.target.matches("[data-website-draft-select]")) {
+                updateWebsiteBatchSelection();
+            }
+        });
+        document.addEventListener("submit", async function (event) {
+            const form = event.target;
+            if (!form.matches || !form.matches("[data-website-batch-publish]")) return;
+            event.preventDefault();
+            const selected = Array.from(document.querySelectorAll("[data-website-draft-select]:checked"));
+            if (!selected.length) {
+                setWebsiteStatus("Select at least one website draft to publish.", true);
+                return;
+            }
+            const selectedForms = selected.map(function (checkbox) {
+                const item = checkbox.closest("[data-website-media-item]");
+                return item && item.querySelector("[data-website-publication-save]");
+            }).filter(Boolean);
+            if (selectedForms.some(websiteFormHasUnsavedEdits)) {
+                setWebsiteStatus("Save each selected item’s details first, then publish the saved drafts together.", true);
+                return;
+            }
+            if (websiteMutation.busy) {
+                setWebsiteStatus("Wait for the current project gallery save or upload to finish.", true);
+                return;
+            }
+            websiteMutation.busy = true;
+            form.setAttribute("aria-busy", "true");
+            const submit = form.querySelector("[data-website-batch-submit]");
+            if (submit) {
+                submit.disabled = true;
+                submit.setAttribute("aria-busy", "true");
+            }
+            setWebsiteStatus("Publishing " + selected.length + " gallery item" + (selected.length === 1 ? "" : "s") + " together…", false);
+            try {
+                const requestUrl = form.getAttribute("action") || window.location.href;
+                const response = await fetch(requestUrl, {
+                    method: "POST",
+                    body: new FormData(form),
+                    credentials: "same-origin",
+                    cache: "no-store",
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                const finalUrl = new URL(response.url || requestUrl, window.location.href);
+                if (response.status === 403 || finalUrl.pathname.includes("/accounts/login")) {
+                    setWebsiteStatus("Your session needs attention. Sign in again, then retry this change.", true);
+                    return;
+                }
+                const responseDocument = new DOMParser().parseFromString(await response.text(), "text/html");
+                const toast = responseDocument.querySelector(".toast-region .toast");
+                const serverMessage = toast && toast.querySelector(".toast-content");
+                const toastIsError = Boolean(toast && (toast.classList.contains("toast-error") || toast.classList.contains("toast-danger")));
+                if (!response.ok || toastIsError) {
+                    setWebsiteStatus(serverMessage && serverMessage.textContent.trim() || "The drafts could not be published. Review the selection and try again.", true);
+                    return;
+                }
+                if (!replaceWebsiteLibrary(responseDocument, "", "batch", false)) {
+                    setWebsiteStatus("The response could not be applied here. Your selections are still in the form; try again.", true);
+                    return;
+                }
+                setWebsiteStatus(serverMessage && serverMessage.textContent.trim() || (selected.length + " gallery items published to the website together."), false);
+                updateWebsiteBatchSelection();
+            } catch (error) {
+                setWebsiteStatus("Connection lost. Your selected drafts are still in the form; retry when connected.", true);
+            } finally {
+                websiteMutation.busy = false;
+                form.removeAttribute("aria-busy");
+                if (submit && submit.isConnected) submit.removeAttribute("aria-busy");
+                updateWebsiteBatchSelection();
+            }
+        });
+        document.addEventListener("submit", async function (event) {
+            const form = event.target;
+            if (!form.matches || !form.matches("[data-website-publication-save]")) return;
+            const submitter = event.submitter || document.activeElement;
+            if (submitter && submitter.name === "action" && submitter.value === "preview") return;
+            event.preventDefault();
+            if (form.dataset.submitting === "true") return;
+            if (websiteMutation.busy) {
+                setWebsiteStatus("Wait for the current project gallery save or upload to finish.", true);
+                return;
+            }
+            websiteMutation.busy = true;
+            form.dataset.submitting = "true";
+            form.setAttribute("aria-busy", "true");
+            if (submitter && "disabled" in submitter) submitter.disabled = true;
+            const action = submitter && submitter.name === "action" ? submitter.value : "save";
+            const pendingMessage = action === "publish"
+                ? "Publishing gallery item and saving gallery settings…"
+                : action === "unpublish"
+                    ? "Removing gallery item from the website…"
+                    : "Saving gallery item and settings…";
+            setWebsiteStatus(pendingMessage, false);
+            try {
+                const payload = new FormData(form);
+                if (submitter && submitter.name) payload.append(submitter.name, submitter.value);
+                // A submit button named "action" shadows form.action with a RadioNodeList.
+                const requestUrl = submitter && submitter.hasAttribute("formaction")
+                    ? submitter.formAction
+                    : (form.getAttribute("action") || window.location.href);
+                const response = await fetch(requestUrl, {
+                    method: "POST",
+                    body: payload,
+                    credentials: "same-origin",
+                    cache: "no-store",
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                const finalUrl = new URL(response.url || requestUrl, window.location.href);
+                if (response.status === 403 || finalUrl.pathname.includes("/accounts/login")) {
+                    setWebsiteStatus("Your session needs attention. Sign in again, then retry this change.", true);
+                    return;
+                }
+                const responseDocument = new DOMParser().parseFromString(await response.text(), "text/html");
+                const item = form.closest("[data-website-media-item]");
+                const itemId = item ? item.dataset.websiteMediaItem : "";
+                const errors = websiteResponseErrors(responseDocument);
+                const mutationSucceeded = response.ok && !errors;
+                const syncGallerySettings = mutationSucceeded && (action === "save" || action === "publish");
+                if (syncGallerySettings && !websiteGallerySettingsMatch(form, responseDocument, itemId)) {
+                    setWebsiteStatus("The gallery settings did not come back saved. Your edits are still in the form; try again.", true);
+                    return;
+                }
+                if (!replaceWebsiteLibrary(responseDocument, itemId, action, syncGallerySettings)) {
+                    setWebsiteStatus("The response could not be applied here. Your edits are still in the form; try again.", true);
+                    return;
+                }
+                if (!response.ok || errors) {
+                    setWebsiteStatus(errors || "The change could not be saved. Review the form and try again.", true);
+                    const updatedItem = itemId && document.querySelector('[data-website-media-item="' + itemId + '"]');
+                    const errorControl = updatedItem && updatedItem.querySelector(".errorlist");
+                    if (errorControl) {
+                        const field = errorControl.parentElement && errorControl.parentElement.querySelector("input, select, textarea");
+                        if (field) field.focus({ preventScroll: true });
+                    }
+                    return;
+                }
+                const messages = {
+                    save: "Draft and gallery settings saved. The live item is unchanged.",
+                    publish: "Gallery item published and gallery settings saved.",
+                    unpublish: "Removed from the website. The original file is retained."
+                };
+                setWebsiteStatus(messages[action] || "Project gallery updated.", false);
+            } catch (error) {
+                setWebsiteStatus("Connection lost. Your edits are still in the form; retry when connected.", true);
+            } finally {
+                websiteMutation.busy = false;
+                if (form.isConnected) {
+                    delete form.dataset.submitting;
+                    form.removeAttribute("aria-busy");
+                }
+                if (submitter && submitter.isConnected && "disabled" in submitter) submitter.disabled = false;
+            }
+        });
         const dialog = document.querySelector("[data-media-delete-dialog]");
         let deleteTrigger;
         if (dialog && typeof dialog.showModal === "function") {
-            document.querySelectorAll("[data-media-delete]").forEach(function (link) {
-                link.addEventListener("click", function (event) {
-                    event.preventDefault();
-                    deleteTrigger = link;
-                    dialog.querySelector("[data-delete-form]").action = link.href;
-                    dialog.querySelector("[data-delete-name]").textContent = link.dataset.mediaName;
-                    dialog.showModal();
-                    dialog.querySelector("[data-delete-cancel]").focus();
-                });
+            document.addEventListener("click", function (event) {
+                const link = event.target.closest && event.target.closest("[data-media-delete]");
+                if (!link) return;
+                event.preventDefault();
+                deleteTrigger = link;
+                dialog.querySelector("[data-delete-form]").action = link.href;
+                dialog.querySelector("[data-delete-name]").textContent = link.dataset.mediaName;
+                dialog.showModal();
+                dialog.querySelector("[data-delete-cancel]").focus();
             });
             dialog.querySelector("[data-delete-cancel]").addEventListener("click", function () { dialog.close(); });
             dialog.addEventListener("close", function () { if (deleteTrigger) deleteTrigger.focus(); });
@@ -2358,21 +3206,133 @@
             const list = form.querySelector("[data-upload-file-list]");
             const status = form.querySelector("[data-upload-status]");
             let chosen = [];
+            const isWebsiteUpload = form.hasAttribute("data-website-media-upload");
+            const metadataInput = isWebsiteUpload ? form.querySelector('input[name="publication_details"]') : null;
+            const setUploadStatus = function (message, isError) {
+                status.textContent = message;
+                showAdminToast(message, isError);
+            };
+
+            const fileSignature = function (file) {
+                return [file.name, file.size, file.lastModified, file.type].join("|");
+            };
+            const titleFromFilename = function (file) {
+                return file.name.replace(/^.*[\\/]/, "").replace(/\.[^.]+$/, "").trim().slice(0, 180) || "Project media";
+            };
+            const defaultDetails = function (file, index) {
+                return { title: titleFromFilename(file), caption: "", label: "", show_client_name: false, sort_order: index };
+            };
+
+            const makeTextField = function (details, key, title, options) {
+                const wrapper = document.createElement("label");
+                wrapper.className = "website-upload-field" + (options.wide ? " is-wide" : "");
+                const label = document.createElement("span");
+                label.textContent = title;
+                const control = options.multiline ? document.createElement("textarea") : document.createElement("input");
+                if (options.multiline) {
+                    control.rows = 3;
+                } else {
+                    control.type = options.number ? "number" : "text";
+                    if (options.maxLength) control.maxLength = options.maxLength;
+                    if (options.number) {
+                        control.min = "0";
+                        control.step = "1";
+                    }
+                }
+                control.value = details[key] == null ? "" : String(details[key]);
+                if (options.required) control.required = true;
+                control.addEventListener("input", function () {
+                    details[key] = options.number ? control.value : control.value;
+                });
+                wrapper.append(label, control);
+                return { wrapper: wrapper, control: control };
+            };
+
+            const makeWebsiteReviewCard = function (entry, index) {
+                const article = document.createElement("article");
+                article.className = "website-upload-review-card";
+                const header = document.createElement("header");
+                header.className = "website-upload-review-heading";
+                const fileInfo = document.createElement("div");
+                const kicker = document.createElement("span");
+                kicker.className = "section-kicker";
+                kicker.textContent = "File " + (index + 1);
+                const filename = document.createElement("strong");
+                filename.textContent = entry.file.name;
+                const size = document.createElement("small");
+                size.textContent = (entry.file.size / 1024 / 1024).toFixed(1) + " MB";
+                fileInfo.append(kicker, filename, size);
+
+                const remove = document.createElement("button");
+                remove.type = "button";
+                remove.className = "text-link-button";
+                remove.textContent = "Remove";
+                remove.setAttribute("aria-label", "Remove " + entry.file.name);
+                remove.addEventListener("click", function () {
+                    chosen.splice(index, 1);
+                    const transfer = new DataTransfer();
+                    chosen.forEach(function (item) { transfer.items.add(item.file); });
+                    input.files = transfer.files;
+                    redraw();
+                });
+                header.append(fileInfo, remove);
+
+                const fields = document.createElement("div");
+                fields.className = "website-upload-metadata-grid";
+                const titleField = makeTextField(entry.details, "title", "Gallery item title", { required: true, maxLength: 180 });
+                titleField.control.autocomplete = "off";
+                fields.appendChild(titleField.wrapper);
+                const captionField = makeTextField(entry.details, "caption", "Public caption", { multiline: true, wide: true });
+                fields.appendChild(captionField.wrapper);
+                const labelField = makeTextField(entry.details, "label", "Public label (optional)", { maxLength: 60 });
+                fields.appendChild(labelField.wrapper);
+                const orderField = makeTextField(entry.details, "sort_order", "Display order", { number: true });
+                fields.appendChild(orderField.wrapper);
+
+                const consent = document.createElement("label");
+                consent.className = "website-upload-client-name form-check";
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.checked = Boolean(entry.details.show_client_name);
+                checkbox.addEventListener("change", function () { entry.details.show_client_name = checkbox.checked; });
+                const consentCopy = document.createElement("span");
+                const consentTitle = document.createElement("strong");
+                consentTitle.textContent = "Show the client name on this item";
+                const consentHelp = document.createElement("small");
+                consentHelp.textContent = "This applies only to this gallery item.";
+                consentCopy.append(consentTitle, consentHelp);
+                consent.append(checkbox, consentCopy);
+                fields.appendChild(consent);
+                article.append(header, fields);
+                return { card: article, titleControl: titleField.control, orderControl: orderField.control };
+            };
+
             const redraw = function () {
                 list.replaceChildren();
-                chosen.forEach(function (file, index) {
+                if (!chosen.length) {
+                    const empty = document.createElement("p");
+                    empty.className = "website-upload-empty";
+                    empty.textContent = "Choose files above to prepare their details.";
+                    list.appendChild(empty);
+                    return;
+                }
+                chosen.forEach(function (entry, index) {
+                    if (isWebsiteUpload) {
+                        list.appendChild(makeWebsiteReviewCard(entry, index).card);
+                        return;
+                    }
                     const row = document.createElement("div");
                     const name = document.createElement("span");
-                    name.textContent = file.name + " · " + (file.size / 1024 / 1024).toFixed(1) + " MB";
+                    name.textContent = entry.file.name + " · " + (entry.file.size / 1024 / 1024).toFixed(1) + " MB";
                     const remove = document.createElement("button");
                     remove.type = "button";
                     remove.className = "text-link-button";
                     remove.textContent = "Remove";
-                    remove.setAttribute("aria-label", "Remove " + file.name);
+                    remove.setAttribute("aria-label", "Remove " + entry.file.name);
                     remove.addEventListener("click", function () {
                         chosen.splice(index, 1);
                         const transfer = new DataTransfer();
-                        chosen.forEach(function (selected) { transfer.items.add(selected); });
+                        chosen.forEach(function (item) { transfer.items.add(item.file); });
                         input.files = transfer.files;
                         redraw();
                     });
@@ -2380,35 +3340,89 @@
                     list.append(row);
                 });
             };
-            input.addEventListener("change", function () { chosen = Array.from(input.files || []); redraw(); status.textContent = ""; });
+            input.addEventListener("change", function () {
+                const previous = chosen.slice();
+                chosen = Array.from(input.files || []).map(function (file, index) {
+                    const previousIndex = previous.findIndex(function (entry) { return fileSignature(entry.file) === fileSignature(file); });
+                    if (previousIndex >= 0) return previous.splice(previousIndex, 1)[0];
+                    return { file: file, details: defaultDetails(file, index) };
+                });
+                redraw();
+                status.textContent = "";
+            });
             form.addEventListener("submit", async function (event) {
                 event.preventDefault();
-                const invalid = chosen.find(function (file) { return file.size === 0 || file.size > 50 * 1024 * 1024 || !/\.(jpe?g|png|webp|gif|heic|mp4|mov|webm)$/i.test(file.name); });
+                if (isWebsiteUpload) {
+                    const missingTitle = chosen.find(function (entry) { return !entry.details.title.trim(); });
+                    const invalidOrder = chosen.find(function (entry) {
+                        const value = Number(entry.details.sort_order);
+                        return String(entry.details.sort_order).trim() === "" || !Number.isInteger(value) || value < 0;
+                    });
+                    if (missingTitle || invalidOrder) {
+                        setUploadStatus(missingTitle ? "Add a public title for each photo or video before uploading." : "Display order must be a non-negative whole number.", true);
+                        const target = missingTitle || invalidOrder;
+                        const targetIndex = chosen.indexOf(target);
+                        const card = list.children[targetIndex];
+                        const control = card && card.querySelector(missingTitle ? 'input[required]' : 'input[type="number"]');
+                        if (control) control.focus();
+                        return;
+                    }
+                    if (!metadataInput) {
+                        setUploadStatus("The website detail form is unavailable. Reload Publish Content and try again.", true);
+                        return;
+                    }
+                    metadataInput.value = JSON.stringify(chosen.map(function (entry) { return entry.details; }));
+                }
+                const invalid = chosen.find(function (entry) {
+                    const file = entry.file;
+                    return file.size === 0 || file.size > 50 * 1024 * 1024 || !/\.(jpe?g|png|webp|gif|heic|mp4|mov|webm)$/i.test(file.name);
+                });
                 if (!chosen.length || chosen.length > 20 || invalid) {
-                    status.textContent = invalid ? invalid.name + ": choose a supported photo or video under 50 MB." : "Choose between 1 and 20 files.";
+                    setUploadStatus(invalid ? invalid.file.name + ": choose a supported photo or video under 50 MB." : "Choose between 1 and 20 files.", true);
                     return;
                 }
                 const button = form.querySelector('button[type="submit"]');
                 if (button.disabled) return;
+                if (isWebsiteUpload && websiteMutation.busy) {
+                    setUploadStatus("Wait for the current project gallery save or upload to finish.", true);
+                    return;
+                }
                 button.disabled = true;
+                if (isWebsiteUpload) websiteMutation.busy = true;
                 form.setAttribute("aria-busy", "true");
-                status.textContent = "Uploading drafts…";
+                setUploadStatus("Uploading drafts…", false);
                 try {
-                    const response = await fetch(form.action, { method: "POST", body: new FormData(form), credentials: "same-origin" });
-                    if (response.redirected && new URL(response.url).pathname.includes("/dashboard/media")) {
-                        window.location.assign(response.url);
-                        return;
-                    }
-                    if (response.status === 403 || response.redirected) {
-                        status.textContent = "Your session needs attention. Sign in again, then retry this upload.";
+                    const requestUrl = form.getAttribute("action") || window.location.href;
+                    const response = await fetch(requestUrl, { method: "POST", body: new FormData(form), credentials: "same-origin" });
+                    const finalUrl = new URL(response.url || requestUrl, window.location.href);
+                    if (response.status === 403 || finalUrl.pathname.includes("/accounts/login")) {
+                        setUploadStatus("Your session needs attention. Sign in again, then retry this upload.", true);
                     } else {
                         const html = new DOMParser().parseFromString(await response.text(), "text/html");
-                        const errors = Array.from(html.querySelectorAll("[data-publication-upload] .errorlist")).map(function (item) { return item.textContent.trim(); });
-                        status.textContent = errors.join(" ") || "The upload could not be saved. Your selected files are still here; try again.";
+                        const errors = Array.from(html.querySelectorAll("[data-publication-upload] .errorlist")).map(function (item) { return item.textContent.trim(); }).filter(Boolean);
+                        const isWebsiteResponse = isWebsiteUpload && finalUrl.pathname.includes("/dashboard/content");
+                        const currentClientLibrary = !isWebsiteUpload && document.querySelector(".client-sharing-library");
+                        const incomingClientLibrary = !isWebsiteUpload && html.querySelector(".client-sharing-library");
+                        if (response.ok && response.redirected && isWebsiteResponse && replaceWebsiteLibrary(html, null, "upload")) {
+                            chosen = [];
+                            input.value = "";
+                            if (metadataInput) metadataInput.value = "";
+                            redraw();
+                            setUploadStatus("Website drafts uploaded. They are now listed below.", false);
+                        } else if (response.ok && response.redirected && currentClientLibrary && incomingClientLibrary) {
+                            currentClientLibrary.replaceWith(incomingClientLibrary);
+                            chosen = [];
+                            input.value = "";
+                            redraw();
+                            setUploadStatus("Client media drafts uploaded.", false);
+                        } else {
+                            setUploadStatus(errors.join(" ") || "The upload could not be saved. Your selected files are still here; try again.", true);
+                        }
                     }
                 } catch (error) {
-                    status.textContent = "Connection lost. Your selected files are still here; retry when connected.";
+                    setUploadStatus("Connection lost. Your selected files are still here; retry when connected.", true);
                 } finally {
+                    if (isWebsiteUpload) websiteMutation.busy = false;
                     button.disabled = false;
                     form.removeAttribute("aria-busy");
                 }
@@ -2417,8 +3431,12 @@
     }
 
     function init() {
+        // Bind the admin-wide POST handler first so other optional UI setup cannot
+        // leave ordinary save and upload forms falling back to full-page submits.
+        initAdminAsyncForms();
         initMediaPublishing();
         initNavigation();
+        initContentPageNavigation();
         initTaskSearch();
         initTaskFilterDropdowns();
         initTaskAssociationSelectors();

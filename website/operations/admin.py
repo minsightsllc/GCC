@@ -228,9 +228,18 @@ class EstimateLineItemAdmin(GrandCoastModelAdmin):
 
 @admin.register(Project, site=grand_coast_admin_site)
 class ProjectAdmin(GrandCoastModelAdmin):
-    list_display = ("title", "client", "status", "is_published", "updated_at")
-    list_filter = ("status", "is_published")
+    list_display = ("title", "client", "status", "updated_at")
+    list_filter = ("status",)
     search_fields = ("title", "location", "client__name", "assigned_staff__username")
+    exclude = (
+        "is_published",
+        "public_title",
+        "public_location",
+        "public_summary",
+        "show_client_name",
+        "gallery_layout",
+        "gallery_accent",
+    )
 
 
 @admin.register(Milestone, site=grand_coast_admin_site)

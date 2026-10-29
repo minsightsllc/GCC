@@ -1,11 +1,9 @@
 <section class="content-editor-panel publication-services" aria-labelledby="services-editor-title">
     <div class="service-list-heading">
         <div>
-            <span class="section-kicker">Public website</span>
             <h3 id="services-editor-title">Service entries</h3>
-            <p class="detail-value">Create the service list shown on your website. Only entries marked “Show on website” appear publicly.</p>
+            <p class="detail-value">Active entries appear on the Services page.</p>
         </div>
-        <a class="button button-outline" href="{% url 'operations:services' %}" target="_blank" rel="noopener">View services <span aria-hidden="true">↗</span></a>
     </div>
 
     <div class="service-entry-list">
@@ -39,7 +37,7 @@
         {% empty %}
         <div class="media-empty-state service-empty-state">
             <strong>No services added yet</strong>
-            <p>Add your first entry below. Until then, the public Services page will show its introduction without an empty list.</p>
+            <p>Add a service below. The public page hides this list until an entry is active.</p>
         </div>
         {% endfor %}
     </div>

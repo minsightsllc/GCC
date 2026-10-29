@@ -701,17 +701,6 @@ class Project(TimeStampedModel):
         return self.title
 
     @property
-    def public_display_title(self):
-        return self.public_title.strip() or "A Grand Coast project"
-
-    def clean(self):
-        super().clean()
-        if self.is_published and not self.public_title.strip():
-            previously_published = not self._state.adding and type(self).objects.filter(pk=self.pk, is_published=True).exists()
-            if not previously_published:
-                raise ValidationError({"public_title": "Enter a public title before publishing this project."})
-
-    @property
     def progress_percent(self):
         milestones = list(self.milestones.all())
         if not milestones:
@@ -862,7 +851,7 @@ class MediaPublication(models.Model):
     """Independent audience drafts and immutable-at-save live copies of an asset."""
 
     class Destination(models.TextChoices):
-        CLIENT = "client", "Client sharing"
+        CLIENT = "client", "Client Media"
         WEBSITE = "website", "Website publishing"
 
     asset = models.ForeignKey(MediaAsset, on_delete=models.CASCADE, related_name="publications")
@@ -884,15 +873,91 @@ class MediaPublication(models.Model):
 
     def draft_data(self):
         project = self.asset.project
+        show_client_name = bool(
+            self.show_client_name
+            and project
+            and project.client_id
+        )
         return {
             "title": self.title, "caption": self.caption, "label": self.label,
             "location": self.location, "sort_order": self.sort_order,
-            "client_name": project.client.name if self.show_client_name and project and project.client_id else "",
+            "client_name": project.client.name if show_client_name else "",
         }
 
     @property
     def has_unpublished_changes(self):
         return bool(self.published_at and self.draft_data() != self.published_data)
+
+
+class WebsiteGalleryPost(TimeStampedModel):
+    """One public project post containing an ordered set of media slides."""
+
+    class Layout(models.TextChoices):
+        SPLIT = "split", "Story split"
+        WIDE = "wide", "Wide media"
+        COMPACT = "compact", "Compact feature"
+
+    class Accent(models.TextChoices):
+        GOLD = "gold", "Coast gold"
+        BLUE = "blue", "Brand blue"
+        NAVY = "navy", "Deep navy"
+        SAGE = "sage", "Coastal sage"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="website_gallery_posts")
+    title = models.CharField(max_length=180)
+    caption = models.TextField(blank=True)
+    label = models.CharField(max_length=60, blank=True)
+    show_client_name = models.BooleanField(default=False)
+    layout = models.CharField(max_length=16, choices=Layout.choices, default=Layout.SPLIT)
+    accent = models.CharField(max_length=16, choices=Accent.choices, default=Accent.GOLD)
+    sort_order = models.PositiveIntegerField(default=0)
+    published_data = models.JSONField(default=dict, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["sort_order", "created_at", "pk"]
+
+    def draft_data(self):
+        client_name = ""
+        if (
+            self.show_client_name
+            and self.project_id
+            and self.project.client_id
+        ):
+            client_name = self.project.client.name
+        slides = [
+            {"asset_id": str(item.asset_id), "sort_order": item.sort_order}
+            for item in self.items.filter(is_in_draft=True).order_by("sort_order", "created_at", "pk")
+        ]
+        return {
+            "title": self.title,
+            "caption": self.caption,
+            "label": self.label,
+            "show_client_name": self.show_client_name,
+            "client_name": client_name,
+            "layout": self.layout,
+            "accent": self.accent,
+            "sort_order": self.sort_order,
+            "slides": slides,
+        }
+
+    @property
+    def has_unpublished_changes(self):
+        return bool(self.published_at and self.draft_data() != self.published_data)
+
+
+class WebsiteGalleryPostItem(models.Model):
+    """A reusable original file included in a post's draft and/or live snapshot."""
+
+    post = models.ForeignKey(WebsiteGalleryPost, on_delete=models.CASCADE, related_name="items")
+    asset = models.OneToOneField(MediaAsset, on_delete=models.CASCADE, related_name="website_post_item")
+    sort_order = models.PositiveIntegerField(default=0)
+    is_in_draft = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sort_order", "created_at", "pk"]
 
 
 class LeadAttachment(models.Model):

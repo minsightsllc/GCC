@@ -803,7 +803,7 @@ class OperationsWorkflowTests(TestCase):
         upload = SimpleUploadedFile("progress.jpg", b"\xff\xd8\xffimage bytes", content_type="image/jpeg")
         response = self.browser.post(
             reverse("operations:media-upload"),
-            {"project": str(self.project.pk), "destinations": ["client"], "files": [upload]},
+            {"project": str(self.project.pk), "files": [upload]},
         )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(MediaAsset.objects.filter(project=self.project, title="progress").exists())

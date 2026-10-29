@@ -1423,7 +1423,7 @@ class PlatformWorkflowTests(TestCase):
         media = MediaAsset.objects.get(title='field-report')
         self.assertEqual(media.visibility, MediaAsset.Visibility.INTERNAL)
 
-    def test_media_library_destinations_and_empty_state_are_labeled(self):
+    def test_client_sharing_empty_state_is_labeled(self):
         self.login(self.owner)
         empty_project = Project.objects.create(title="No media yet")
         response = self.browser.get(
@@ -1433,9 +1433,10 @@ class PlatformWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['media_destination'], 'client')
         self.assertEqual(response.context['media_rows'], [])
-        self.assertContains(response, 'aria-label="Media destination"')
-        self.assertContains(response, 'aria-current="page"')
-        self.assertContains(response, 'No files in this view')
+        self.assertContains(response, 'Client Media')
+        self.assertNotContains(response, 'aria-label="Media destination"')
+        self.assertNotContains(response, 'name="website-')
+        self.assertContains(response, 'No client media in this view')
 
     def test_owner_can_review_keep_send_and_delete_a_client_update_draft(self):
         internal_update = ProjectUpdate.objects.create(

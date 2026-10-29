@@ -1,0 +1,26 @@
+<article class="public-gallery-post post-layout-{{ post.layout }} post-accent-{{ post.accent }}" aria-label="{{ post.title }}">
+    <div class="public-gallery-post-copy">
+        {% if post.label %}<span class="publication-label">{{ post.label }}</span>{% endif %}
+        <h3>{{ post.title }}</h3>
+        {% if post.caption %}<p>{{ post.caption|linebreaksbr }}</p>{% endif %}
+        {% if post.client_name %}<p class="publication-meta">Client: {{ post.client_name }}</p>{% endif %}
+    </div>
+    <div class="public-post-carousel" data-gallery-carousel role="group" aria-roledescription="carousel" aria-label="Photos and videos for {{ post.title }}">
+        <div class="public-post-slides">
+            {% for slide in post.slides %}
+            <div class="public-post-slide" data-gallery-slide role="group" aria-roledescription="slide" aria-label="{{ forloop.counter }} of {{ post.slides|length }}" aria-hidden="{% if forloop.first %}false{% else %}true{% endif %}" {% if not forloop.first %}hidden{% endif %}>
+                {% if slide.media_type == 'video' %}
+                <video src="{{ slide.display_url }}" controls preload="metadata" aria-label="{{ slide.alt_text }}"></video>
+                {% else %}
+                <img src="{{ slide.display_url }}" alt="{{ slide.alt_text }}" {% if not forloop.first %}loading="lazy"{% endif %}>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% if post.slides|length > 1 %}
+        <button class="public-post-arrow public-post-arrow-prev" type="button" data-gallery-prev aria-label="Previous photo or video">&larr;</button>
+        <span class="public-post-counter" data-gallery-counter aria-live="polite">1 / {{ post.slides|length }}</span>
+        <button class="public-post-arrow public-post-arrow-next" type="button" data-gallery-next aria-label="Next photo or video">&rarr;</button>
+        {% endif %}
+    </div>
+</article>

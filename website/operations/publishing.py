@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import MediaAsset, MediaPublication
+from .models import MediaAsset, MediaPublication, WebsiteGalleryPost
 
 
 def publication_for(asset, destination):
@@ -13,7 +13,7 @@ def publication_for(asset, destination):
 
 def website_is_live(asset):
     publication = publication_for(asset, "website")
-    return bool(publication and publication.published_at and asset.project_id and asset.project.is_published)
+    return bool(publication and publication.published_at and asset.project_id)
 
 
 def client_is_live(asset):
@@ -25,12 +25,49 @@ def client_is_live(asset):
 def media_presentation(asset, destination, *, preview=False, publication=None):
     publication = publication or publication_for(asset, destination)
     data = (publication.draft_data() if preview else publication.published_data) if publication else {}
+    client_name = data.get("client_name", "")
     return {
         "pk": asset.pk, "file": bool(asset.file), "media_type": asset.media_type,
         "display_url": reverse("operations:media-file", kwargs={"pk": asset.pk}),
         "title": data.get("title", ""), "caption": data.get("caption", ""),
-        "label": data.get("label", ""), "location": data.get("location", ""),
-        "client_name": data.get("client_name", ""), "sort_order": data.get("sort_order", 0),
+        "label": data.get("label", ""),
+        "location": data.get("location", "") if destination != "website" else "",
+        "client_name": client_name, "sort_order": data.get("sort_order", 0),
+    }
+
+
+def website_post_presentation(post, *, preview=False):
+    """Build public-safe copy and slide URLs from one post snapshot."""
+    data = post.draft_data() if preview else (post.published_data or {})
+    items = {
+        str(item.asset_id): item.asset
+        for item in post.items.select_related("asset").prefetch_related("asset__publications")
+    }
+    slides = []
+    for slide in data.get("slides", []):
+        asset = items.get(str(slide.get("asset_id", "")))
+        if not asset or not asset.file:
+            continue
+        publication = publication_for(asset, MediaPublication.Destination.WEBSITE)
+        if not preview and not (publication and publication.published_at):
+            continue
+        slides.append({
+            "asset_id": asset.pk,
+            "media_type": asset.media_type,
+            "display_url": reverse("operations:media-file", kwargs={"pk": asset.pk}),
+            "alt_text": data.get("title") or "Project photo or video",
+        })
+    return {
+        "pk": post.pk,
+        "title": data.get("title", ""),
+        "caption": data.get("caption", ""),
+        "label": data.get("label", ""),
+        "client_name": data.get("client_name", "") if data.get("show_client_name") else "",
+        "layout": data.get("layout", WebsiteGalleryPost.Layout.SPLIT),
+        "accent": data.get("accent", WebsiteGalleryPost.Accent.GOLD),
+        "sort_order": data.get("sort_order", 0),
+        "slides": slides,
+        "is_preview": preview,
     }
 
 
@@ -47,16 +84,6 @@ def publish(publication):
     elif publication.destination == "website":
         if not project:
             raise ValidationError("Assign this media to a project before publishing it to the website.")
-        if not project.is_published:
-            raise ValidationError("Publish the project page in Projects before publishing its media.")
-        # Existing published galleries remain public with a generic project
-        # title. Allow their existing media to be updated without forcing a
-        # project-title change; newly published media still needs one.
-        if not project.public_title.strip() and not publication.published_at:
-            raise ValidationError(
-                "Add a public project title in Projects before publishing new media. "
-                "The title on this form only names the photo or video."
-            )
     else:
         raise ValidationError("Choose a valid destination before publishing this media.")
     changed = (publication.published_at is None or publication.published_data != publication.draft_data()

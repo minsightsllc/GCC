@@ -1,0 +1,296 @@
+<section class="content-page-panel content-projects-panel" id="publish-page-projects" aria-labelledby="publish-projects-title">
+    <header class="content-page-heading">
+        <div>
+            <span class="section-kicker">Projects</span>
+            <h3 id="publish-projects-title">Projects</h3>
+            <p>Build one public post from a set of photos and videos. Client Media stays separate.</p>
+        </div>
+        <a class="button button-outline" href="{% url 'operations:projects' %}" target="_blank" rel="noopener">Open public Projects page &rarr;</a>
+    </header>
+
+    {% if website_projects %}
+    <form class="website-project-picker" method="get" aria-label="Choose a project gallery">
+        <input type="hidden" name="content_page_focus" value="projects">
+        <label class="form-field" for="website-project-picker">Project<select id="website-project-picker" name="website_project">{% for project in website_projects %}<option value="{{ project.pk }}" {% if website_project.pk == project.pk %}selected{% endif %}>{{ project.title }}</option>{% endfor %}</select></label>
+        <button class="button button-outline" type="submit">Load project</button>
+    </form>
+
+    {% if website_project %}
+    <div class="website-publishing-workflow" data-website-publishing-workflow>
+        <section class="website-selected-project" aria-label="Selected project gallery">
+            <div>
+                <span class="section-kicker">Selected project</span>
+                <h3>{{ website_project.title }}</h3>
+                <p class="detail-value">Each post can contain up to 20 ordered photos or videos, shown with previous and next arrows.</p>
+            </div>
+        </section>
+
+        <div class="website-gallery-toolbar">
+            <div>
+                <h3>Project posts</h3>
+                <p class="detail-value">One post title and caption describe all its slides.</p>
+            </div>
+            <form class="website-gallery-filter" method="get">
+                <input type="hidden" name="website_project" value="{{ website_project.pk }}">
+                <input type="hidden" name="content_page_focus" value="projects">
+                <label class="form-field" for="website-post-state">Show<select id="website-post-state" name="website_state"><option value="all" {% if website_post_state == 'all' %}selected{% endif %}>All posts</option><option value="draft" {% if website_post_state == 'draft' %}selected{% endif %}>Drafts and edits</option><option value="published" {% if website_post_state == 'published' %}selected{% endif %}>Published posts</option></select></label>
+                <button class="button button-outline" type="submit">Apply filter</button>
+            </form>
+        </div>
+
+        <div class="website-media-library-shell" data-website-media-library>
+            <section class="website-post-create-panel" aria-labelledby="website-post-create-title">
+                <div class="website-post-step-heading">
+                    <span class="website-upload-step-number">+</span>
+                    <div>
+                        <span class="section-kicker">New post</span>
+                        <h3 id="website-post-create-title">Create a project post</h3>
+                        <p>Choose the slides, describe the post, then choose its appearance.</p>
+                    </div>
+                </div>
+                <form id="website-post-create-form" class="workspace-form website-post-form" method="post" action="{% url 'operations:website-post-create' %}" enctype="multipart/form-data" novalidate data-website-post-create>
+                    {% csrf_token %}
+                    <input type="hidden" name="website_project" value="{{ website_project.pk }}">
+                    <input type="hidden" name="website_state" value="{{ website_post_state }}">
+                    <input type="hidden" name="website_page" value="{{ website_post_page.number|default:1 }}">
+                    <input type="hidden" name="content_page_focus" value="projects">
+                    <div class="website-post-response-error" data-website-post-response-errors role="alert" hidden></div>
+                    {{ website_post_create_form.non_field_errors }}
+
+                    <fieldset class="website-post-slides-setup">
+                        <legend>Step 1 · Choose photos and videos</legend>
+                        <p class="field-help website-post-step-help">Files you select below become slides in this post. Remove a new upload here before saving, or check existing project files to add them. Files left out stay in the project and are not deleted.</p>
+                        <div class="workspace-form-grid">
+                            <div class="form-field publication-wide">
+                                <label for="{{ website_post_create_form.files.id_for_label }}">Choose new photos or videos{{ website_post_create_form.files }}</label>
+                                {% if website_post_create_form.files.help_text %}<small class="field-help">{{ website_post_create_form.files.help_text }}</small>{% endif %}
+                                {{ website_post_create_form.files.errors }}
+                                <div class="website-post-file-review" data-website-post-file-review data-empty-message="No new files selected." aria-live="polite"><span>No new files selected.</span></div>
+                            </div>
+                            {% if website_post_create_form.existing_assets.field.queryset.exists %}
+                            <div class="form-field publication-wide website-existing-assets">
+                                <strong class="website-post-field-title">Or add existing website files</strong>
+                                <p class="field-help">Only files set up for website publishing appear here. Remove takes a file out of this list and website publishing; its original and any Client Media share stay unchanged.</p>
+                                <ul class="website-existing-asset-list">
+                                    {% for choice in website_post_create_form.existing_assets %}
+                                    <li>
+                                        <label for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>
+                                        <button class="text-link-button website-existing-asset-remove" type="submit" name="website_asset_remove" value="{{ choice.data.value }}" aria-label="Remove {{ choice.choice_label }} from Publish Content" data-website-asset-remove-trigger>Remove</button>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                                {{ website_post_create_form.existing_assets.errors }}
+                            </div>
+                            {% else %}
+                            <p class="field-help publication-wide">There are no other website files available to add. Upload a new file above to add it to this post.</p>
+                            {% endif %}
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="website-post-settings">
+                        <legend>Step 2 · Add the post title and caption</legend>
+                        <p class="field-help website-post-step-help">One title and caption appear with the whole slideshow, not separately on each photo or video.</p>
+                        <div class="workspace-form-grid">
+                            {% for field in website_post_create_form %}
+                            {% if field.name == 'title' or field.name == 'caption' or field.name == 'label' or field.name == 'show_client_name' %}
+                            <div class="form-field{% if field.name == 'caption' %} publication-wide{% endif %}">
+                                {% if field.field.widget.input_type == 'checkbox' %}
+                                <label class="form-check" for="{{ field.id_for_label }}">{{ field }}<span><strong>{{ field.label }}</strong>{% if field.help_text %}<small class="field-help">{{ field.help_text }}</small>{% endif %}</span></label>
+                                {% else %}
+                                <label for="{{ field.id_for_label }}">{{ field.label }}{{ field }}</label>{% if field.help_text %}<small class="field-help">{{ field.help_text }}</small>{% endif %}
+                                {% endif %}
+                                {{ field.errors }}
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="website-post-settings">
+                        <legend>Step 3 · Set the post appearance and order</legend>
+                        <div class="workspace-form-grid">
+                            {% for field in website_post_create_form %}
+                            {% if field.name == 'layout' or field.name == 'accent' or field.name == 'sort_order' %}
+                            <div class="form-field">
+                                <label for="{{ field.id_for_label }}">{{ field.label }}{{ field }}</label>
+                                {% if field.help_text %}<small class="field-help">{{ field.help_text }}</small>{% endif %}
+                                {{ field.errors }}
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </fieldset>
+
+                    <div class="detail-actions website-post-actions">
+                            <button class="button button-quiet" type="submit" name="action" value="save">Save draft</button>
+                        <button class="button button-primary" type="submit" name="action" value="publish">Publish post</button>
+                            <span class="field-help">A saved draft is private. Publish it when it is ready for the public Projects page.</span>
+                    </div>
+                </form>
+            </section>
+
+            <div class="website-post-list" data-website-post-list>
+                {% for post in website_post_rows %}
+                <article class="website-post-editor" id="website-post-{{ post.pk }}" data-website-post-id="{{ post.pk }}">
+                    <header class="website-post-editor-heading">
+                        <div>
+                            <span class="section-kicker">Project post</span>
+                            <h3>{{ post.title }}</h3>
+                            <p>{{ post.draft_slide_count }} slide{{ post.draft_slide_count|pluralize }} in the saved post</p>
+                        </div>
+                        <span class="status-badge">{% if post.is_live %}Published{% if post.has_draft_changes %} &middot; Draft changes{% endif %}{% else %}Draft{% endif %}</span>
+                    </header>
+
+                    <div class="website-post-editor-preview">
+                        {% if post.preview.slides %}
+                            {% include 'operations/public_gallery_post.html' with post=post.preview %}
+                        {% else %}
+                            <div class="media-empty-state"><strong>No slides in this draft</strong><p>Add a photo or video below.</p></div>
+                        {% endif %}
+                    </div>
+
+                    <form class="workspace-form website-post-form" method="post" action="{% url 'operations:website-post-update' pk=post.pk %}" enctype="multipart/form-data" novalidate data-website-post-save>
+                        {% csrf_token %}
+                        <input type="hidden" name="website_project" value="{{ website_project.pk }}">
+                        <input type="hidden" name="website_state" value="{{ website_post_state }}">
+                        <input type="hidden" name="website_page" value="{{ website_post_page.number }}">
+                        <input type="hidden" name="content_page_focus" value="projects">
+                        <div class="website-post-response-error" data-website-post-response-errors role="alert" hidden></div>
+                        {{ post.form.non_field_errors }}
+
+                        <fieldset class="website-post-slides-setup">
+                            <legend>Step 1 · Choose photos and videos</legend>
+                            <p class="field-help website-post-step-help">
+                                {% if post.is_live %}Uncheck a slide to remove it from the next version, then republish. Saving draft changes alone keeps the current public post unchanged.{% else %}Uncheck a slide and save the draft to remove it from this post. Its original file stays in the project and can be reused.{% endif %}
+                            </p>
+                            {% if post.items_for_editor %}
+                            <div class="website-post-slide-list">
+                                {% for slide in post.items_for_editor %}
+                                <article class="website-post-slide-row{% if not slide.is_in_draft %} is-removed-from-draft{% endif %}">
+                                    <div class="website-post-slide-thumb">
+                                        {% if slide.asset.media_type == 'video' %}<video src="{{ slide.display_url }}" controls preload="metadata"></video>{% else %}<img src="{{ slide.display_url }}" alt="{{ slide.asset.title }}" loading="lazy">{% endif %}
+                                    </div>
+                                    <div class="website-post-slide-info">
+                                        <strong>{{ slide.asset.title }}</strong>
+                                        <small>{% if post.is_live %}{% if slide.is_in_draft and slide.is_in_live %}Included in the live post and saved draft{% elif slide.is_in_draft %}Added to the draft; not public until republished{% elif slide.is_in_live %}Removed from the draft; still public until republished{% else %}Not included in the live post or saved draft{% endif %}{% elif slide.is_in_draft %}Included in this draft{% else %}Excluded from this draft; the original file is available to reuse{% endif %}</small>
+                                        <label class="form-check" for="{{ slide.keep_checkbox.id_for_label }}">{{ slide.keep_checkbox }}<span><strong>{% if post.is_live %}Include in the next version{% else %}Keep in this post{% endif %}</strong><small class="field-help">Uncheck to remove this slide; the original file is kept.</small></span></label>
+                                        <label class="form-field website-slide-order" for="{{ slide.order_field.id_for_label }}">Slide order{{ slide.order_field }}</label>
+                                        {{ slide.order_field.errors }}
+                                    </div>
+                                </article>
+                                {% endfor %}
+                            </div>
+                            {% else %}<div class="media-empty-state"><strong>No slides in this draft</strong><p>Add photos or videos below. Original files are kept even when removed from a post.</p></div>{% endif %}
+
+                            <div class="workspace-form-grid website-post-add-slides">
+                                <div class="form-field publication-wide">
+                                    <label for="{{ post.form.files.id_for_label }}">Add new photos or videos{{ post.form.files }}</label>{{ post.form.files.errors }}
+                                    <div class="website-post-file-review" data-website-post-file-review data-empty-message="No new files selected." aria-live="polite"><span>No new files selected.</span></div>
+                                </div>
+                                {% if post.form.existing_assets.field.queryset.exists %}
+                                <div class="form-field publication-wide website-existing-assets">
+                                    <strong class="website-post-field-title">Or add existing website files</strong>
+                                    <p class="field-help">Only files set up for website publishing appear here. Remove takes a file out of this list and website publishing; its original and any Client Media share stay unchanged.</p>
+                                    <ul class="website-existing-asset-list">
+                                        {% for choice in post.form.existing_assets %}
+                                        <li>
+                                            <label for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>
+                                            <button class="text-link-button website-existing-asset-remove" type="submit" name="website_asset_remove" value="{{ choice.data.value }}" aria-label="Remove {{ choice.choice_label }} from Publish Content" data-website-asset-remove-trigger>Remove</button>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                    {{ post.form.existing_assets.errors }}
+                                </div>
+                                {% else %}
+                                <p class="field-help publication-wide">No other website files are available to add.</p>
+                                {% endif %}
+                                {{ post.form.items_to_keep.errors }}
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="website-post-settings">
+                            <legend>Step 2 · Edit the post title and caption</legend>
+                            <p class="field-help website-post-step-help">These details apply to every slide in this post.</p>
+                            <div class="workspace-form-grid">
+                                {% for field in post.form %}
+                                {% if field.name == 'title' or field.name == 'caption' or field.name == 'label' or field.name == 'show_client_name' %}
+                                <div class="form-field{% if field.name == 'caption' %} publication-wide{% endif %}">
+                                    {% if field.field.widget.input_type == 'checkbox' %}
+                                    <label class="form-check" for="{{ field.id_for_label }}">{{ field }}<span><strong>{{ field.label }}</strong>{% if field.help_text %}<small class="field-help">{{ field.help_text }}</small>{% endif %}</span></label>
+                                    {% else %}
+                                    <label for="{{ field.id_for_label }}">{{ field.label }}{{ field }}</label>{% if field.help_text %}<small class="field-help">{{ field.help_text }}</small>{% endif %}
+                                    {% endif %}
+                                    {{ field.errors }}
+                                </div>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="website-post-settings">
+                            <legend>Step 3 · Edit the appearance and order</legend>
+                            <div class="workspace-form-grid">
+                                {% for field in post.form %}
+                                {% if field.name == 'layout' or field.name == 'accent' or field.name == 'sort_order' %}
+                                <div class="form-field">
+                                    <label for="{{ field.id_for_label }}">{{ field.label }}{{ field }}</label>
+                                    {% if field.help_text %}<small class="field-help">{{ field.help_text }}</small>{% endif %}
+                                    {{ field.errors }}
+                                </div>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                        </fieldset>
+
+                        {% if post.has_draft_changes %}<p class="publication-draft-note">Saved edits are still private. Republish this post to update the public carousel.</p>{% endif %}
+                        <div class="detail-actions website-post-actions">
+                            <button class="button button-quiet" type="submit" name="action" value="save">{% if post.is_live %}Save draft changes{% else %}Save draft{% endif %}</button>
+                            <a class="button button-outline" href="{% url 'operations:website-post-preview' pk=post.pk %}" target="_blank" rel="noopener">Preview saved draft</a>
+                            <button class="button button-primary" type="submit" name="action" value="publish">{% if post.is_live %}Republish post{% else %}Publish post{% endif %}</button>
+                            {% if post.is_live %}<button class="text-link-button website-post-unpublish" type="submit" name="action" value="unpublish">Unpublish post</button>{% endif %}
+                        </div>
+                        {% if post.published_at %}<p class="website-post-live-note">Published {{ post.published_at|date:'M j, Y' }}. Draft edits do not change the public post until republished.</p>{% endif %}
+                    </form>
+
+                    {% if not post.is_live %}
+                    <div class="website-post-delete-area">
+                        <p>Discard this unpublished post? Its original photos and videos remain in the project.</p>
+                        <a class="button button-danger website-post-delete-trigger" href="{% url 'operations:website-post-delete' pk=post.pk %}?website_state={{ website_post_state }}&amp;website_page={{ website_post_page.number }}" data-website-post-delete-trigger>Delete this draft</a>
+                    </div>
+                    <dialog class="website-post-delete-dialog" data-website-post-delete-dialog aria-labelledby="website-post-delete-title-{{ post.pk }}" aria-describedby="website-post-delete-description-{{ post.pk }}">
+                        <form method="post" action="{% url 'operations:website-post-delete' pk=post.pk %}" data-website-post-save data-website-post-key="{{ post.pk }}" data-website-post-delete-form novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="website_project" value="{{ website_project.pk }}">
+                            <input type="hidden" name="website_state" value="{{ website_post_state }}">
+                            <input type="hidden" name="website_page" value="{{ website_post_page.number }}">
+                            <input type="hidden" name="content_page_focus" value="projects">
+                            <span class="section-kicker">Delete post draft</span>
+                            <h3 id="website-post-delete-title-{{ post.pk }}">Delete “{{ post.title }}”?</h3>
+                            <p id="website-post-delete-description-{{ post.pk }}">This removes the unpublished post and its website draft details. The original photos and videos stay stored, and any Client Media shares remain unchanged.</p>
+                            <div class="detail-actions">
+                                <button class="button button-quiet" type="button" data-website-post-delete-cancel>Keep draft</button>
+                                <button class="button button-danger" type="submit" name="action" value="delete">Delete draft</button>
+                            </div>
+                        </form>
+                    </dialog>
+                    {% endif %}
+                </article>
+                {% empty %}
+                <div class="media-empty-state website-post-empty"><strong>No posts for this project yet</strong><p>Choose multiple photos or videos above to make the first carousel post.</p></div>
+                {% endfor %}
+            </div>
+
+            {% if website_post_page.has_other_pages %}
+            <nav class="publication-pagination" aria-label="Project post pages">
+                {% if website_post_page.has_previous %}<a href="?website_project={{ website_project.pk }}&amp;website_state={{ website_post_state }}&amp;website_page={{ website_post_page.previous_page_number }}&amp;content_page_focus=projects#publish-page-projects">&larr; Previous</a>{% endif %}
+                <span>Page {{ website_post_page.number }} of {{ website_post_page.paginator.num_pages }}</span>
+                {% if website_post_page.has_next %}<a href="?website_project={{ website_project.pk }}&amp;website_state={{ website_post_state }}&amp;website_page={{ website_post_page.next_page_number }}&amp;content_page_focus=projects#publish-page-projects">Next &rarr;</a>{% endif %}
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="media-empty-state website-no-projects"><strong>No projects to publish yet</strong><p>Create an operational project first, then add its photos and videos here.</p><a class="button button-primary" href="{% url 'operations:dashboard-section' section='projects' %}">Open Projects</a></div>
+    {% endif %}
+</section>

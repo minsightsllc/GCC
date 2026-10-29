@@ -34,6 +34,8 @@ from .models import (
     Lead,
     MediaAsset,
     MediaPublication,
+    WebsiteGalleryPost,
+    WebsiteGalleryPostItem,
     ProjectDocument,
     Project,
     ProjectUpdate,
@@ -443,10 +445,9 @@ EstimateLineItemFormSet = inlineformset_factory(
 class ProjectForm(forms.ModelForm):
     class Meta:
         model = Project
-        fields = ["title", "client", "lead", "assigned_staff", "location", "project_type", "admin_stage_note", "next_step", "summary", "is_published", "public_title", "public_location", "public_summary", "show_client_name", "gallery_layout", "gallery_accent", "start_date", "target_date"]
+        fields = ["title", "client", "lead", "assigned_staff", "location", "project_type", "admin_stage_note", "next_step", "summary", "start_date", "target_date"]
         widgets = {
             "summary": forms.Textarea(attrs={"rows": 4}),
-            "public_summary": forms.Textarea(attrs={"rows": 3}),
             "start_date": forms.DateInput(attrs={"type": "date"}),
             "target_date": forms.DateInput(attrs={"type": "date"}),
             "assigned_staff": forms.SelectMultiple(attrs={
@@ -458,23 +459,6 @@ class ProjectForm(forms.ModelForm):
 
     def __init__(self, *args, staff_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["is_published"].label = "Publish on public website"
-        if self.is_bound:
-            self.data = self.data.copy()
-            # Older internal project forms can still be submitted after deployment.
-            for field in ("gallery_layout", "gallery_accent"):
-                if field not in self.data:
-                    self.data[field] = getattr(self.instance, field)
-            if not any(field in self.data for field in ("public_title", "public_location", "public_summary")):
-                for field in ("public_title", "public_location", "public_summary", "show_client_name"):
-                    self.data[field] = getattr(self.instance, field)
-        self.fields["is_published"].help_text = (
-            "Shows a public project page; this does not control client portal access."
-        )
-        self.fields["public_title"].help_text = "A title for website visitors. Internal project names are never used as a fallback."
-        self.fields["public_location"].label = "Public city or region"
-        self.fields["public_summary"].label = "Public description"
-        self.fields["show_client_name"].label = "Show the client's name on the public project page"
         self.fields["admin_stage_note"].label = "Admin-only stage note"
         self.fields["admin_stage_note"].help_text = (
             "Private staff reference only. Shared project progress and client/team alerts are controlled by milestones."
@@ -490,9 +474,6 @@ class ProjectForm(forms.ModelForm):
         cleaned = super().clean()
         lead = cleaned.get("lead")
         client = cleaned.get("client")
-        was_published = not self.instance._state.adding and self.instance.is_published
-        if cleaned.get("is_published") and not was_published and not cleaned.get("public_title"):
-            self.add_error("public_title", "Enter a public title before publishing this project.")
         if lead and client and lead.client_id != client.pk:
             raise ValidationError("Choose the client connected to this lead.")
         if lead:
@@ -510,6 +491,24 @@ class ProjectForm(forms.ModelForm):
             if not has_accepted_estimate:
                 self.add_error("lead", "Lead-derived projects require an externally approved estimate recorded in GCC.")
         return cleaned
+
+
+class ProjectGallerySettingsForm(forms.ModelForm):
+    public_title = forms.CharField(
+        required=False,
+        max_length=180,
+        label="Public project title",
+        help_text="Shown above this gallery on the public Projects page. The internal project name stays private.",
+    )
+
+    class Meta:
+        model = Project
+        fields = ["public_title", "gallery_layout", "gallery_accent"]
+        labels = {
+            "public_title": "Public project title",
+            "gallery_layout": "Gallery layout",
+            "gallery_accent": "Gallery accent",
+        }
 
 
 class ProjectCreateForm(ProjectForm):
@@ -558,27 +557,19 @@ class ProjectUpdateDraftForm(forms.ModelForm):
 class MediaEditForm(forms.ModelForm):
     class Meta:
         model = MediaAsset
-        fields = ["caption", "visibility", "project"]
+        fields = ["caption"]
         widgets = {"caption": forms.Textarea(attrs={"rows": 3})}
-
-    def __init__(self, *args, project_queryset=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["project"].queryset = project_queryset if project_queryset is not None else Project.objects.all()
 
 
 class MediaUploadForm(forms.Form):
     project = forms.ModelChoiceField(queryset=Project.objects.none())
-    destinations = forms.MultipleChoiceField(
-        choices=MediaPublication.Destination.choices, required=False,
-        widget=forms.CheckboxSelectMultiple,
-        help_text="Files upload as drafts. Review each file before sharing or publishing.",
-    )
     files = MultipleFileField(required=True)
 
-    def __init__(self, *args, project_queryset=None, **kwargs):
+    def __init__(self, *args, project_queryset=None, require_client=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["project"].queryset = project_queryset if project_queryset is not None else Project.objects.none()
         self.fields["files"].widget.attrs["accept"] = ".jpg,.jpeg,.png,.webp,.gif,.heic,.mp4,.mov,.webm"
+        self.require_client = require_client
 
     def clean_files(self):
         files = self.cleaned_data["files"]
@@ -598,9 +589,190 @@ class MediaUploadForm(forms.Form):
     def clean(self):
         cleaned = super().clean()
         project = cleaned.get("project")
-        if project and "client" in cleaned.get("destinations", []) and not project.client_id:
-            self.add_error("destinations", "Connect a client to this project before preparing client sharing.")
+        if self.require_client and project and not project.client_id:
+            self.add_error("project", "Choose a project linked to a client before preparing client media.")
         return cleaned
+
+
+class WebsiteMediaUploadForm(MediaUploadForm):
+    publication_details = forms.CharField(required=False, widget=forms.HiddenInput)
+
+    def clean(self):
+        cleaned = super().clean()
+        uploads = cleaned.get("files")
+        if not uploads:
+            return cleaned
+
+        raw_details = cleaned.get("publication_details", "")
+        if not raw_details:
+            self.add_error(
+                "publication_details",
+                "Review public details for every selected file before uploading.",
+            )
+            return cleaned
+        try:
+            details = json.loads(raw_details)
+        except (TypeError, ValueError):
+            self.add_error("publication_details", "Review the details for each selected file.")
+            return cleaned
+
+        if not isinstance(details, list) or len(details) != len(uploads):
+            self.add_error("publication_details", "Add website details for every selected file.")
+            return cleaned
+
+        title_field = forms.CharField(max_length=180)
+        caption_field = forms.CharField(required=False)
+        label_field = forms.CharField(required=False, max_length=60)
+        client_name_field = forms.BooleanField(required=False)
+        order_field = forms.IntegerField(min_value=0)
+        validated_details = []
+        errors = []
+
+        for index, (upload, item) in enumerate(zip(uploads, details)):
+            if not isinstance(item, dict):
+                errors.append(f"File {index + 1}: enter a title and review its website details.")
+                continue
+            try:
+                validated_details.append({
+                    "title": title_field.clean(item.get("title", "")),
+                    "caption": caption_field.clean(item.get("caption", "")),
+                    "label": label_field.clean(item.get("label", "")),
+                    "show_client_name": client_name_field.clean(item.get("show_client_name", False)),
+                    "sort_order": order_field.clean(item.get("sort_order", index)),
+                })
+            except ValidationError as exc:
+                errors.extend(f"File {index + 1}: {message}" for message in exc.messages)
+
+        if errors:
+            self.add_error("publication_details", errors)
+        else:
+            cleaned["publication_details_items"] = validated_details
+        return cleaned
+
+
+class WebsiteGalleryPostForm(forms.ModelForm):
+    files = MultipleFileField(required=False, label="Add photos or videos")
+    existing_assets = forms.ModelMultipleChoiceField(
+        queryset=MediaAsset.objects.none(),
+        required=False,
+        label="Add existing project files",
+        widget=forms.CheckboxSelectMultiple,
+    )
+    items_to_keep = forms.ModelMultipleChoiceField(
+        queryset=MediaAsset.objects.none(),
+        required=False,
+        label="Slides in this post",
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+    class Meta:
+        model = WebsiteGalleryPost
+        fields = ["title", "caption", "label", "show_client_name", "layout", "accent", "sort_order"]
+        widgets = {"caption": forms.Textarea(attrs={"rows": 3})}
+        labels = {
+            "title": "Post title",
+            "caption": "Post caption",
+            "label": "Post label (optional)",
+            "show_client_name": "Show the client's name on this post",
+            "layout": "Post layout",
+            "accent": "Accent color",
+            "sort_order": "Post order",
+        }
+
+    def __init__(self, *args, project=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        project = project or getattr(self.instance, "project", None)
+        self.project = project
+        self.fields["files"].widget.attrs.update({
+            "accept": ".jpg,.jpeg,.png,.webp,.gif,.heic,.mp4,.mov,.webm",
+            "multiple": True,
+        })
+        if project:
+            current_items = WebsiteGalleryPostItem.objects.filter(post=self.instance) if self.instance.pk else WebsiteGalleryPostItem.objects.none()
+            current_asset_ids = current_items.values_list("asset_id", flat=True)
+            self.fields["existing_assets"].queryset = (
+                MediaAsset.objects.filter(
+                    project=project,
+                    file__gt="",
+                    publications__destination=MediaPublication.Destination.WEBSITE,
+                )
+                .exclude(website_post_item__isnull=False)
+                .select_related("project")
+                .order_by("created_at", "title")
+                .distinct()
+            )
+            self.fields["items_to_keep"].queryset = MediaAsset.objects.filter(
+                website_post_item__post=self.instance
+            ).order_by("website_post_item__sort_order", "created_at") if self.instance.pk else MediaAsset.objects.none()
+            self.fields["items_to_keep"].initial = list(
+                current_items.filter(is_in_draft=True).values_list("asset_id", flat=True)
+            )
+        self.fields["title"].help_text = "One title for the whole post, not a separate title for each slide."
+        self.fields["caption"].help_text = "One caption for the whole post. The arrows move through its photos and videos."
+        self.fields["show_client_name"].help_text = "Only this post shows the client name, and only when checked."
+        self.fields["layout"].choices = WebsiteGalleryPost.Layout.choices
+        self.fields["accent"].choices = WebsiteGalleryPost.Accent.choices
+        self.fields["sort_order"].help_text = "Lower numbers appear first on the public Projects page."
+        if self.instance.pk:
+            for item in WebsiteGalleryPostItem.objects.filter(post=self.instance).select_related("asset"):
+                self.fields[f"slide_order_{item.asset_id}"] = forms.IntegerField(
+                    required=False,
+                    min_value=0,
+                    initial=item.sort_order,
+                    label=f"Order for {item.asset.title}",
+                )
+
+    def clean_files(self):
+        files = self.cleaned_data.get("files", [])
+        if len(files) > 20:
+            raise ValidationError("Add up to 20 slides to one post.")
+        for upload in files:
+            if upload.size == 0:
+                raise ValidationError(f"{upload.name} is empty.")
+            try:
+                validate_contact_upload(upload)
+            except ValidationError as exc:
+                raise ValidationError(f"{upload.name}: {' '.join(exc.messages)}") from exc
+        return files
+
+    def clean(self):
+        cleaned = super().clean()
+        keep_count = len(cleaned.get("items_to_keep", []))
+        existing_count = len(cleaned.get("existing_assets", []))
+        upload_count = len(cleaned.get("files", []))
+        action = self.data.get("action", "save")
+        if keep_count + existing_count + upload_count > 20:
+            self.add_error("files", "A post can contain up to 20 photos or videos.")
+        if (
+            keep_count + existing_count + upload_count == 0
+            and (not self.instance.pk or action == "publish")
+        ):
+            self.add_error("items_to_keep", "Add at least one photo or video to this post.")
+        if existing_count and not self.project:
+            self.add_error("existing_assets", "Choose a project before adding existing media.")
+        return cleaned
+
+
+class ClientMediaAssetField(forms.ModelChoiceField):
+    def label_from_instance(self, asset):
+        return f"{asset.title} · {asset.project.title}"
+
+
+class ClientMediaPrepareForm(forms.Form):
+    asset = ClientMediaAssetField(
+        queryset=MediaAsset.objects.none(),
+        label="Existing project media",
+        empty_label="Choose an existing project file",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["asset"].queryset = (
+            MediaAsset.objects.filter(project__client__isnull=False, file__gt="")
+            .exclude(publications__destination=MediaPublication.Destination.CLIENT)
+            .select_related("project", "project__client")
+            .distinct()
+        )
 
 
 class MediaPublicationForm(forms.ModelForm):
@@ -614,21 +786,23 @@ class MediaPublicationForm(forms.ModelForm):
         is_client = self.instance.destination == "client"
         self.fields["title"].label = "Client-facing filename" if is_client else "Public media title"
         self.fields["caption"].label = "Client note" if is_client else "Public caption"
-        if not is_client:
-            self.fields["title"].help_text = (
-                "Names this photo or video in the gallery."
-                if self.instance.published_at
-                else "Names this photo or video. New website media also requires a public project title in Projects."
-            )
         self.fields["sort_order"].label = "Display order"
         self.fields["sort_order"].help_text = "Lower numbers appear first."
         if is_client:
             for name in ("label", "location", "show_client_name"):
                 self.fields.pop(name)
         else:
-            self.fields["location"].label = "Public city or region (optional)"
+            self.fields.pop("location")
+            self.fields["title"].label = "Gallery item title"
+            self.fields["caption"].label = "Photo or video caption"
+            self.fields["title"].help_text = (
+                "Shown beneath this photo or video in the public Projects gallery."
+            )
             self.fields["label"].label = "Public label (optional)"
-            self.fields["show_client_name"].label = "Show this project's client name"
+            self.fields["show_client_name"].label = "Show the client's name with this photo or video"
+            self.fields["show_client_name"].help_text = (
+                "This setting applies only to this gallery item."
+            )
 
 
 class ServiceImageInput(forms.ClearableFileInput):

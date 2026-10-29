@@ -1,0 +1,26 @@
+<section class="content-page-panel" id="publish-page-services" aria-labelledby="publish-services-title">
+    <header class="content-page-heading">
+        <div>
+            <span class="section-kicker">Services</span>
+            <h3 id="publish-services-title">Services page</h3>
+            <p>Manage the page introduction and the service entries shown below it.</p>
+        </div>
+        <a class="button button-outline" href="{% url 'operations:services' %}" target="_blank" rel="noopener">Preview Services ↗</a>
+    </header>
+
+    <form class="content-page-editor" method="post" action="{% url 'operations:content-update' %}">
+        {% csrf_token %}
+        <input type="hidden" name="content_page" value="services">
+        <div class="content-page-field-grid">
+            <label class="form-field" for="{{ content_form.services_title.id_for_label }}">{{ content_form.services_title.label }}{{ content_form.services_title }}{{ content_form.services_title.errors }}</label>
+            <label class="form-field content-page-field-wide" for="{{ content_form.services_intro.id_for_label }}">{{ content_form.services_intro.label }}{{ content_form.services_intro }}{{ content_form.services_intro.errors }}</label>
+            <label class="form-field content-page-field-wide" for="{{ content_form.services_note.id_for_label }}">{{ content_form.services_note.label }}{{ content_form.services_note }}{{ content_form.services_note.errors }}</label>
+        </div>
+        <footer class="content-page-save-row">
+            <span>Changes appear on the Services page when saved.</span>
+            <button class="button button-primary" type="submit">Save Services page</button>
+        </footer>
+    </form>
+
+    {% include 'operations/content_services.html' %}
+</section>
