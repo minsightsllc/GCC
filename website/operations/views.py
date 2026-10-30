@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import calendar as calendar_module
 import json
+import logging
 import mimetypes
 import uuid
 from datetime import date, datetime, time, timedelta
@@ -28,7 +29,7 @@ from django.core.exceptions import PermissionDenied
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import F, Prefetch, Q
+from django.db.models import F, Max, Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.template.loader import render_to_string
 from django.shortcuts import get_object_or_404, redirect, render
@@ -208,6 +209,7 @@ DASHBOARD_SECTIONS = {"overview", "clients", "leads", "estimates", "projects", "
 TEAM_SECTIONS = {"overview", "projects", "tasks", "calendar", "time", "media", "profile", "notifications"}
 EMPLOYEE_GROUPS = {"Manager", "Office", "Field", "Sales"}
 LEADERSHIP_GROUPS = {"Owner", "Manager"}
+logger = logging.getLogger(__name__)
 
 
 def _prepare_client_invite_delivery(request, *, client, invite, raw_token, actor):
@@ -5562,6 +5564,9 @@ def service_save(request, pk=None):
         service = form.save(commit=False)
         if not service.slug:
             service.slug = f"{slugify(service.title)[:65] or 'service'}-{uuid.uuid4().hex[:8]}"
+        if pk is None:
+            max_order = Service.objects.aggregate(max_order=Max("sort_order"))["max_order"]
+            service.sort_order = (max_order if max_order is not None else -1) + 1
         service.save()
         record_activity("Service saved", service.title, actor=request.user)
         messages.success(request, "Service saved.")
@@ -5569,6 +5574,33 @@ def service_save(request, pk=None):
     overrides = {"service_error_id": pk, "service_edit_form": form} if pk else {"service_create_form": form}
     overrides["content_page_error"] = "services"
     return _render_dashboard_form_error(request, "content", overrides)
+
+
+def _delete_service_image(storage, name):
+    try:
+        storage.delete(name)
+    except Exception:
+        logger.exception("Could not delete stored image for a removed service entry.")
+
+
+@require_POST
+@staff_required
+@transaction.atomic
+def service_delete(request, pk):
+    if not _can_manage_content(request.user):
+        raise PermissionDenied
+    service = get_object_or_404(Service.objects.select_for_update(), pk=pk)
+    title = service.title
+    image_storage = service.image.storage if service.image else None
+    image_name = service.image.name if service.image else ""
+    service.delete()
+    if image_storage and image_name:
+        transaction.on_commit(
+            lambda storage=image_storage, name=image_name: _delete_service_image(storage, name)
+        )
+    record_activity("Service deleted", title, actor=request.user)
+    messages.success(request, "Service deleted.")
+    return _content_page_redirect("services")
 
 
 @require_POST

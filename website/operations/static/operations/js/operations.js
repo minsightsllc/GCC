@@ -11,6 +11,7 @@
     var calendarPopstateBound = false;
     var activeCalendarPopstate = null;
     var modalEscapeHandlerBound = false;
+    var activeModalTrigger = null;
 
     function showAdminToast(message, isError, actionHref, actionLabel) {
         var text = String(message || "").trim();
@@ -2318,9 +2319,21 @@
         }
         var src = source.dataset.lightboxSrc;
         var alt = source.dataset.lightboxAlt || "Project media";
-        content.innerHTML = '<img class="modal-image" src="' + src.replace(/"/g, "&quot;") + '" alt="' + alt.replace(/"/g, "&quot;") + '">';
+        var image = document.createElement("img");
+        image.className = "modal-image";
+        image.src = src;
+        image.alt = alt;
+        content.replaceChildren(image);
+        var dialog = backdrop.querySelector("[role=dialog]");
+        if (dialog) {
+            dialog.removeAttribute("aria-labelledby");
+            dialog.setAttribute("aria-label", alt);
+        }
+        activeModalTrigger = source;
         backdrop.hidden = false;
         document.body.classList.add("modal-open");
+        var closeButton = backdrop.querySelector('[data-action="close-modal"]');
+        if (closeButton) closeButton.focus();
     }
 
     function closeModal() {
@@ -2330,6 +2343,8 @@
         }
         backdrop.hidden = true;
         document.body.classList.remove("modal-open");
+        if (activeModalTrigger && activeModalTrigger.isConnected) activeModalTrigger.focus();
+        activeModalTrigger = null;
     }
 
     function initEstimateDeliveryDialog() {
@@ -2571,6 +2586,11 @@
 
         document.addEventListener("submit", function (event) {
             var form = event.target;
+            if (form && form.matches && form.matches("[data-service-delete]")
+                && !window.confirm('Delete "' + (form.dataset.serviceTitle || "this service") + '" from the website? Its service image, if any, will also be deleted. This cannot be undone.')) {
+                event.preventDefault();
+                return;
+            }
             if (
                 event.defaultPrevented
                 || !form
@@ -3002,21 +3022,58 @@
             if (!button) return;
             const carousel = button.closest("[data-gallery-carousel]");
             if (!carousel) return;
+            if (carousel.dataset.galleryAnimating === "true") return;
             const slides = Array.from(carousel.querySelectorAll("[data-gallery-slide]"));
             if (slides.length < 2) return;
             const current = Math.max(0, slides.findIndex(function (slide) { return !slide.hidden; }));
             const offset = button.matches("[data-gallery-next]") ? 1 : -1;
             const next = (current + offset + slides.length) % slides.length;
-            slides.forEach(function (slide, index) {
-                slide.hidden = index !== next;
-                slide.setAttribute("aria-hidden", index === next ? "false" : "true");
-                if (index !== next) {
-                    const video = slide.querySelector("video");
-                    if (video) video.pause();
-                }
-            });
+            const previousSlide = slides[current];
+            const nextSlide = slides[next];
+            const enteringClass = offset > 0 ? "is-gallery-entering-next" : "is-gallery-entering-prev";
+            const leavingClass = offset > 0 ? "is-gallery-leaving-prev" : "is-gallery-leaving-next";
+            previousSlide.setAttribute("aria-hidden", "true");
+            nextSlide.setAttribute("aria-hidden", "false");
+            const previousVideo = previousSlide.querySelector("video");
+            if (previousVideo) previousVideo.pause();
+            carousel.dataset.galleryIndex = String(next);
             const counter = carousel.querySelector("[data-gallery-counter]");
             if (counter) counter.textContent = (next + 1) + " / " + slides.length;
+
+            if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+                previousSlide.hidden = true;
+                nextSlide.hidden = false;
+                return;
+            }
+
+            carousel.dataset.galleryAnimating = "true";
+            nextSlide.hidden = false;
+            nextSlide.classList.add(enteringClass);
+            void nextSlide.offsetWidth;
+            let transitionFinished = false;
+            let transitionFallback;
+            const finishTransition = function () {
+                if (transitionFinished) return;
+                transitionFinished = true;
+                window.clearTimeout(transitionFallback);
+                nextSlide.removeEventListener("transitionend", onTransitionEnd);
+                previousSlide.hidden = true;
+                previousSlide.classList.remove(leavingClass);
+                nextSlide.classList.remove(enteringClass);
+                carousel.dataset.galleryAnimating = "false";
+            };
+            const onTransitionEnd = function (transitionEvent) {
+                if (transitionEvent.target === nextSlide && transitionEvent.propertyName === "transform") {
+                    finishTransition();
+                }
+            };
+            nextSlide.addEventListener("transitionend", onTransitionEnd);
+            transitionFallback = window.setTimeout(finishTransition, 500);
+            window.requestAnimationFrame(function () {
+                if (transitionFinished) return;
+                previousSlide.classList.add(leavingClass);
+                nextSlide.classList.remove(enteringClass);
+            });
         });
     }
 

@@ -21,6 +21,10 @@
                         <button class="button button-quiet" type="submit" name="direction" value="up" {% if forloop.first %}disabled{% endif %} aria-label="Move {{ row.service.title }} up">↑ <span>Move up</span></button>
                         <button class="button button-quiet" type="submit" name="direction" value="down" {% if forloop.last %}disabled{% endif %} aria-label="Move {{ row.service.title }} down">↓ <span>Move down</span></button>
                     </form>
+                    <form class="service-delete-form" action="{% url 'operations:service-delete' pk=row.service.pk %}" method="post" data-service-delete data-service-title="{{ row.service.title }}" aria-label="Delete {{ row.service.title }}">
+                        {% csrf_token %}
+                        <button class="button button-danger" type="submit">Delete service</button>
+                    </form>
                 </div>
             </header>
 

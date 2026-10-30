@@ -1,12 +1,7 @@
 <div class="service-editor-grid">
-    <div class="form-field">
+    <div class="form-field service-title-field">
         <label for="{{ service_form.title.id_for_label }}">{{ service_form.title.label }}</label>
         {{ service_form.title }}{{ service_form.title.errors }}
-    </div>
-    <div class="form-field">
-        <label for="{{ service_form.sort_order.id_for_label }}">{{ service_form.sort_order.label }}</label>
-        {{ service_form.sort_order }}{{ service_form.sort_order.errors }}
-        {% if service_form.sort_order.help_text %}<small>{{ service_form.sort_order.help_text }}</small>{% endif %}
     </div>
     <div class="form-field service-description-field">
         <label for="{{ service_form.description.id_for_label }}">{{ service_form.description.label }}</label>

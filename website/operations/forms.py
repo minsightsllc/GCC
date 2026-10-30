@@ -746,7 +746,7 @@ class ServiceImageInput(forms.ClearableFileInput):
 class ServiceForm(forms.ModelForm):
     class Meta:
         model = Service
-        fields = ["title", "description", "image", "sort_order", "is_active"]
+        fields = ["title", "description", "image", "is_active"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
             "image": ServiceImageInput(attrs={
@@ -754,7 +754,7 @@ class ServiceForm(forms.ModelForm):
                 "class": "service-image-file-input",
             }),
         }
-        labels = {"is_active": "Show on website", "sort_order": "Display order"}
+        labels = {"is_active": "Show on website"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

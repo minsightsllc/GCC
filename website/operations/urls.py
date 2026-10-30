@@ -139,6 +139,7 @@ urlpatterns = [
     path("dashboard/content/update/", views.content_update, name="content-update"),
     path("dashboard/content/services/add/", views.service_save, name="service-add"),
     path("dashboard/content/services/<int:pk>/save/", views.service_save, name="service-save"),
+    path("dashboard/content/services/<int:pk>/remove/", views.service_delete, name="service-delete"),
     path("dashboard/content/services/<int:pk>/move/", views.service_move, name="service-move"),
     path("services/<int:pk>/image/", views.service_image, name="service-image"),
     path("dashboard/content/google-reviews/sync/", views.google_reviews_sync, name="google-reviews-sync"),
