@@ -7,6 +7,21 @@
 {% block body %}
 <div class="staging-bar"><span class="staging-label">GRAND COAST</span><span>Thoughtful construction. Clear communication. Better builds.</span><span class="staging-spacer"></span></div>
 <header class="site-header"><div class="container header-inner"><a class="brand" href="{% url 'operations:home' %}" aria-label="Grand Coast Construction home"><img class="brand-logo" src="{% static 'operations/images/gcc-logo.png' %}" alt="Grand Coast Construction Inc. logo"><span class="brand-name">Grand Coast <strong>Construction Inc.</strong></span></a><nav class="site-nav" aria-label="Legal page navigation"><a href="{% url 'operations:home' %}">Home</a><a href="{% url 'operations:contact' %}">Contact</a><a class="button button-primary nav-cta" href="{% url 'operations:login' %}">Sign in</a></nav></div></header>
-<main class="legal-page"><div class="container legal-card"><span class="gold-rule"></span><span class="section-kicker">Grand Coast account information</span><h1>{{ page_title }}</h1>{% if page == "privacy" %}<p>Our Privacy Policy is being prepared. This page will explain how Grand Coast Construction collects, uses, protects, and retains information.</p>{% else %}<p>Our Terms of Service are being prepared. This page will explain the terms that apply when using Grand Coast Construction services and account tools.</p>{% endif %}<p>For questions while this page is being prepared, please contact Grand Coast directly.</p><a class="button button-outline" href="{% url 'operations:home' %}">Return to Grand Coast</a></div></main>
+<main class="legal-page">
+    <article class="container legal-card">
+        <span class="gold-rule"></span>
+        <span class="section-kicker">Grand Coast account information</span>
+        <h1>{{ legal_document.title }}</h1>
+        <p class="legal-updated">{{ legal_document.updated }}</p>
+        <p class="legal-intro">{{ legal_document.intro }}</p>
+        {% for section in legal_document.sections %}
+            <section class="legal-section">
+                <h2>{{ section.title }}</h2>
+                {% for paragraph in section.paragraphs %}<p>{{ paragraph }}</p>{% endfor %}
+            </section>
+        {% endfor %}
+        <a class="button button-outline" href="{% url 'operations:home' %}">Return to Grand Coast</a>
+    </article>
+</main>
 <footer class="site-footer"><div class="container footer-bottom"><span>© 2026 Grand Coast Construction Inc.</span><span><a href="{% url 'operations:privacy' %}">Privacy Policy</a> · <a href="{% url 'operations:terms' %}">Terms of Service</a></span></div></footer>
 {% endblock %}

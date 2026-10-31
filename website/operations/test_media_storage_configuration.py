@@ -49,11 +49,10 @@ class UploadStorageModeTests(SimpleTestCase):
             if settings.USE_SUPABASE_STORAGE
             else "django.core.files.storage.FileSystemStorage"
         )
-        self.assertEqual(settings.STORAGES["default"]["BACKEND"], expected_backend)
-        self.assertEqual(
-            settings.STORAGES["contact_submissions"]["BACKEND"],
-            expected_backend,
-        )
+        for alias in ("default", "contact_submissions"):
+            storage = settings.STORAGES[alias]
+            self.assertEqual(storage["BACKEND"], "operations.storage.MetadataStrippingStorage")
+            self.assertEqual(storage["OPTIONS"]["backend"], expected_backend)
         self.assertEqual(
             settings.USE_SUPABASE_CONTACT_STORAGE,
             settings.USE_SUPABASE_STORAGE,

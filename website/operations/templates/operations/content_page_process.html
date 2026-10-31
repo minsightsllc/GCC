@@ -1,27 +1,88 @@
-<section class="content-page-panel" id="publish-page-process" aria-labelledby="publish-process-title">
+<section class="content-page-panel content-process-panel" id="publish-page-process" aria-labelledby="publish-process-title">
     <header class="content-page-heading">
         <div>
             <span class="section-kicker">Process</span>
-            <h3 id="publish-process-title">Process steps</h3>
-            <p>Edit the step names shown on the Process page.</p>
+            <h3 id="publish-process-title">Process page</h3>
+            <p>Set the page introduction, then organize the steps shown on Process and Home.</p>
         </div>
-        <a class="button button-outline" href="{% url 'operations:process' %}" target="_blank" rel="noopener">Preview Process ↗</a>
+        <a class="button button-outline" href="{% url 'operations:process' %}" target="_blank" rel="noopener">Preview Process &#8599;</a>
     </header>
 
-    <form class="content-page-editor" method="post" action="{% url 'operations:content-update' %}">
+    <form id="content-process-editor" class="content-page-editor" method="post" action="{% url 'operations:content-update' %}" data-publication-save>
         {% csrf_token %}
         <input type="hidden" name="content_page" value="process">
-        <div class="content-process-list">
-            {% for fields in content_step_fields %}
-            <label class="content-process-step" for="{{ fields.field.id_for_label }}">
-                <span class="content-process-number">{{ forloop.counter|stringformat:'02d' }}</span>
-                <span class="content-process-label">Step {{ forloop.counter }}{{ fields.field }}{{ fields.field.errors }}</span>
-            </label>
-            {% endfor %}
+        <div class="content-page-field-grid">
+            <label class="form-field content-page-field-wide" for="{{ content_form.process_page_title.id_for_label }}">{{ content_form.process_page_title.label }}{{ content_form.process_page_title }}{{ content_form.process_page_title.errors }}</label>
+            <label class="form-field content-page-field-wide" for="{{ content_form.process_page_intro.id_for_label }}">{{ content_form.process_page_intro.label }}{{ content_form.process_page_intro }}{{ content_form.process_page_intro.errors }}</label>
         </div>
         <footer class="content-page-save-row">
-            <span>Changes appear on the Process page when saved.</span>
+            <span>The heading and introduction appear on Process. Active steps also appear in the Home summary.</span>
             <button class="button button-primary" type="submit">Save Process page</button>
         </footer>
     </form>
+
+    <section class="content-process-entries" aria-labelledby="process-steps-heading">
+        <header class="content-section-subheading">
+            <div>
+                <span class="section-kicker">Step list</span>
+                <h4 id="process-steps-heading">Steps in display order</h4>
+                <p>Use Move up and Move down to set the order. Images appear on Process; Home remains text-only.</p>
+            </div>
+        </header>
+        <div class="service-entry-list process-step-list">
+            {% for row in process_step_rows %}
+            <article class="service-admin-entry process-step-admin-entry">
+                <header class="service-entry-heading">
+                    <div class="service-entry-name">
+                        <span class="section-kicker">Step {{ forloop.counter }}</span>
+                        <h4>{{ row.step.title }}</h4>
+                    </div>
+                    <div class="service-entry-tools">
+                        <span class="status-badge {% if row.step.is_active %}green{% endif %}">{% if row.step.is_active %}On website{% else %}Hidden{% endif %}</span>
+                        <form class="service-order-actions" action="{% url 'operations:process-step-move' pk=row.step.pk %}" method="post" data-publication-save aria-label="Reorder {{ row.step.title }}">
+                            {% csrf_token %}
+                            <button class="button button-quiet" type="submit" name="direction" value="up" {% if forloop.first %}disabled{% endif %} aria-label="Move {{ row.step.title }} up">&#8593; <span>Move up</span></button>
+                            <button class="button button-quiet" type="submit" name="direction" value="down" {% if forloop.last %}disabled{% endif %} aria-label="Move {{ row.step.title }} down">&#8595; <span>Move down</span></button>
+                        </form>
+                        <form class="service-delete-form" action="{% url 'operations:process-step-remove' pk=row.step.pk %}" method="post" data-process-delete data-process-title="{{ row.step.title }}" aria-label="Delete {{ row.step.title }}">
+                            {% csrf_token %}
+                            <button class="button button-danger" type="submit">Delete step</button>
+                        </form>
+                    </div>
+                </header>
+                <form id="process-step-form-{{ row.step.pk }}" method="post" action="{% url 'operations:process-step-save' pk=row.step.pk %}" enctype="multipart/form-data" class="service-edit-form" data-publication-save>
+                    {% csrf_token %}
+                    {{ row.form.non_field_errors }}
+                    {% include 'operations/content_process_step_fields.html' with process_form=row.form step=row.step %}
+                    <div class="service-save-footer">
+                        <p>Saving updates this step wherever it is shown.</p>
+                        <button type="submit" class="button button-primary">Save step</button>
+                    </div>
+                </form>
+            </article>
+            {% empty %}
+            <div class="media-empty-state service-empty-state">
+                <strong>No process steps yet</strong>
+                <p>Add the steps you want visitors to see. Hidden steps stay saved for later.</p>
+            </div>
+            {% endfor %}
+        </div>
+
+        <details class="service-add process-step-add" {% if not process_step_rows or process_step_create_form.errors %}open{% endif %}>
+            <summary class="button button-outline">+ Add process step</summary>
+            <form id="process-step-create-form" action="{% url 'operations:process-step-add' %}" method="post" enctype="multipart/form-data" class="service-edit-form service-create-form" data-publication-save>
+                {% csrf_token %}
+                {{ process_step_create_form.non_field_errors }}
+                <div class="service-create-heading">
+                    <h4>New process step</h4>
+                    <p>Add a title and description, optionally choose an image, and decide whether it appears publicly.</p>
+                </div>
+                {% include 'operations/content_process_step_fields.html' with process_form=process_step_create_form %}
+                <div class="service-save-footer">
+                    <p>New steps are added to the bottom of the list.</p>
+                    <button type="submit" class="button button-primary">Add step</button>
+                </div>
+            </form>
+        </details>
+    </section>
 </section>

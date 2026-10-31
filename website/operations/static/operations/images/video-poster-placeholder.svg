@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="Video thumbnail placeholder">
+  <rect width="1280" height="720" fill="#1e3051"/>
+  <path d="M0 560 300 390l185 110 270-250 525 340v130H0Z" fill="#31518c" opacity=".62"/>
+  <path d="M0 630 330 450l230 135 260-190 460 260v65H0Z" fill="#14243f" opacity=".72"/>
+  <circle cx="640" cy="330" r="86" fill="#d6a32a"/>
+  <path d="m616 281 76 49-76 49Z" fill="#1e3051"/>
+  <text x="640" y="510" fill="#ffffff" font-family="Arial, sans-serif" font-size="34" font-weight="700" letter-spacing="5" text-anchor="middle">GRAND COAST VIDEO</text>
+</svg>

@@ -514,10 +514,13 @@ def api_v1_native_upload_complete(request):
         else:
             media_type = (
                 MediaAsset.MediaType.VIDEO
-                if extension in {".mp4", ".mov", ".webm"}
+                if extension in {".mp4", ".mov"}
                 else MediaAsset.MediaType.PHOTO
             )
-            asset = MediaAsset.objects.create(
+            asset = MediaAsset.create_for_upload(
+                "Public Content"
+                if grant.visibility == MediaAsset.Visibility.PUBLIC
+                else "Client Media",
                 project=grant.project,
                 site_visit=(
                     related

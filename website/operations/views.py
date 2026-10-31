@@ -8,6 +8,7 @@ import uuid
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from functools import wraps
+from io import BytesIO
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 
 from django.contrib import messages
@@ -27,7 +28,9 @@ from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
+from django.core.files.storage import default_storage
 from django.db import IntegrityError, transaction
 from django.db.models import F, Max, Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -65,7 +68,9 @@ from .forms import (
     MediaUploadForm,
     MediaPublicationForm,
     WebsiteGalleryPostForm,
+    WebsitePastProjectForm,
     ServiceForm,
+    ProcessStepForm,
     PublicPasswordResetForm,
     ProjectCreateForm,
     ProjectDocumentForm,
@@ -107,6 +112,9 @@ from .models import (
     MediaPublication,
     WebsiteGalleryPost,
     WebsiteGalleryPostItem,
+    WEBSITE_GALLERY_MAX_POSTS,
+    WEBSITE_GALLERY_MAX_SLIDES_PER_POST,
+    WEBSITE_GALLERY_MAX_UPLOAD_SIZE,
     Milestone,
     ProcessStep,
     Project,
@@ -141,6 +149,7 @@ from .publishing import (
     website_post_presentation,
 )
 from .security import (
+    admin_password_attempt_allowed,
     admin_ip_block,
     admin_user_block,
     confirmed_totp_device,
@@ -157,6 +166,7 @@ from .security import (
     set_mobile_owner_challenge,
     verify_admin_pin,
 )
+from .legal_documents import LEGAL_DOCUMENTS
 from .services import (
     complete_client_invite,
     complete_employee_invite,
@@ -258,7 +268,7 @@ def pwa_manifest(request):
             "scope": "/",
             "display": "standalone",
             "background_color": "#f5f7fa",
-            "theme_color": "#31518c",
+            "theme_color": "#1e3051",
             "description": "Grand Coast Construction Inc. project and client workspace.",
             "icons": [
                 {
@@ -398,8 +408,10 @@ def _can_manage_messages(user):
 
 def _visible_projects_for_user(user):
     if _can_access_dashboard(user):
-        return Project.objects.all()
-    return Project.objects.filter(Q(assigned_staff=user) | Q(project_manager=user)).distinct()
+        return Project.objects.filter(is_portfolio_only=False)
+    return Project.objects.filter(is_portfolio_only=False).filter(
+        Q(assigned_staff=user) | Q(project_manager=user)
+    ).distinct()
 
 
 def _visible_tasks_for_user(user):
@@ -553,9 +565,20 @@ def _public_context(*, include_project_galleries=False):
     site_settings = _site_settings()
     google_reviews = list(GoogleReview.objects.all()[:5])
     services = list(Service.objects.filter(is_active=True))
-    process_steps = list(ProcessStep.objects.all())
+    process_steps = list(ProcessStep.objects.filter(is_active=True))
     for service in services:
         service.display_image = reverse("operations:service-image", kwargs={"pk": service.pk}) if service.image else _asset(service.image_path)
+    for step in process_steps:
+        step.display_image = reverse("operations:process-step-image", kwargs={"pk": step.pk}) if step.image else ""
+    contact_service_areas = [
+        area.strip()
+        for area in site_settings.contact_service_areas.splitlines()
+        if area.strip()
+    ]
+    phone_digits = "".join(
+        character for character in site_settings.contact_phone if character.isdigit()
+    )
+    phone_prefix = "+" if site_settings.contact_phone.lstrip().startswith("+") else ""
     projects = []
     if include_project_galleries:
         website_posts = (
@@ -590,6 +613,8 @@ def _public_context(*, include_project_galleries=False):
         "google_reviews": google_reviews,
         "services": services,
         "process_steps": process_steps,
+        "contact_service_areas": contact_service_areas,
+        "contact_phone_href": f"tel:{phone_prefix}{phone_digits}" if phone_digits else "",
         "public_projects": projects,
         "featured_project": public_featured_project,
         "featured_project_image": (
@@ -619,7 +644,11 @@ def public_page(request, page="home"):
     context["contact_form"] = ContactLeadForm(request=request)
     context["turnstile_site_key"] = get_turnstile_site_key(request)
     if page == "contact" and request.method == "POST":
-        form = ContactLeadForm(request.POST, request.FILES, request=request)
+        form = ContactLeadForm(
+            request.POST,
+            request.FILES,
+            request=request,
+        )
         context["contact_form"] = form
         if form.is_valid():
             full_name = f"{form.cleaned_data['first_name'].strip()} {form.cleaned_data['last_name'].strip()}".strip()
@@ -638,14 +667,14 @@ def public_page(request, page="home"):
                     upload.name = original_name
                     LeadAttachment.objects.create(lead=lead, file=upload, original_name=original_name)
                 record_activity("New lead received", f"{lead.name} · Website form", lead=lead)
-            messages.success(request, "Thanks for sharing your project. We will be in touch soon.")
+            messages.success(request, context["site_settings"].contact_success_message)
             return redirect("operations:contact")
     return render(request, "operations/public.html", context)
 
 
 LEGAL_PAGES = {
-    "privacy": "Privacy Policy",
-    "terms": "Terms of Service",
+    page: document["title"]
+    for page, document in LEGAL_DOCUMENTS.items()
 }
 
 
@@ -656,7 +685,11 @@ def legal_page(request, page):
     return render(
         request,
         "operations/legal.html",
-        {"page": page, "page_title": LEGAL_PAGES[page]},
+        {
+            "page": page,
+            "page_title": LEGAL_PAGES[page],
+            "legal_document": LEGAL_DOCUMENTS[page],
+        },
     )
 
 
@@ -879,6 +912,17 @@ class GrandCoastLoginView(LoginView):
     template_name = "operations/login.html"
     authentication_form = PublicAuthenticationForm
 
+    def dispatch(self, request, *args, **kwargs):
+        if (
+            request.method == "POST"
+            and is_mobile_owner_login(request)
+            and not admin_password_attempt_allowed(request, request.POST.get("username", ""))
+        ):
+            form = self.get_form()
+            form.add_error(None, "Too many sign-in attempts. Try again in 15 minutes.")
+            return self.render_to_response(self.get_context_data(form=form), status=429)
+        return super().dispatch(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["turnstile_site_key"] = get_turnstile_site_key(self.request)
@@ -1010,6 +1054,39 @@ def _active_lead_or_404(pk):
     return get_object_or_404(Lead, pk=pk, deleted_at__isnull=True)
 
 
+CONTACT_CONTENT_FIELDS = (
+    "contact_page_kicker",
+    "contact_page_title",
+    "contact_page_intro",
+    "contact_service_areas_heading",
+    "contact_service_areas",
+    "contact_form_kicker",
+    "contact_form_title",
+    "contact_form_intro",
+    "contact_form_privacy_note",
+    "contact_form_footer_note",
+    "contact_direct_heading",
+    "contact_phone",
+    "contact_email",
+    "contact_instagram_url",
+    "contact_success_message",
+    "contact_form_submit_label",
+)
+
+CONTENT_FORM_FIELDS_BY_PAGE = {
+    "home": (
+        "headline",
+        "subheadline",
+        "featured_title",
+        "featured_body",
+        "google_review_url",
+    ),
+    "services": ("services_title", "services_intro", "services_note"),
+    "process": ("process_page_title", "process_page_intro"),
+    "contact": CONTACT_CONTENT_FIELDS,
+}
+
+
 def _content_form(instance, services, process_steps, data=None):
     initial = {
         "headline": instance.headline,
@@ -1020,9 +1097,10 @@ def _content_form(instance, services, process_steps, data=None):
         "services_title": instance.services_title,
         "services_intro": instance.services_intro,
         "services_note": instance.services_note,
+        "process_page_title": instance.process_page_title,
+        "process_page_intro": instance.process_page_intro,
     }
-    for step in process_steps:
-        initial[f"step_{step.key}"] = step.title
+    initial.update({field: getattr(instance, field) for field in CONTACT_CONTENT_FIELDS})
     if data is not None:
         data = data.copy()
         for field, value in initial.items():
@@ -1088,6 +1166,7 @@ def _dashboard_context(request, section, form_overrides=None):
 
     projects = list(
         Project.objects.select_related("estimate", "lead", "client")
+        .filter(is_portfolio_only=False)
         .prefetch_related(
             "milestones",
             Prefetch(
@@ -1130,7 +1209,11 @@ def _dashboard_context(request, section, form_overrides=None):
 
     media_context = _media_library_context(request, form_overrides=form_overrides) if section == "media" else {}
     website_publishing_context = (
-        _website_publishing_context(request, projects, form_overrides=form_overrides)
+        _website_publishing_context(
+            request,
+            Project.objects.select_related("client"),
+            form_overrides=form_overrides,
+        )
         if section == "content"
         else {}
     )
@@ -1202,7 +1285,7 @@ def _dashboard_context(request, section, form_overrides=None):
             else ProjectCreateForm(staff_queryset=_staff_users())
         ),
         "project_document_form": ProjectDocumentForm(
-            project_queryset=Project.objects.all(),
+            project_queryset=Project.objects.filter(is_portfolio_only=False),
             initial={"project": selected_project.pk} if selected_project else None,
         ),
         "can_manage_documents": _can_manage_documents(request.user),
@@ -1210,8 +1293,11 @@ def _dashboard_context(request, section, form_overrides=None):
         "project_update_draft_form": ProjectUpdateDraftForm(prefix="project-update-draft"),
         "project_update_draft_source": None,
         "project_update_draft_auto_open": False,
-        "media_upload_form": MediaUploadForm(project_queryset=Project.objects.all()),
+        "media_upload_form": MediaUploadForm(
+            project_queryset=Project.objects.filter(is_portfolio_only=False)
+        ),
         "content_form": _content_form(site_settings, services, process_steps),
+        "process_step_create_form": ProcessStepForm(prefix="new-process-step"),
         "lead_note_form": (
             LeadNoteForm(instance=selected_lead, prefix="admin-note")
             if selected_lead
@@ -1240,11 +1326,19 @@ def _dashboard_context(request, section, form_overrides=None):
         for row in service_rows:
             if row["service"].pk == form_overrides["service_error_id"]:
                 row["form"] = form_overrides["service_edit_form"]
-    content_step_fields = [
-        {"step": step, "field": content_form[f"step_{step.key}"]}
-        for step in process_steps
+    process_step_rows = [
+        {
+            "step": step,
+            "form": ProcessStepForm(instance=step, prefix=f"process-step-{step.pk}"),
+        }
+        for step in ProcessStep.objects.all()
     ]
-
+    if form_overrides.get("process_step_error_id"):
+        for row in process_step_rows:
+            if row["step"].pk == form_overrides["process_step_error_id"]:
+                row["form"] = form_overrides["process_step_edit_form"]
+    if "process_step_create_form" in form_overrides:
+        dashboard_forms["process_step_create_form"] = form_overrides["process_step_create_form"]
     active_projects = [project for project in projects if project.status != Project.Status.COMPLETE]
     pending_estimates = [estimate for estimate in estimates if estimate.status in {Estimate.Status.DRAFT, Estimate.Status.SENT}]
     open_leads = [lead for lead in all_leads if lead.status not in {Lead.Status.WON, Lead.Status.LOST}]
@@ -1307,7 +1401,8 @@ def _dashboard_context(request, section, form_overrides=None):
         "content_process_steps": process_steps,
         "service_rows": service_rows,
         "service_create_form": form_overrides.get("service_create_form", ServiceForm(prefix="new-service")),
-        "content_step_fields": content_step_fields,
+        "process_step_rows": process_step_rows,
+        "process_step_create_form": dashboard_forms["process_step_create_form"],
         "content_page_focus": request.GET.get("content_page_focus", "")
         if request.GET.get("content_page_focus") in {"home", "services", "projects", "process", "contact"}
         else "",
@@ -4744,7 +4839,10 @@ def project_update_draft(request, pk):
 @require_POST
 @staff_required
 def project_create_invite(request, pk):
-    project = get_object_or_404(Project.objects.select_related("client"), pk=pk)
+    project = get_object_or_404(
+        Project.objects.filter(is_portfolio_only=False).select_related("client"),
+        pk=pk,
+    )
     if not project.client:
         messages.error(request, "This project needs a client contact before an invite can be created.")
         return _dashboard_redirect("projects", project=project.pk)
@@ -4836,9 +4934,11 @@ def _website_publishing_context(request, projects, *, form_overrides=None):
                 "items",
                 queryset=WebsiteGalleryPostItem.objects.select_related("asset").prefetch_related("asset__publications"),
             ))
-            .order_by("sort_order", "created_at")
+            .order_by("sort_order", "created_at", "pk")
         )
-        for post in posts:
+        for position, post in enumerate(posts):
+            post.can_move_up = position > 0
+            post.can_move_down = position < len(posts) - 1
             post.is_live = bool(post.published_at)
             post.has_draft_changes = post.has_unpublished_changes
             post.live_asset_ids = {
@@ -4862,32 +4962,139 @@ def _website_publishing_context(request, projects, *, form_overrides=None):
             post.items_for_editor = list(post.items.all())
             post.draft_slide_count = sum(1 for item in post.items_for_editor if item.is_in_draft)
             keep_field = post.form["items_to_keep"]
-            keep_by_asset = {
-                str(choice.data["value"]): choice
-                for choice in keep_field
-            }
+            keep_by_asset = {}
+            for choice in keep_field:
+                choice.data["label"] = "Keep in this post"
+                keep_by_asset[str(choice.data["value"])] = choice
             for item in post.items_for_editor:
                 item.is_in_live = str(item.asset_id) in post.live_asset_ids
                 item.keep_checkbox = keep_by_asset.get(str(item.asset_id))
                 item.order_field = post.form[f"slide_order_{item.asset_id}"]
+                poster_field_name = f"slide_poster_{item.asset_id}"
+                item.poster_field = post.form[poster_field_name] if poster_field_name in post.form.fields else None
+                item.poster_preview_url = (
+                    reverse("operations:website-post-poster", kwargs={"pk": post.pk, "asset_id": item.asset_id})
+                    + f"?preview=1&v={int(post.updated_at.timestamp())}"
+                    if item.poster_image
+                    else static("operations/images/video-poster-placeholder.svg")
+                )
+            _attach_existing_website_video_rows(post.form)
             post.preview = website_post_presentation(post, preview=True)
             rows.append(post)
 
     page = Paginator(rows, 10).get_page(request.GET.get("website_page"))
     page_rows = list(page)
+    total_post_count = WebsiteGalleryPost.objects.count()
     create_form = form_overrides.get("website_post_create_form") or WebsiteGalleryPostForm(
         project=selected_project,
-        initial={"sort_order": len(rows)},
         prefix="new-post",
+    )
+    _attach_existing_website_video_rows(create_form)
+    create_project_form = (
+        form_overrides.get("website_past_project_create_form")
+        or WebsitePastProjectForm()
     )
     return {
         "website_projects": website_projects,
         "website_project": selected_project,
+        "website_post_count": total_post_count,
+        "website_post_limit": WEBSITE_GALLERY_MAX_POSTS,
+        "website_max_slides_per_post": WEBSITE_GALLERY_MAX_SLIDES_PER_POST,
+        "website_max_upload_mb": WEBSITE_GALLERY_MAX_UPLOAD_SIZE // (1024 * 1024),
+        "website_can_create_post": total_post_count < WEBSITE_GALLERY_MAX_POSTS,
+        "website_past_project_create_form": create_project_form,
         "website_post_create_form": create_form,
         "website_post_rows": page_rows,
         "website_post_page": page,
         "website_post_state": state,
     }
+
+
+def _attach_existing_website_video_rows(form):
+    """Attach the rendered choice and poster input to each reusable project file."""
+    assets_by_id = {
+        str(asset.pk): asset
+        for asset in form.fields["existing_assets"].queryset.select_related("project")
+    }
+    rows = []
+    for choice in form["existing_assets"]:
+        asset = assets_by_id.get(str(choice.data["value"]))
+        if not asset:
+            continue
+        poster_field = form.existing_poster_fields_by_asset.get(str(asset.pk))
+        rows.append({
+            "choice": choice,
+            "asset": asset,
+            "is_video": asset.media_type == MediaAsset.MediaType.VIDEO,
+            "poster_field": poster_field,
+            "display_url": reverse("operations:media-file", kwargs={"pk": asset.pk}),
+            "placeholder_url": static("operations/images/video-poster-placeholder.svg"),
+        })
+    form.existing_asset_rows = rows
+
+
+def _save_website_video_poster(item, upload):
+    """Store a normalized website-only poster; never shares the original media asset."""
+    if not upload or item.asset.media_type != MediaAsset.MediaType.VIDEO:
+        return
+    from PIL import Image, ImageOps
+
+    with Image.open(upload) as source:
+        frame = ImageOps.exif_transpose(source)
+        frame.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
+        frame = frame.convert("RGB")
+        output = BytesIO()
+        frame.save(output, format="JPEG", quality=82, optimize=True)
+    item.poster_image.save(
+        f"{item.asset_id}-{uuid.uuid4().hex[:12]}.jpg",
+        ContentFile(output.getvalue()),
+        save=False,
+    )
+    item.save(update_fields=["poster_image"])
+
+
+@require_POST
+@staff_required
+@transaction.atomic
+def website_past_project_create(request):
+    if not _can_manage_content(request.user):
+        raise PermissionDenied
+
+    form = WebsitePastProjectForm(request.POST)
+    selections = {
+        "website_project": request.POST.get("website_project", ""),
+        "content_page_focus": "projects",
+    }
+    if not form.is_valid():
+        response = _render_dashboard_form_error(
+            request,
+            "content",
+            {"website_past_project_create_form": form},
+            selections=selections,
+        )
+        response.status_code = 422
+        return response
+
+    title = form.cleaned_data["title"]
+    project = Project.objects.create(
+        title=title,
+        public_title=title,
+        is_portfolio_only=True,
+        is_published=False,
+        created_by=request.user,
+    )
+    record_activity(
+        "Past project added to website portfolio",
+        title,
+        actor=request.user,
+        project=project,
+    )
+    messages.success(request, "Past project added. You can now create its photo or video post.")
+    return _content_page_redirect(
+        "projects",
+        website_project=project.pk,
+        content_page_focus="projects",
+    )
 
 
 def _media_error(request, form, asset=None):
@@ -4924,8 +5131,9 @@ def media_upload(request):
         project = form.cleaned_data["project"]
         created = []
         for upload in form.cleaned_data["files"]:
-            media_type = MediaAsset.MediaType.VIDEO if upload.name.lower().endswith((".mp4", ".mov", ".webm")) else MediaAsset.MediaType.PHOTO
-            asset = MediaAsset.objects.create(
+            media_type = MediaAsset.MediaType.VIDEO if upload.name.lower().endswith((".mp4", ".mov")) else MediaAsset.MediaType.PHOTO
+            asset = MediaAsset.create_for_upload(
+                "Client Media",
                 project=project,
                 title=upload.name.rsplit(".", 1)[0],
                 file=upload,
@@ -5163,7 +5371,13 @@ def _save_website_gallery_post(request, *, post=None):
         except (ValueError, TypeError, AttributeError):
             raise Http404 from None
         project = get_object_or_404(Project.objects.select_for_update().select_related("client"), pk=project_id)
-        post = WebsiteGalleryPost(project=project)
+        max_sort_order = WebsiteGalleryPost.objects.filter(project=project).aggregate(
+            max_order=Max("sort_order")
+        )["max_order"]
+        post = WebsiteGalleryPost(
+            project=project,
+            sort_order=(max_sort_order if max_sort_order is not None else -1) + 1,
+        )
     else:
         post = get_object_or_404(
             WebsiteGalleryPost.objects.select_for_update().select_related("project__client"),
@@ -5195,6 +5409,13 @@ def _save_website_gallery_post(request, *, post=None):
     )
     if not form.is_valid():
         return _website_post_form_error(request, form, project=project, post=None if is_new_post else post)
+
+    if is_new_post and WebsiteGalleryPost.objects.count() >= WEBSITE_GALLERY_MAX_POSTS:
+        form.add_error(
+            None,
+            f"The Projects page is limited to {WEBSITE_GALLERY_MAX_POSTS} total posts, including drafts. Remove an existing post before creating another.",
+        )
+        return _website_post_form_error(request, form, project=project, post=None)
 
     existing_assets = list(form.cleaned_data["existing_assets"])
     selected_asset_ids = {asset.pk for asset in existing_assets}
@@ -5235,6 +5456,10 @@ def _save_website_gallery_post(request, *, post=None):
             if submitted_order is not None:
                 item.sort_order = submitted_order
         item.save(update_fields=["is_in_draft", "sort_order"])
+        _save_website_video_poster(
+            item,
+            form.cleaned_data.get(f"slide_poster_{item.asset_id}"),
+        )
 
     previous_live_ids = {
         str(slide.get("asset_id"))
@@ -5261,23 +5486,28 @@ def _save_website_gallery_post(request, *, post=None):
             ordered_existing.append(by_id[asset_id])
     ordered_existing.extend(asset for asset in existing_assets if asset not in ordered_existing)
     for asset in ordered_existing:
-        WebsiteGalleryPostItem.objects.create(
+        item = WebsiteGalleryPostItem.objects.create(
             post=post,
             asset=asset,
             sort_order=current_order,
             is_in_draft=True,
         )
+        _save_website_video_poster(
+            item,
+            form.cleaned_data.get(f"existing_poster_{asset.pk}"),
+        )
         current_order += 1
 
-    for upload in form.cleaned_data["files"]:
+    for upload_index, upload in enumerate(form.cleaned_data["files"]):
         filename = upload.name.replace("\\", "/").rsplit("/", 1)[-1]
         title = filename.rsplit(".", 1)[0][:180] or "Project media"
         media_type = (
             MediaAsset.MediaType.VIDEO
-            if filename.lower().endswith((".mp4", ".mov", ".webm"))
+            if filename.lower().endswith((".mp4", ".mov"))
             else MediaAsset.MediaType.PHOTO
         )
-        asset = MediaAsset.objects.create(
+        asset = MediaAsset.create_for_upload(
+            "Public Content",
             project=project,
             title=title,
             file=upload,
@@ -5285,11 +5515,15 @@ def _save_website_gallery_post(request, *, post=None):
             visibility=MediaAsset.Visibility.INTERNAL,
             uploaded_by=request.user,
         )
-        WebsiteGalleryPostItem.objects.create(
+        item = WebsiteGalleryPostItem.objects.create(
             post=post,
             asset=asset,
             sort_order=current_order,
             is_in_draft=True,
+        )
+        _save_website_video_poster(
+            item,
+            form.cleaned_data.get(f"new_poster_{upload_index}"),
         )
         MediaPublication.objects.get_or_create(
             asset=asset,
@@ -5409,6 +5643,52 @@ def website_gallery_post_update(request, pk):
     return _save_website_gallery_post(request, post=post)
 
 
+@require_POST
+@staff_required
+@transaction.atomic
+def website_gallery_post_move(request, pk):
+    if not _can_manage_content(request.user):
+        raise PermissionDenied
+
+    post = get_object_or_404(
+        WebsiteGalleryPost.objects.select_for_update(),
+        pk=pk,
+    )
+    direction = request.POST.get("direction")
+    if direction not in {"up", "down"}:
+        raise Http404
+
+    posts = list(
+        WebsiteGalleryPost.objects.select_for_update()
+        .filter(project_id=post.project_id)
+        .order_by("sort_order", "created_at", "pk")
+    )
+    index = next((position for position, item in enumerate(posts) if item.pk == post.pk), None)
+    if index is None:
+        raise Http404
+    neighbor = index + (-1 if direction == "up" else 1)
+    if 0 <= neighbor < len(posts):
+        posts[index], posts[neighbor] = posts[neighbor], posts[index]
+        for position, item in enumerate(posts):
+            item.sort_order = position
+            if item.published_at:
+                published_data = dict(item.published_data or {})
+                published_data["sort_order"] = position
+                item.published_data = published_data
+        WebsiteGalleryPost.objects.bulk_update(posts, ["sort_order", "published_data"])
+
+    state = request.POST.get("website_state", "all")
+    if state not in {"all", "draft", "published"}:
+        state = "all"
+    return _content_page_redirect(
+        "projects",
+        website_project=post.project_id,
+        website_state=state,
+        website_page=request.POST.get("website_page", "1"),
+        content_page_focus="projects",
+    )
+
+
 @require_http_methods(["GET", "POST"])
 @staff_required
 @transaction.atomic
@@ -5505,6 +5785,55 @@ def website_gallery_post_preview(request, pk):
         "operations/website_post_preview.html",
         {"post": website_post_presentation(post, preview=True), "project": post.project},
     )
+
+
+@require_GET
+def website_post_poster(request, pk, asset_id):
+    """Serve the website-only video frame from a saved draft or live snapshot."""
+    preview = request.GET.get("preview") == "1"
+    if preview and not _can_manage_content(request.user):
+        raise PermissionDenied
+
+    post = get_object_or_404(
+        WebsiteGalleryPost.objects.select_related("project").prefetch_related(
+            Prefetch(
+                "items",
+                queryset=WebsiteGalleryPostItem.objects.select_related("asset__project").prefetch_related(
+                    "asset__publications"
+                ),
+            )
+        ),
+        pk=pk,
+    )
+    if preview:
+        snapshot = post.draft_data()
+    else:
+        if not post.published_at or not post.project.is_published:
+            raise Http404
+        snapshot = post.published_data or {}
+
+    slide = next(
+        (entry for entry in snapshot.get("slides", []) if str(entry.get("asset_id")) == str(asset_id)),
+        None,
+    )
+    if not slide or not slide.get("poster_image"):
+        raise Http404
+
+    item = next((item for item in post.items.all() if str(item.asset_id) == str(asset_id)), None)
+    if not item or item.asset.media_type != MediaAsset.MediaType.VIDEO:
+        raise Http404
+    if not preview and not website_is_live(item.asset):
+        raise Http404
+    try:
+        poster_file = default_storage.open(slide["poster_image"], "rb")
+    except (FileNotFoundError, OSError, ValueError) as exc:
+        raise Http404 from exc
+
+    response = FileResponse(poster_file, content_type="image/jpeg")
+    response["Cache-Control"] = "private, no-store" if preview else "public, max-age=3600"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Cross-Origin-Resource-Policy"] = "same-origin"
+    return response
 
 
 @require_GET
@@ -5647,6 +5976,111 @@ def service_image(request, pk):
 
 @require_POST
 @staff_required
+@transaction.atomic
+def process_step_save(request, pk=None):
+    if not _can_manage_content(request.user):
+        raise PermissionDenied
+    instance = get_object_or_404(ProcessStep.objects.select_for_update(), pk=pk) if pk else ProcessStep()
+    prefix = f"process-step-{pk}" if pk else "new-process-step"
+    form = ProcessStepForm(request.POST, request.FILES, instance=instance, prefix=prefix)
+    if form.is_valid():
+        old_storage = instance.image.storage if instance.pk and instance.image else None
+        old_name = instance.image.name if instance.pk and instance.image else ""
+        step = form.save(commit=False)
+        if pk is None:
+            base_key = slugify(step.title)[:32] or "step"
+            step.key = base_key
+            suffix = 2
+            while ProcessStep.objects.filter(key=step.key).exists():
+                suffix_text = f"-{suffix}"
+                step.key = f"{base_key[:40 - len(suffix_text)]}{suffix_text}"
+                suffix += 1
+            max_order = ProcessStep.objects.aggregate(max_order=Max("sort_order"))["max_order"]
+            step.sort_order = (max_order if max_order is not None else -1) + 1
+        step.save()
+        if old_storage and old_name and old_name != (step.image.name if step.image else ""):
+            transaction.on_commit(
+                lambda storage=old_storage, name=old_name: _delete_service_image(storage, name)
+            )
+        record_activity("Process step saved", step.title, actor=request.user)
+        messages.success(request, "Process step saved.")
+        return _content_page_redirect("process")
+    overrides = (
+        {"process_step_error_id": pk, "process_step_edit_form": form}
+        if pk
+        else {"process_step_create_form": form}
+    )
+    overrides["content_page_error"] = "process"
+    return _render_dashboard_form_error(request, "content", overrides)
+
+
+@require_POST
+@staff_required
+@transaction.atomic
+def process_step_remove(request, pk):
+    if not _can_manage_content(request.user):
+        raise PermissionDenied
+    step = get_object_or_404(ProcessStep.objects.select_for_update(), pk=pk)
+    title = step.title
+    image_storage = step.image.storage if step.image else None
+    image_name = step.image.name if step.image else ""
+    step.delete()
+    if image_storage and image_name:
+        transaction.on_commit(
+            lambda storage=image_storage, name=image_name: _delete_service_image(storage, name)
+        )
+    for position, item in enumerate(ProcessStep.objects.select_for_update().order_by("sort_order", "pk")):
+        if item.sort_order != position:
+            item.sort_order = position
+            item.save(update_fields=["sort_order"])
+    record_activity("Process step deleted", title, actor=request.user)
+    messages.success(request, "Process step deleted.")
+    return _content_page_redirect("process")
+
+
+@require_POST
+@staff_required
+@transaction.atomic
+def process_step_move(request, pk):
+    if not _can_manage_content(request.user):
+        raise PermissionDenied
+    steps = list(ProcessStep.objects.select_for_update().order_by("sort_order", "pk"))
+    index = next((i for i, item in enumerate(steps) if item.pk == pk), None)
+    if index is None:
+        raise Http404
+    direction = request.POST.get("direction")
+    if direction not in {"up", "down"}:
+        raise Http404
+    neighbor = index + (-1 if direction == "up" else 1)
+    if 0 <= neighbor < len(steps):
+        steps[index], steps[neighbor] = steps[neighbor], steps[index]
+        for position, item in enumerate(steps):
+            item.sort_order = position
+        ProcessStep.objects.bulk_update(steps, ["sort_order"])
+    return _content_page_redirect("process")
+
+
+@require_GET
+def process_step_image(request, pk):
+    step = get_object_or_404(ProcessStep, pk=pk)
+    if not step.is_active and not _can_manage_content(request.user):
+        raise Http404
+    if not step.image:
+        raise Http404
+    try:
+        response = FileResponse(
+            step.image.open("rb"),
+            content_type=mimetypes.guess_type(step.image.name)[0] or "application/octet-stream",
+        )
+    except (FileNotFoundError, OSError) as exc:
+        raise Http404 from exc
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@require_POST
+@staff_required
 def content_update(request):
     if not _can_manage_content(request.user):
         raise PermissionDenied
@@ -5654,26 +6088,42 @@ def content_update(request):
     services = list(Service.objects.filter(is_active=True))
     process_steps = list(ProcessStep.objects.all())
     content_page = request.POST.get("content_page", "all")
-    if content_page not in {"home", "services", "process", "all"}:
+    if content_page not in {"home", "services", "process", "contact", "all"}:
         raise Http404
     form = _content_form(instance, services, process_steps, data=request.POST)
-    if form.is_valid():
+    # Each editor submits only one page's fields. Validate that page's fields
+    # only, so stale or incomplete content on another page cannot block a save.
+    all_form_fields = form.fields
+    if content_page != "all":
+        active_fields = set(CONTENT_FORM_FIELDS_BY_PAGE[content_page])
+        form.fields = {
+            name: field for name, field in all_form_fields.items() if name in active_fields
+        }
+    try:
+        form_is_valid = form.is_valid()
+    finally:
+        form.fields = all_form_fields
+
+    if form_is_valid:
         if content_page in {"home", "all"}:
             for field in ("headline", "subheadline", "featured_title", "featured_body", "google_review_url"):
                 setattr(instance, field, form.cleaned_data[field])
         if content_page in {"services", "all"}:
             for field in ("services_title", "services_intro", "services_note"):
                 setattr(instance, field, form.cleaned_data[field])
-        if content_page in {"home", "services", "all"}:
-            instance.save()
         if content_page in {"process", "all"}:
-            for step in process_steps:
-                step.title = form.cleaned_data[f"step_{step.key}"]
-                step.save(update_fields=["title"])
+            for field in ("process_page_title", "process_page_intro"):
+                setattr(instance, field, form.cleaned_data[field])
+        if content_page in {"contact", "all"}:
+            for field in CONTACT_CONTENT_FIELDS:
+                setattr(instance, field, form.cleaned_data[field])
+        if content_page in {"home", "services", "process", "contact", "all"}:
+            instance.save()
         page_label = {
             "home": "Home page",
             "services": "Services page",
             "process": "Process page",
+            "contact": "Contact page",
             "all": "Website content",
         }[content_page]
         record_activity("Public content updated", page_label, actor=request.user)
@@ -5717,7 +6167,10 @@ def public_project_detail(request, pk):
 
 @require_GET
 def project_cover_file(request, pk):
-    project = get_object_or_404(Project.objects.select_related("client"), pk=pk)
+    project = get_object_or_404(
+        Project.objects.filter(is_portfolio_only=False).select_related("client"),
+        pk=pk,
+    )
     allowed = bool(project.is_published)
     if request.user.is_authenticated and request.user.is_staff:
         allowed = bool(

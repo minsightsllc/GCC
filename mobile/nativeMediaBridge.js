@@ -20,6 +20,55 @@ function safeFilename(name) {
   return normalized.slice(-180) || 'upload';
 }
 
+const MEDIA_MIME_EXTENSIONS = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'video/mp4': '.mp4',
+  'video/quicktime': '.mov',
+};
+const MEDIA_EXTENSION_MIMES = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.mp4': 'video/mp4',
+  '.mov': 'video/quicktime',
+};
+const ALLOWED_MEDIA_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.mp4', '.mov']);
+
+function supportedMediaFilename(asset, fallbackName) {
+  const originalName = safeFilename(asset.name || asset.fileName || fallbackName);
+  const dot = originalName.lastIndexOf('.');
+  const hasExtension = dot > 0;
+  const suppliedExtension = hasExtension ? originalName.slice(dot).toLowerCase() : '';
+  const mimeType = String(asset.mimeType || '').split(';', 1)[0].trim().toLowerCase();
+  const assetType = String(asset.type || '').trim().toLowerCase();
+  const mimeExtension = MEDIA_MIME_EXTENSIONS[mimeType];
+  const extension = suppliedExtension || mimeExtension;
+
+  if (!extension || !ALLOWED_MEDIA_EXTENSIONS.has(extension)) {
+    throw new Error('Use JPG, PNG, or WebP photos, or MP4 or MOV videos. GIF and HEIC files are not supported.');
+  }
+  if (
+    (mimeType.startsWith('image/') && !['image/jpeg', 'image/png', 'image/webp'].includes(mimeType))
+    || (mimeType.startsWith('video/') && !['video/mp4', 'video/quicktime'].includes(mimeType))
+  ) {
+    throw new Error('Use JPG, PNG, or WebP photos, or MP4 or MOV videos. GIF and HEIC files are not supported.');
+  }
+  if (
+    (mimeType.startsWith('image/') && ['.mp4', '.mov'].includes(extension))
+    || (mimeType.startsWith('video/') && ['.jpg', '.jpeg', '.png', '.webp'].includes(extension))
+    || (assetType === 'image' && ['.mp4', '.mov'].includes(extension))
+    || (assetType === 'video' && ['.jpg', '.jpeg', '.png', '.webp'].includes(extension))
+  ) {
+    throw new Error('The selected file type does not match its photo or video format.');
+  }
+
+  const stem = hasExtension ? originalName.slice(0, dot) : originalName;
+  return `${stem}${extension}`;
+}
+
 function fileMetadata(entry) {
   return {
     request_id: entry.requestId,
@@ -37,7 +86,7 @@ function fileMetadata(entry) {
   };
 }
 
-export function createNativeMediaBridge({ emit }) {
+export function createNativeMediaBridge({ emit, trustedUploadOrigin, trustedUploadPath }) {
   let queue = [];
   let queueLoaded = false;
   let queueLoadPromise = null;
@@ -49,6 +98,25 @@ export function createNativeMediaBridge({ emit }) {
       // Native capability failures must never interrupt WebView navigation.
     }
   };
+
+  function isTrustedUploadDestination(value) {
+    if (!trustedUploadOrigin || !trustedUploadPath || typeof value !== 'string') {
+      return false;
+    }
+    try {
+      const uploadUrl = new URL(value);
+      return (
+        uploadUrl.origin === trustedUploadOrigin
+        && uploadUrl.pathname === trustedUploadPath
+        && !uploadUrl.search
+        && !uploadUrl.hash
+        && !uploadUrl.username
+        && !uploadUrl.password
+      );
+    } catch {
+      return false;
+    }
+  }
 
   async function ensureQueueDirectory() {
     if (!FileSystem.documentDirectory) {
@@ -154,14 +222,34 @@ export function createNativeMediaBridge({ emit }) {
     }
 
     const assets = result.assets || (result.uri ? [result] : []);
+    let mediaAssets;
+    if (message.action === 'pick-document') {
+      mediaAssets = assets.slice(0, MAX_QUEUE_ITEMS).map((asset) => ({
+        asset,
+        name: safeFilename(asset.name || asset.fileName || ('upload-' + randomId())),
+      }));
+    } else {
+      try {
+        mediaAssets = assets.slice(0, MAX_QUEUE_ITEMS).map((asset) => {
+          const fallbackName = (message.action === 'capture-media' ? 'capture-' : 'upload-') + randomId();
+          return { asset, name: supportedMediaFilename(asset, fallbackName) };
+        });
+      } catch (error) {
+        post({
+          type: 'native-media-error',
+          request_id: requestId,
+          message: error instanceof Error ? error.message : 'Choose JPG, PNG, or WebP photos, or MP4 or MOV videos.',
+        });
+        return;
+      }
+    }
     const entries = [];
     try {
-      for (const asset of assets.slice(0, MAX_QUEUE_ITEMS)) {
+      for (const { asset, name } of mediaAssets) {
         if (!asset?.uri) {
           continue;
         }
         const fileId = randomId();
-        const name = safeFilename(asset.name || asset.fileName || ('capture-' + fileId));
         const privateUri = await copyToPrivateQueue(asset.uri, name, fileId);
         const privateInfo = await FileSystem.getInfoAsync(privateUri, { size: true });
         entries.push({
@@ -169,7 +257,10 @@ export function createNativeMediaBridge({ emit }) {
           fileId,
           name,
           size: Number(asset.fileSize || asset.size || privateInfo.size || 0) || null,
-          type: asset.mimeType || asset.type || 'application/octet-stream',
+          type: MEDIA_EXTENSION_MIMES[name.slice(name.lastIndexOf('.')).toLowerCase()]
+            || asset.mimeType
+            || asset.type
+            || 'application/octet-stream',
           localUri: privateUri,
           action: message.action,
           target: message.target || 'project_media',
@@ -203,6 +294,20 @@ export function createNativeMediaBridge({ emit }) {
 
   function uploadEntry(entry, grant) {
     return new Promise((resolve) => {
+      if (!isTrustedUploadDestination(grant.upload_url)) {
+        entry.status = 'retry';
+        persistQueue().catch(() => {});
+        post({
+          type: 'native-media-upload-error',
+          request_id: entry.requestId,
+          file_id: entry.fileId,
+          status: 400,
+          message: 'The upload destination was rejected.',
+          retry_available: false,
+        });
+        resolve(false);
+        return;
+      }
       const request = new XMLHttpRequest();
       const form = new FormData();
       const uploadUrl = grant.upload_url;
@@ -264,11 +369,37 @@ export function createNativeMediaBridge({ emit }) {
 
   async function uploadGrants(message) {
     await loadQueue();
+    if (typeof message.request_id !== 'string' || !message.request_id || message.request_id.length > 160) {
+      return;
+    }
     const grants = Array.isArray(message.grants) ? message.grants : [];
     for (const grant of grants) {
+      if (
+        !grant
+        || typeof grant.file_id !== 'string'
+        || !grant.file_id
+        || grant.file_id.length > 160
+        || typeof grant.grant_token !== 'string'
+        || !grant.grant_token
+        || grant.grant_token.length > 2048
+        || typeof grant.idempotency_key !== 'string'
+        || !grant.idempotency_key
+        || grant.idempotency_key.length > 160
+        || !isTrustedUploadDestination(grant.upload_url)
+      ) {
+        post({
+          type: 'native-media-upload-error',
+          request_id: message.request_id,
+          file_id: grant && grant.file_id,
+          status: 400,
+          message: 'The upload grant was invalid.',
+          retry_available: false,
+        });
+        continue;
+      }
       const entry = queue.find((item) => (
         item.fileId === grant.file_id
-        && (!message.request_id || item.requestId === message.request_id)
+        && item.requestId === message.request_id
       ));
       if (!entry) {
         post({ type: 'native-media-upload-error', request_id: message.request_id, file_id: grant.file_id, status: 404, message: 'The staged file is no longer available.', retry_available: false });

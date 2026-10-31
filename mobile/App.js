@@ -21,6 +21,7 @@ import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { createNativeMediaBridge } from './nativeMediaBridge';
+import { LEGAL_DOCUMENTS } from './legalDocuments';
 import {
   DrawerContentScrollView,
   DrawerItem,
@@ -49,6 +50,40 @@ const colors = {
 const WEB_APP_URL = (
   process.env.EXPO_PUBLIC_WEB_APP_URL || 'http://127.0.0.1:8000'
 ).replace(/\/$/, '');
+
+function getTrustedWebAppDetails() {
+  try {
+    const appUrl = new URL(WEB_APP_URL);
+    if (
+      !['http:', 'https:'].includes(appUrl.protocol)
+      || appUrl.username
+      || appUrl.password
+      || appUrl.pathname !== '/'
+      || appUrl.search
+      || appUrl.hash
+    ) {
+      return null;
+    }
+    const uploadUrl = new URL('/api/v1/native-upload/', appUrl.origin);
+    return { origin: appUrl.origin, uploadPath: uploadUrl.pathname };
+  } catch {
+    return null;
+  }
+}
+
+function createNativeMediaBridgeToken() {
+  const bytes = new Uint8Array(32);
+  if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+const TRUSTED_WEB_APP = getTrustedWebAppDetails();
 
 const AUTH_PATH = '/accounts/login/';
 const ACCOUNT_DELETE_PATH = '/accounts/delete/';
@@ -272,6 +307,7 @@ const adminDrawerLogout = adminMorePages[2];
 const MOBILE_CHROME_SCRIPT = [
   '(function () {',
   '  try {',
+  "    document.documentElement.classList.add('mobile-app-webview');",
   "    var styleId = 'grand-coast-mobile-webview-chrome';",
   '    var style = document.getElementById(styleId);',
   '',
@@ -798,10 +834,27 @@ function AppDrawerContent({ navigation, ...props }) {
   );
 }
 
-function useWebViewChrome(webViewRef) {
+function buildMobileWebViewScript(bridgeToken) {
+  const privateRouteTokenScript = [
+    '(function () {',
+    '  var path = window.location && window.location.pathname || "/";',
+    '  var isPrivate = ["/dashboard", "/team", "/portal"].some(function (prefix) {',
+    '    return path === prefix || path.indexOf(prefix + "/") === 0;',
+    '  });',
+    '  if (isPrivate) {',
+    `    window.__GCC_NATIVE_MEDIA_BRIDGE_TOKEN = ${JSON.stringify(bridgeToken)};`,
+    '  } else {',
+    '    try { delete window.__GCC_NATIVE_MEDIA_BRIDGE_TOKEN; } catch (error) { window.__GCC_NATIVE_MEDIA_BRIDGE_TOKEN = null; }',
+    '  }',
+    '})();',
+  ].join('\n');
+  return `${privateRouteTokenScript}\n${MOBILE_CHROME_SCRIPT}`;
+}
+
+function useWebViewChrome(webViewRef, script) {
   return useCallback(() => {
-    webViewRef.current?.injectJavaScript(MOBILE_CHROME_SCRIPT);
-  }, [webViewRef]);
+    webViewRef.current?.injectJavaScript(script);
+  }, [script, webViewRef]);
 }
 
 function PushNotificationBridge() {
@@ -1029,9 +1082,17 @@ function SignInGate({ onWebViewLoadEnd, webViewRef }) {
   const androidPullOffset = useRef(new Animated.Value(0)).current;
   const refreshInFlightRef = useRef(false);
   const nativeMediaBridgeRef = useRef(null);
+  const nativeMediaBridgeTokenRef = useRef(null);
+  if (!nativeMediaBridgeTokenRef.current) {
+    nativeMediaBridgeTokenRef.current = createNativeMediaBridgeToken();
+  }
+  const mobileWebViewScript = useMemo(
+    () => buildMobileWebViewScript(nativeMediaBridgeTokenRef.current),
+    [],
+  );
   const nativeMediaEnabled = process.env.EXPO_PUBLIC_NATIVE_MEDIA_ENABLED !== 'false';
   const canPullToRefresh = isAuthenticated && isPrivatePath(pathnameFromUrl(currentWebViewPath));
-  const injectMobileChrome = useWebViewChrome(webViewRef);
+  const injectMobileChrome = useWebViewChrome(webViewRef, mobileWebViewScript);
   const loginSource = useMemo(() => ({
     headers: MOBILE_WEBVIEW_REQUEST_HEADERS,
     uri: pageUrl(`${AUTH_PATH}?mobile=1`),
@@ -1073,6 +1134,8 @@ function SignInGate({ onWebViewLoadEnd, webViewRef }) {
     }
     nativeMediaBridgeRef.current = createNativeMediaBridge({
       emit: emitNativeMediaMessage,
+      trustedUploadOrigin: TRUSTED_WEB_APP && TRUSTED_WEB_APP.origin,
+      trustedUploadPath: TRUSTED_WEB_APP && TRUSTED_WEB_APP.uploadPath,
     });
     return () => {
       nativeMediaBridgeRef.current = null;
@@ -1199,16 +1262,78 @@ function SignInGate({ onWebViewLoadEnd, webViewRef }) {
   const handleMessage = (event) => {
     try {
       const message = JSON.parse(event.nativeEvent.data);
-      if (message.type && message.type.indexOf('native-media-') === 0) {
-        if (nativeMediaEnabled && nativeMediaBridgeRef.current) {
-          nativeMediaBridgeRef.current.handleMessage(message).catch(() => {
-            emitNativeMediaMessage({
-              type: 'native-media-error',
-              request_id: message.request_id,
-              message: 'The device capability is temporarily unavailable.',
-            });
-          });
+      if (message && typeof message.type === 'string' && message.type.indexOf('native-media-') === 0) {
+        const mediaMessageTypes = new Set([
+          'native-media-request',
+          'native-media-upload-grants',
+          'native-media-page-ready',
+          'native-media-retry-queue',
+        ]);
+        const senderUrl = event.nativeEvent.url;
+        let sender;
+        try {
+          sender = new URL(senderUrl);
+        } catch {
+          return;
         }
+        const privateWorkspaceOpen = isPrivatePath(pathnameFromUrl(currentWebViewPath));
+        const senderPathIsPrivate = isPrivatePath(sender.pathname)
+          || (Platform.OS === 'android' && sender.pathname === '/');
+        if (
+          !nativeMediaEnabled
+          || !nativeMediaBridgeRef.current
+          || !mediaMessageTypes.has(message.type)
+          || !privateWorkspaceOpen
+          || !senderPathIsPrivate
+          || !TRUSTED_WEB_APP
+          || sender.origin !== TRUSTED_WEB_APP.origin
+          || !['http:', 'https:'].includes(sender.protocol)
+          || sender.username
+          || sender.password
+          || message.bridge_token !== nativeMediaBridgeTokenRef.current
+        ) {
+          return;
+        }
+
+        const isBoundedString = (value, maxLength) => (
+          typeof value === 'string' && value.length > 0 && value.length <= maxLength
+        );
+        if (message.request_id !== undefined && !isBoundedString(message.request_id, 160)) return;
+        if (message.type === 'native-media-request') {
+          if (
+            !['capture-media', 'pick-media', 'pick-document'].includes(message.action)
+            || !isBoundedString(message.request_id, 160)
+            || ['target', 'project_id', 'target_id', 'visibility', 'context', 'mime_types'].some(
+              (key) => message[key] !== undefined && !isBoundedString(message[key], 240),
+            )
+            || (message.allow_multiple !== undefined && typeof message.allow_multiple !== 'boolean')
+          ) return;
+        }
+        if (message.type === 'native-media-upload-grants') {
+          if (
+            !Array.isArray(message.grants)
+            || !isBoundedString(message.request_id, 160)
+            || message.grants.length === 0
+            || message.grants.length > 24
+            || message.grants.some((grant) => (
+              !grant
+              || typeof grant !== 'object'
+              || !isBoundedString(grant.file_id, 160)
+              || !isBoundedString(grant.upload_url, 2048)
+              || !isBoundedString(grant.grant_token, 2048)
+              || !isBoundedString(grant.idempotency_key, 160)
+            ))
+          ) return;
+        }
+
+        const { bridge_token: _bridgeToken, ...verifiedMessage } = message;
+        nativeMediaBridgeRef.current.handleMessage(verifiedMessage).catch(() => {
+          emitNativeMediaMessage({
+            type: 'native-media-error',
+            request_id: message.request_id,
+            message: 'The device capability is temporarily unavailable.',
+          });
+        });
         return;
       }
       if (message.type === 'mobile-pull-to-refresh-progress') {
@@ -1294,8 +1419,10 @@ function SignInGate({ onWebViewLoadEnd, webViewRef }) {
         <WebView
           allowsBackForwardNavigationGestures
           domStorageEnabled
-          injectedJavaScript={MOBILE_CHROME_SCRIPT}
-          injectedJavaScriptBeforeContentLoaded={MOBILE_CHROME_SCRIPT}
+          injectedJavaScript={mobileWebViewScript}
+          injectedJavaScriptBeforeContentLoaded={mobileWebViewScript}
+          injectedJavaScriptBeforeContentLoadedForMainFrameOnly
+          injectedJavaScriptForMainFrameOnly
           javaScriptEnabled
           onError={handleError}
           onLoadEnd={handleLoadEnd}
@@ -1370,6 +1497,57 @@ function EmployeeMoreItem({ page, onPress }) {
       <Text style={[styles.moreItemLabel, page.danger && styles.moreItemDanger]}>{page.label}</Text>
       <Ionicons color={page.danger ? colors.danger : colors.muted} name="chevron-forward-outline" size={19} />
     </Pressable>
+  );
+}
+
+function NativeLegalScreen({ pageKey, onBack }) {
+  const document = LEGAL_DOCUMENTS[pageKey];
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      onBack();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [onBack]);
+
+  return (
+    <View style={styles.nativeLegalScreen} testID={`native-legal-${pageKey}`}>
+      <ScrollView
+        contentContainerStyle={styles.nativeLegalContent}
+        showsVerticalScrollIndicator
+      >
+        <Pressable
+          accessibilityLabel="Back to More"
+          accessibilityRole="button"
+          onPress={onBack}
+          style={styles.nativeLegalBack}
+        >
+          <Ionicons color={colors.blue} name="arrow-back-outline" size={20} />
+          <Text style={styles.nativeLegalBackLabel}>More</Text>
+        </Pressable>
+
+        <Text style={styles.nativeLegalKicker}>Grand Coast Construction Inc.</Text>
+        <Text accessibilityRole="header" style={styles.nativeLegalTitle}>
+          {document.title}
+        </Text>
+        <Text style={styles.nativeLegalUpdated}>{document.updated}</Text>
+        <Text style={styles.nativeLegalIntro}>{document.intro}</Text>
+
+        {document.sections.map((section) => (
+          <View key={section.title} style={styles.nativeLegalSection}>
+            <Text accessibilityRole="header" style={styles.nativeLegalSectionTitle}>
+              {section.title}
+            </Text>
+            {section.paragraphs.map((paragraph, index) => (
+              <Text key={`${section.title}-${index}`} style={styles.nativeLegalParagraph}>
+                {paragraph}
+              </Text>
+            ))}
+          </View>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -1555,9 +1733,15 @@ function EmployeeContactScreen({ onBack }) {
 
 function EmployeeMoreScreen({ onNavigate }) {
   const [showContactForm, setShowContactForm] = useState(false);
+  const [legalPage, setLegalPage] = useState(null);
   const { requestLogout } = useContext(SharedWebViewContext);
   const { setActiveTab, setActiveWebPath } = useContext(NativeShellContext);
   const openPage = useCallback((page) => {
+    if (page.path === PRIVACY_PATH || page.path === TERMS_PATH) {
+      setLegalPage(page.path === PRIVACY_PATH ? 'privacy' : 'terms');
+      return;
+    }
+
     if (page.action === 'logout') {
       requestLogout(EMPLOYEE_WORKSPACE_PATH);
       setActiveTab('Workspace');
@@ -1566,7 +1750,7 @@ function EmployeeMoreScreen({ onNavigate }) {
     }
 
     onNavigate('Workspace', page.path);
-  }, [onNavigate, requestLogout, setActiveTab, setActiveWebPath]);
+  }, [onNavigate, requestLogout, setActiveTab, setActiveWebPath, setLegalPage]);
   const openContactForm = useCallback(() => {
     setShowContactForm(true);
   }, []);
@@ -1576,6 +1760,10 @@ function EmployeeMoreScreen({ onNavigate }) {
 
   if (showContactForm) {
     return <EmployeeContactScreen onBack={closeContactForm} />;
+  }
+
+  if (legalPage) {
+    return <NativeLegalScreen pageKey={legalPage} onBack={() => setLegalPage(null)} />;
   }
 
   return (
@@ -1605,9 +1793,15 @@ function EmployeeMoreScreen({ onNavigate }) {
 }
 
 function AdminMoreScreen({ onNavigate }) {
+  const [legalPage, setLegalPage] = useState(null);
   const { requestLogout } = useContext(SharedWebViewContext);
   const { setActiveTab, setActiveWebPath } = useContext(NativeShellContext);
   const openPage = useCallback((page) => {
+    if (page.path === PRIVACY_PATH || page.path === TERMS_PATH) {
+      setLegalPage(page.path === PRIVACY_PATH ? 'privacy' : 'terms');
+      return;
+    }
+
     if (page.action === 'logout') {
       requestLogout(ADMIN_WORKSPACE_PATH);
       setActiveTab('Dashboard');
@@ -1616,7 +1810,11 @@ function AdminMoreScreen({ onNavigate }) {
     }
 
     onNavigate('Workspace', page.path);
-  }, [onNavigate, requestLogout, setActiveTab, setActiveWebPath]);
+  }, [onNavigate, requestLogout, setActiveTab, setActiveWebPath, setLegalPage]);
+
+  if (legalPage) {
+    return <NativeLegalScreen pageKey={legalPage} onBack={() => setLegalPage(null)} />;
+  }
 
   return (
     <View style={styles.moreScreen}>
@@ -1638,9 +1836,15 @@ function AdminMoreScreen({ onNavigate }) {
 }
 
 function ClientMoreScreen({ onNavigate }) {
+  const [legalPage, setLegalPage] = useState(null);
   const { requestLogout } = useContext(SharedWebViewContext);
   const { setActiveTab, setActiveWebPath } = useContext(NativeShellContext);
   const openPage = useCallback((page) => {
+    if (page.path === PRIVACY_PATH || page.path === TERMS_PATH) {
+      setLegalPage(page.path === PRIVACY_PATH ? 'privacy' : 'terms');
+      return;
+    }
+
     if (page.action === 'logout') {
       requestLogout(CLIENT_OVERVIEW_PATH);
       setActiveTab('Overview');
@@ -1649,7 +1853,11 @@ function ClientMoreScreen({ onNavigate }) {
     }
 
     onNavigate('Overview', page.path);
-  }, [onNavigate, requestLogout, setActiveTab, setActiveWebPath]);
+  }, [onNavigate, requestLogout, setActiveTab, setActiveWebPath, setLegalPage]);
+
+  if (legalPage) {
+    return <NativeLegalScreen pageKey={legalPage} onBack={() => setLegalPage(null)} />;
+  }
 
   return (
     <View style={styles.moreScreen}>
@@ -2509,6 +2717,70 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: '700',
     marginTop: 7,
+  },
+  nativeLegalBack: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 7,
+    marginBottom: 28,
+    minHeight: 40,
+  },
+  nativeLegalBackLabel: {
+    color: colors.blue,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  nativeLegalContent: {
+    padding: 24,
+    paddingBottom: 44,
+  },
+  nativeLegalIntro: {
+    color: colors.ink,
+    fontSize: 15,
+    lineHeight: 23,
+    marginBottom: 8,
+  },
+  nativeLegalKicker: {
+    color: colors.blue,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  nativeLegalParagraph: {
+    color: colors.ink,
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  nativeLegalScreen: {
+    backgroundColor: colors.canvas,
+    flex: 1,
+  },
+  nativeLegalSection: {
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 14,
+    paddingTop: 18,
+  },
+  nativeLegalSectionTitle: {
+    color: colors.navy,
+    fontSize: 17,
+    fontWeight: '800',
+    marginBottom: 10,
+  },
+  nativeLegalTitle: {
+    color: colors.navy,
+    fontFamily: Platform.select({ ios: 'Georgia', default: 'serif' }),
+    fontSize: 32,
+    fontWeight: '700',
+    marginTop: 7,
+  },
+  nativeLegalUpdated: {
+    color: colors.muted,
+    fontSize: 12,
+    marginBottom: 18,
+    marginTop: 8,
   },
   moreContent: {
     padding: 24,

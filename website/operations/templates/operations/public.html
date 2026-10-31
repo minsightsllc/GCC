@@ -73,11 +73,11 @@
         </div>
     </div></section>
 
-    <section class="process-band"><div class="container process-band-inner"><div class="process-title"><span class="section-kicker light">Our process</span><h2>A clearer way to build</h2></div><div class="process-rail">
-        {% for step in process_steps %}<div class="process-step"><span class="process-number {% if forloop.first %}is-complete{% endif %}">{{ forloop.counter }}</span><strong>{{ step.title }}</strong><p>{{ step.description }}</p></div>{% if not forloop.last %}<div class="process-connector"></div>{% endif %}{% endfor %}
-    </div></div></section>
+    <section class="process-band"><div class="container process-band-inner"><div class="process-title"><span class="section-kicker light">Our process</span><h2>A clearer way to build</h2><a class="button process-title-link" href="{% url 'operations:process' %}">See Our Process</a></div><div class="process-kiosk" data-home-process-kiosk><div class="process-rail" data-process-rail>
+        {% for step in process_steps %}<article class="process-step" data-process-slide><span class="process-number">{{ forloop.counter }}</span><strong>{{ step.title }}</strong><p>{{ step.description }}</p></article>{% endfor %}
+    </div><button class="process-kiosk-toggle" type="button" data-process-kiosk-toggle aria-pressed="false" hidden>Pause steps</button></div></div></section>
 
-    <section class="section feature-section"><div class="container feature-grid"><div class="feature-image-frame"><img src="{{ featured_project_image }}" alt="Featured Grand Coast construction project"></div><div class="feature-copy"><span class="gold-rule"></span><span class="section-kicker">Featured work</span><h2>{{ site_settings.featured_title }}</h2><p>{{ site_settings.featured_body }}</p><a class="button button-outline" href="{% url 'operations:projects' %}{% if featured_project %}#public-project-{{ featured_project.pk }}{% endif %}">See this project on Projects <span aria-hidden="true">&rarr;</span></a></div></div></section>
+    <section class="section feature-section"><div class="container feature-grid"><div class="feature-image-frame"><img src="{{ featured_project_image }}" alt="Featured Grand Coast construction project"></div><div class="feature-copy"><span class="gold-rule"></span><span class="section-kicker">Featured work</span><h2>{{ site_settings.featured_title }}</h2><p>{{ site_settings.featured_body }}</p><a class="button button-outline" href="{% url 'operations:projects' %}{% if featured_project %}#public-project-{{ featured_project.pk }}{% endif %}">See more projects <span aria-hidden="true">&rarr;</span></a></div></div></section>
     <section class="contact-band"><div class="container contact-band-inner"><div><span class="section-kicker">Start the conversation</span><h2>Tell us what you’re building.</h2></div><a class="button button-primary" href="{% url 'operations:contact' %}">Request an Estimate <span aria-hidden="true">→</span></a></div></section>
 
 {% elif page == "services" %}
@@ -101,23 +101,39 @@
     </div></div></section>
     <section class="contact-band"><div class="container contact-band-inner"><div><span class="section-kicker">Have a project in mind?</span><h2>Let&rsquo;s talk through the first step.</h2></div><a class="button button-primary" href="{% url 'operations:contact' %}">Request an Estimate &rarr;</a></div></section>
 {% elif page == "process" %}
-    <section class="page-hero page-hero-compact"><div class="container page-hero-grid"><div><span class="gold-rule"></span><span class="section-kicker">Process</span><h1>A clearer way to build.</h1><p>A strong project experience comes from good communication, visible next steps, and an organized handoff.</p></div><div class="page-hero-note"><span class="gold-dot"></span><p>A clear sequence keeps every decision visible from first conversation through final handoff.</p></div></div></section>
-    <section class="section process-detail-section"><div class="container process-detail-list">{% for step in process_steps %}<article class="process-detail {% if forloop.counter|divisibleby:2 %}process-detail-reverse{% endif %}"><span class="process-detail-number">{{ forloop.counter|stringformat:'02d' }}</span><div><span class="section-kicker">{% if forloop.first %}Begin together{% elif forloop.last %}Finish well{% else %}Keep it moving{% endif %}</span><h2>{{ step.title }}</h2><p>{{ step.description }}</p></div><div class="process-detail-aside">A clear {{ step.title|lower }} keeps every later step easier.</div></article>{% endfor %}</div></section>
+    <section class="page-hero page-hero-compact"><div class="container page-hero-grid"><div><span class="gold-rule"></span><span class="section-kicker">Process</span><h1>{{ site_settings.process_page_title }}</h1><p>{{ site_settings.process_page_intro|linebreaksbr }}</p></div></div></section>
+    <section class="section process-detail-section"><div class="container process-detail-list">
+        {% for step in process_steps %}
+        <article class="process-detail{% if step.display_image %} has-image{% endif %}">
+            <span class="process-detail-number">{{ forloop.counter|stringformat:'02d' }}</span>
+            <div class="process-detail-copy"><h2>{{ step.title }}</h2><p>{{ step.description|linebreaksbr }}</p></div>
+            {% if step.display_image %}<figure class="process-detail-image"><img src="{{ step.display_image }}" alt="{{ step.title }}" loading="lazy"></figure>{% endif %}
+        </article>
+        {% empty %}<div class="empty-detail">Our process details will be added soon.</div>{% endfor %}
+    </div></section>
     <section class="contact-band"><div class="container contact-band-inner"><div><span class="section-kicker">Ready when you are</span><h2>Let’s plan the first step.</h2></div><a class="button button-primary" href="{% url 'operations:contact' %}">Request an Estimate →</a></div></section>
 
 {% else %}
-    <section class="page-hero contact-page-hero"><div class="container page-hero-grid"><div><span class="gold-rule"></span><span class="section-kicker">Start here</span><h1>Tell us what you’re building.</h1><p>Share a few details and our team will use them to shape the right next conversation.</p></div><div class="contact-direct"><span class="section-kicker">Proudly serving</span><p>Ventura County<br>Santa Barbara County<br>Los Angeles County</p></div></div></section>
-    <section class="section contact-form-section"><div class="container contact-form-grid"><div class="form-intro"><span class="section-kicker">Request an estimate</span><h2>A better first step.</h2><p>Your request is securely saved for the Grand Coast team to review. We’ll follow up with a clear next step.</p><div class="form-note"><span class="gold-dot"></span><span>Private request · No payment required</span></div><div class="contact-form-direct"><span class="section-kicker">Contact us directly</span><div class="contact-direct-links"><a href="tel:+18057181502">(805) 718-1502</a><a href="mailto:kevin@grandcoastconstruction.com">kevin@grandcoastconstruction.com</a><a class="contact-instagram-link" href="https://www.instagram.com/grandcoastconstruction/?igsh=MzRIODBiNWFIZA%3D%3D" target="_blank" rel="noopener noreferrer" aria-label="Grand Coast Construction on Instagram"><img src="{% static 'operations/images/instagram-gold.png' %}" alt=""></a></div></div></div><form class="estimate-form" method="post" enctype="multipart/form-data">
+    <section class="page-hero contact-page-hero"><div class="container page-hero-grid"><div><span class="gold-rule"></span><span class="section-kicker">{{ site_settings.contact_page_kicker }}</span><h1>{{ site_settings.contact_page_title }}</h1><p>{{ site_settings.contact_page_intro|linebreaksbr }}</p></div><div class="contact-direct"><span class="section-kicker">{{ site_settings.contact_service_areas_heading }}</span><ul class="contact-service-areas">{% for area in contact_service_areas %}<li>{{ area }}</li>{% endfor %}</ul></div></div></section>
+    <section class="section contact-form-section"><div class="container contact-form-grid"><div class="form-intro"><span class="section-kicker">{{ site_settings.contact_form_kicker }}</span><h2>{{ site_settings.contact_form_title }}</h2><p>{{ site_settings.contact_form_intro|linebreaksbr }}</p><div class="form-note"><span class="gold-dot"></span><span>{{ site_settings.contact_form_privacy_note }}</span></div><div class="contact-form-direct"><span class="section-kicker">{{ site_settings.contact_direct_heading }}</span><div class="contact-direct-links">{% if site_settings.contact_phone and contact_phone_href %}<a href="{{ contact_phone_href }}">{{ site_settings.contact_phone }}</a>{% endif %}{% if site_settings.contact_email %}<a href="mailto:{{ site_settings.contact_email }}">{{ site_settings.contact_email }}</a>{% endif %}{% if site_settings.contact_instagram_url %}<a class="contact-instagram-link" href="{{ site_settings.contact_instagram_url }}" target="_blank" rel="noopener noreferrer" aria-label="Grand Coast Construction on Instagram"><img src="{% static 'operations/images/instagram-gold.png' %}" alt=""></a>{% endif %}</div></div></div><form class="estimate-form" method="post" enctype="multipart/form-data">
         {% csrf_token %}
         {% if contact_form.non_field_errors %}<div class="form-errors">{{ contact_form.non_field_errors }}</div>{% endif %}
-        <div class="form-row"><label>First Name{{ contact_form.first_name }}{{ contact_form.first_name.errors }}</label><label>Last Name{{ contact_form.last_name }}{{ contact_form.last_name.errors }}</label></div>
-        <div class="form-row"><label>Email{{ contact_form.email }}{{ contact_form.email.errors }}</label><label>Phone{{ contact_form.phone }}{{ contact_form.phone.errors }}</label></div>
-        <div class="form-row"><label>Project Type{{ contact_form.project_type }}{{ contact_form.project_type.errors }}</label><label>Location{{ contact_form.location }}{{ contact_form.location.errors }}</label></div>
-        <label>Tell us about the project{{ contact_form.message }}{{ contact_form.message.errors }}</label>
-        <label class="file-drop"><span class="file-drop-icon">+</span><span><strong>Add photos or files</strong><small>Optional · photos, video, PDF, DOCX, spreadsheet, or text file</small></span>{{ contact_form.photos }}</label>
-        <div class="form-footer"><span class="privacy-note">Your request stays with Grand Coast.</span><div class="form-submit-actions"><button class="button button-primary" type="submit">Send request <span aria-hidden="true">→</span></button>{% if turnstile_site_key %}<div class="turnstile-widget"><div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}" data-action="contact"></div></div>{% endif %}</div></div>
-    </form></div></section>
-{% endif %}
+        <div class="form-row">
+            <label>{{ contact_form.first_name.label }}{{ contact_form.first_name }}{{ contact_form.first_name.errors }}{% if contact_form.first_name.help_text %}<small class="contact-field-help">{{ contact_form.first_name.help_text }}</small>{% endif %}</label>
+            <label>{{ contact_form.last_name.label }}{{ contact_form.last_name }}{{ contact_form.last_name.errors }}{% if contact_form.last_name.help_text %}<small class="contact-field-help">{{ contact_form.last_name.help_text }}</small>{% endif %}</label>
+        </div>
+        <div class="form-row">
+            <label>{{ contact_form.email.label }}{{ contact_form.email }}{{ contact_form.email.errors }}{% if contact_form.email.help_text %}<small class="contact-field-help">{{ contact_form.email.help_text }}</small>{% endif %}</label>
+            <label>{{ contact_form.phone.label }}{{ contact_form.phone }}{{ contact_form.phone.errors }}{% if contact_form.phone.help_text %}<small class="contact-field-help">{{ contact_form.phone.help_text }}</small>{% endif %}</label>
+        </div>
+        <div class="form-row">
+            <label>{{ contact_form.project_type.label }}{{ contact_form.project_type }}{{ contact_form.project_type.errors }}{% if contact_form.project_type.help_text %}<small class="contact-field-help">{{ contact_form.project_type.help_text }}</small>{% endif %}</label>
+            <label>{{ contact_form.location.label }}{{ contact_form.location }}{{ contact_form.location.errors }}{% if contact_form.location.help_text %}<small class="contact-field-help">{{ contact_form.location.help_text }}</small>{% endif %}</label>
+        </div>
+        <label>{{ contact_form.message.label }}{{ contact_form.message }}{{ contact_form.message.errors }}{% if contact_form.message.help_text %}<small class="contact-field-help">{{ contact_form.message.help_text }}</small>{% endif %}</label>
+        <label class="file-drop"><span class="file-drop-icon">+</span><span><strong>{{ contact_form.photos.label }}</strong><small>{{ contact_form.photos.help_text }}</small></span>{{ contact_form.photos }}{{ contact_form.photos.errors }}</label>
+        <div class="form-footer"><span class="privacy-note">{{ site_settings.contact_form_footer_note }}</span><div class="form-submit-actions"><button class="button button-primary" type="submit">{{ site_settings.contact_form_submit_label }} <span aria-hidden="true">&rarr;</span></button>{% if turnstile_site_key %}<div class="turnstile-widget"><div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}" data-action="contact"></div></div>{% endif %}</div></div>
+    </form></div></section>{% endif %}
 </main>
 {% if site_settings.google_review_url %}<div class="google-review-band"><div class="container"><span class="section-kicker">Have a good experience?</span><a class="text-link" href="{{ site_settings.google_review_url }}" target="_blank" rel="noopener">Review us on Google →</a></div></div>{% endif %}
 
@@ -131,7 +147,7 @@
                     <p>Thoughtful construction. Clear communication. Better builds.</p>
                 </div>
             </div>
-            <p class="footer-service-area">Ventura County &middot; Santa Barbara County &middot; Los Angeles County</p>
+            <p class="footer-service-area">{% for area in contact_service_areas %}{{ area }}{% if not forloop.last %} &middot; {% endif %}{% endfor %}</p>
         </div>
         <nav class="footer-links" aria-label="Footer">
             <a href="{% url 'operations:home' %}">Home</a>
@@ -141,14 +157,21 @@
             <a href="{% url 'operations:contact' %}">Contact</a>
         </nav>
         <div class="footer-contact">
-            <a class="footer-contact-title" href="{% url 'operations:contact' %}">Contact Us Directly</a>
-            <a class="footer-contact-link" href="tel:+18057181502">(805) 718-1502</a>
-            <a class="footer-contact-link" href="mailto:kevin@grandcoastconstruction.com">kevin@grandcoastconstruction.com</a>
-            <a class="footer-instagram-link" href="https://www.instagram.com/grandcoastconstruction/?igsh=MzRIODBiNWFIZA%3D%3D" target="_blank" rel="noopener noreferrer" aria-label="Grand Coast Construction on Instagram">
+            <a class="footer-contact-title" href="{% url 'operations:contact' %}">{{ site_settings.contact_direct_heading }}</a>
+            {% if site_settings.contact_phone and contact_phone_href %}<a class="footer-contact-link" href="{{ contact_phone_href }}">{{ site_settings.contact_phone }}</a>{% endif %}
+            {% if site_settings.contact_email %}<a class="footer-contact-link" href="mailto:{{ site_settings.contact_email }}">{{ site_settings.contact_email }}</a>{% endif %}
+            {% if site_settings.contact_instagram_url %}<a class="footer-instagram-link" href="{{ site_settings.contact_instagram_url }}" target="_blank" rel="noopener noreferrer" aria-label="Grand Coast Construction on Instagram">
                 <img src="{% static 'operations/images/instagram-gold.png' %}" alt="">
-            </a>
+            </a>{% endif %}
         </div>
     </div>
-    <div class="container footer-bottom"><span>Copyright © 2026 Grand Coast Construction Inc. - All Rights Reserved</span><span>Blue · Gold · California</span></div>
+    <div class="container footer-bottom">
+        <span>Copyright © 2026 Grand Coast Construction Inc. - All Rights Reserved</span>
+        <span class="footer-tagline">Blue · Gold · California</span>
+        <nav class="footer-legal-links" aria-label="Legal">
+            <a class="footer-legal-link" href="{% url 'operations:privacy' %}">Privacy Policy</a>
+            <a class="footer-legal-link" href="{% url 'operations:terms' %}">Terms of Service</a>
+        </nav>
+    </div>
 </footer>
 {% endblock %}

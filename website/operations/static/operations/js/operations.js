@@ -7,6 +7,8 @@
 
     var activeAdminToast = null;
     var contentPageHashHandlerBound = false;
+    var contentPageScrollHandlerBound = false;
+    var contentPageScrollFrame = 0;
     var taskFilterGlobalHandlersBound = false;
     var calendarPopstateBound = false;
     var activeCalendarPopstate = null;
@@ -65,15 +67,30 @@
         var toggle = document.querySelector("[data-mobile-nav-toggle]");
         var nav = document.querySelector(".site-nav");
         if (toggle && nav) {
-            toggle.addEventListener("click", function () {
-                var open = nav.classList.toggle("is-open");
+            var label = toggle.querySelector(".sr-only");
+            var setPublicNavOpen = function (open) {
+                nav.classList.toggle("is-open", open);
                 toggle.setAttribute("aria-expanded", String(open));
+                if (label) label.textContent = open ? "Close navigation" : "Open navigation";
+            };
+            toggle.addEventListener("click", function () {
+                setPublicNavOpen(toggle.getAttribute("aria-expanded") !== "true");
+            });
+            document.addEventListener("click", function (event) {
+                if (!nav.classList.contains("is-open")) return;
+                if (nav.contains(event.target) || toggle.contains(event.target)) return;
+                setPublicNavOpen(false);
             });
             each(".site-nav a", function (link) {
                 link.addEventListener("click", function () {
-                    nav.classList.remove("is-open");
-                    toggle.setAttribute("aria-expanded", "false");
+                    setPublicNavOpen(false);
                 });
+            });
+            document.addEventListener("keydown", function (event) {
+                if (event.key === "Escape" && nav.classList.contains("is-open")) {
+                    setPublicNavOpen(false);
+                    toggle.focus();
+                }
             });
         }
 
@@ -113,6 +130,32 @@
         });
     }
 
+    function selectContentPageAtScrollPosition() {
+        var nav = document.querySelector(".admin-view.is-active .content-page-nav");
+        if (!nav) return;
+        var panels = Array.prototype.slice.call(
+            document.querySelectorAll(".admin-view.is-active .content-page-panel[id^='publish-page-']")
+        );
+        if (!panels.length) return;
+
+        var focusLine = nav.getBoundingClientRect().bottom + 16;
+        var activePanel = panels[0];
+        panels.forEach(function (panel) {
+            if (panel.getBoundingClientRect().top <= focusLine) activePanel = panel;
+        });
+        var atPageBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+        if (atPageBottom) activePanel = panels[panels.length - 1];
+        selectContentPage(nav, "#" + activePanel.id);
+    }
+
+    function scheduleContentPageScrollSelection() {
+        if (contentPageScrollFrame) return;
+        contentPageScrollFrame = window.requestAnimationFrame(function () {
+            contentPageScrollFrame = 0;
+            selectContentPageAtScrollPosition();
+        });
+    }
+
     function initContentPageNavigation(options) {
         options = options || {};
         var nav = document.querySelector(".admin-view.is-active .content-page-nav");
@@ -129,6 +172,11 @@
             window.addEventListener("hashchange", function () {
                 selectContentPage(document.querySelector(".admin-view.is-active .content-page-nav"), window.location.hash);
             });
+        }
+        if (!contentPageScrollHandlerBound) {
+            contentPageScrollHandlerBound = true;
+            window.addEventListener("scroll", scheduleContentPageScrollSelection, {passive: true});
+            window.addEventListener("resize", scheduleContentPageScrollSelection);
         }
         var pageFromQuery = new URL(window.location.href).searchParams.get("content_page_focus");
         var queryHash = pageFromQuery ? "#publish-page-" + pageFromQuery : "";
@@ -1441,6 +1489,8 @@
         var requestControls = {};
 
         function post(message) {
+            var bridgeToken = window.__GCC_NATIVE_MEDIA_BRIDGE_TOKEN;
+            if (bridgeToken) message.bridge_token = bridgeToken;
             window.ReactNativeWebView.postMessage(JSON.stringify(message));
         }
 
@@ -2591,6 +2641,11 @@
                 event.preventDefault();
                 return;
             }
+            if (form && form.matches && form.matches("[data-process-delete]")
+                && !window.confirm('Delete "' + (form.dataset.processTitle || "this process step") + '" from the website? Its image, if any, will also be deleted. This cannot be undone.')) {
+                event.preventDefault();
+                return;
+            }
             if (
                 event.defaultPrevented
                 || !form
@@ -2645,6 +2700,7 @@
             });
             var selectedFiles = snapshotSelectedFiles(form);
             var previousScrollY = window.scrollY;
+            var pageUrlBeforeSubmission = new URL(window.location.href);
             showAdminToast(hasFiles ? "Uploading files…" : "Saving changes…", false);
 
             (async function () {
@@ -2702,7 +2758,10 @@
                                 element.removeAttribute("autofocus");
                             });
                             currentApp.replaceWith(incomingApp);
-                            var cleanUrl = new URL(finalUrl.href);
+                            // Validation responses render at the POST endpoint,
+                            // which cannot be opened with GET. Keep the current page
+                            // URL unless the server redirected after a successful save.
+                            var cleanUrl = new URL((response.redirected ? finalUrl : pageUrlBeforeSubmission).href);
                             cleanUrl.searchParams.delete("focus_search");
                             window.history.replaceState(window.history.state, "", cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
                             initAdminWorkspaceContent();
@@ -2763,6 +2822,199 @@
             const card = form.closest("[data-website-post-id]");
             return card ? card.dataset.websitePostId : "";
         };
+        const posterInputFor = function (form, name) {
+            if (!form || !name) return null;
+            return Array.from(form.elements).find(function (input) { return input.name === name && input.type === "file"; }) || null;
+        };
+        const posterStatusFor = function (button) {
+            const root = button.closest("[data-existing-video-tools], .website-post-file-chip, .website-slide-poster-editor, .website-post-slide-row, .website-post-slide-media, .website-post-slide-thumb");
+            return root && root.querySelector("[data-poster-capture-status]");
+        };
+        const captureVideoPoster = function (video, button, automatic) {
+            const form = button.closest("form");
+            const inputName = button.dataset.posterInputName
+                || (button.closest("[data-existing-video-tools]") && button.closest("[data-existing-video-tools]").dataset.posterInputName);
+            const input = posterInputFor(form, inputName);
+            const status = posterStatusFor(button);
+            const captureId = (button._websitePosterCaptureId || 0) + 1;
+            button._websitePosterCaptureId = captureId;
+            const fail = function (message) {
+                if (button._websitePosterCaptureId !== captureId
+                    || (automatic && button.dataset.posterManuallySelected === "true")) return false;
+                if (status) status.textContent = message;
+                const placeholder = button.dataset.posterPlaceholder
+                    || (button.closest("[data-existing-video-tools]") && button.closest("[data-existing-video-tools]").dataset.posterPlaceholder)
+                    || (form && form.dataset.websitePosterPlaceholder);
+                if (placeholder && video) video.poster = placeholder;
+                return false;
+            };
+            if (!input) {
+                return Promise.resolve(fail("The thumbnail upload field could not be found. Reload the page and try again."));
+            }
+            if (!video) {
+                return Promise.resolve(fail("The video preview could not be found. Reload the page and try again."));
+            }
+            if (!automatic) {
+                if (status) status.textContent = "Waiting for the selected video frame…";
+                video.pause();
+            }
+            const hasDecodedFrame = function () {
+                return !video.seeking && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0;
+            };
+            const waitForDecodedFrame = function () {
+                return new Promise(function (resolve) {
+                    if (hasDecodedFrame()) {
+                        resolve(true);
+                        return;
+                    }
+                    let finished = false;
+                    let pollTimer;
+                    const finish = function (ready) {
+                        if (finished) return;
+                        finished = true;
+                        window.clearTimeout(timeout);
+                        window.clearInterval(pollTimer);
+                        ["loadeddata", "canplay", "seeked", "timeupdate", "resize", "error"].forEach(function (eventName) {
+                            video.removeEventListener(eventName, check);
+                        });
+                        resolve(ready);
+                    };
+                    const check = function (event) {
+                        if (event && event.type === "error") {
+                            finish(false);
+                        } else if (hasDecodedFrame()) {
+                            finish(true);
+                        }
+                    };
+                    const timeout = window.setTimeout(function () { finish(false); }, 10000);
+                    ["loadeddata", "canplay", "seeked", "timeupdate", "resize", "error"].forEach(function (eventName) {
+                        video.addEventListener(eventName, check);
+                    });
+                    pollTimer = window.setInterval(check, 50);
+                    check();
+                });
+            };
+            const capture = waitForDecodedFrame().then(function (frameReady) {
+                if (!frameReady) {
+                    return fail("The selected video frame did not finish loading. Wait for the video to settle, then try again. The branded placeholder will be used.");
+                }
+                if (button._websitePosterCaptureId !== captureId
+                    || (automatic && button.dataset.posterManuallySelected === "true")) return false;
+                if (typeof DataTransfer !== "function" || typeof File !== "function") {
+                    return fail("Frame capture is not supported in this browser. The branded placeholder will be used.");
+                }
+                const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
+                const canvas = document.createElement("canvas");
+                canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+                canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+                const context = canvas.getContext("2d");
+                if (!context) {
+                    return fail("Frame capture is not supported in this browser. The branded placeholder will be used.");
+                }
+                return new Promise(function (resolve) {
+                    try {
+                        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        canvas.toBlob(function (blob) {
+                            if (button._websitePosterCaptureId !== captureId
+                                || (automatic && button.dataset.posterManuallySelected === "true")) {
+                                resolve(false);
+                                return;
+                            }
+                            if (!blob) {
+                                resolve(fail("This video frame could not be captured. The branded placeholder will be used."));
+                                return;
+                            }
+                            try {
+                                const transfer = new DataTransfer();
+                                transfer.items.add(new File([blob], "video-thumbnail.jpg", { type: "image/jpeg" }));
+                                input.files = transfer.files;
+                                const previewUrl = URL.createObjectURL(blob);
+                                if (button._websitePosterPreviewUrl) URL.revokeObjectURL(button._websitePosterPreviewUrl);
+                                button._websitePosterPreviewUrl = previewUrl;
+                                video.poster = previewUrl;
+                                if (status) status.textContent = "Thumbnail ready. Save the draft or publish to use it.";
+                                resolve(true);
+                            } catch (error) {
+                                resolve(fail("This browser could not prepare the thumbnail. The branded placeholder will be used."));
+                            }
+                        }, "image/jpeg", 0.82);
+                    } catch (error) {
+                        resolve(fail("This video frame could not be captured. The branded placeholder will be used."));
+                    }
+                });
+            });
+            button._websitePosterCapturePromise = capture;
+            capture.finally(function () { button._websitePosterCapturePromise = null; });
+            return capture;
+        };
+        const autoCaptureVideoPoster = function (video, button) {
+            if (!video || !button || button.dataset.posterAutoStarted === "true") return;
+            button.dataset.posterAutoStarted = "true";
+            const task = new Promise(function (resolve) {
+                let finished = false;
+                let timeout;
+                const finish = function (captured) {
+                    if (finished) return;
+                    finished = true;
+                    window.clearTimeout(timeout);
+                    video.removeEventListener("loadeddata", onReady);
+                    video.removeEventListener("error", onError);
+                    resolve(captured);
+                };
+                const onReady = function () {
+                    if (button.dataset.posterManuallySelected === "true") {
+                        finish(false);
+                        return;
+                    }
+                    captureVideoPoster(video, button, true).then(finish);
+                };
+                const onError = function () {
+                    const status = posterStatusFor(button);
+                    if (status) status.textContent = "This browser could not read the video. The branded placeholder will be used.";
+                    finish(false);
+                };
+                if (video.error) {
+                    onError();
+                    return;
+                }
+                video.addEventListener("loadeddata", onReady);
+                video.addEventListener("error", onError);
+                timeout = window.setTimeout(function () {
+                    const status = posterStatusFor(button);
+                    if (status) status.textContent = "The video frame is taking too long to load. The branded placeholder will be used.";
+                    finish(false);
+                }, 12000);
+                if (video.readyState >= 2) onReady();
+                else video.load();
+            });
+            button._websitePosterCapturePromise = task;
+            task.finally(function () { button._websitePosterCapturePromise = null; });
+            return task;
+        };
+        const startPendingWebsitePosterCaptures = function (form) {
+            form.querySelectorAll(".website-post-file-chip").forEach(function (card) {
+                const video = card.querySelector("video[data-video-poster-capture]");
+                const button = card.querySelector("[data-capture-video-frame]");
+                if (video && button && button.dataset.posterManuallySelected !== "true") {
+                    autoCaptureVideoPoster(video, button);
+                }
+            });
+            form.querySelectorAll("[data-existing-video-tools]:not([hidden])").forEach(function (tools) {
+                const video = tools.querySelector("video[data-video-poster-capture]");
+                const button = tools.querySelector("[data-capture-video-frame]");
+                const input = posterInputFor(form, tools.dataset.posterInputName);
+                if (video && button && (!input || !input.files.length)
+                    && button.dataset.posterManuallySelected !== "true") {
+                    autoCaptureVideoPoster(video, button);
+                }
+            });
+        };
+        const waitForWebsitePosterCaptures = async function (form) {
+            const pending = Array.from(form.querySelectorAll("[data-capture-video-frame]"))
+                .map(function (button) { return button._websitePosterCapturePromise; })
+                .filter(Boolean);
+            if (pending.length) await Promise.all(pending);
+        };
         const captureGalleryPostForms = function (library, excludedKey) {
             return Array.from(library.querySelectorAll("[data-website-post-create], [data-website-post-save]"))
                 .filter(function (form) { return !form.hasAttribute("data-website-post-delete-form"); })
@@ -2803,12 +3055,15 @@
                             || namedControls[saved.index]
                         : namedControls[saved.index];
                     if (!control) return;
-                    if (saved.type === "checkbox" || saved.type === "radio") control.checked = saved.checked;
+                    if (saved.type === "checkbox" || saved.type === "radio") {
+                        control.checked = saved.checked;
+                        control.dispatchEvent(new CustomEvent("change", { bubbles: true, detail: { restoring: true } }));
+                    }
                     else if (saved.type === "file" && saved.files.length && typeof DataTransfer === "function") {
                         const transfer = new DataTransfer();
                         saved.files.forEach(function (file) { transfer.items.add(file); });
                         control.files = transfer.files;
-                        control.dispatchEvent(new Event("change", { bubbles: true }));
+                        control.dispatchEvent(new CustomEvent("change", { bubbles: true, detail: { restoring: true } }));
                     } else if (control.multiple && saved.selected) {
                         Array.from(control.options).forEach(function (option) {
                             option.selected = saved.selected.includes(option.value);
@@ -2817,12 +3072,56 @@
                 });
             });
         };
+        document.addEventListener("click", function (event) {
+            const moveButton = event.target.closest && event.target.closest("[data-website-slide-move]");
+            if (!moveButton) return;
+            event.preventDefault();
+            const row = moveButton.closest(".website-post-slide-row");
+            const list = row && row.parentElement;
+            if (!row || !list) return;
+            if (moveButton.dataset.websiteSlideMove === "up" && row.previousElementSibling) {
+                list.insertBefore(row, row.previousElementSibling);
+            } else if (moveButton.dataset.websiteSlideMove === "down" && row.nextElementSibling) {
+                list.insertBefore(row.nextElementSibling, row);
+            }
+            const rows = Array.from(list.querySelectorAll(":scope > .website-post-slide-row"));
+            rows.forEach(function (slideRow, index) {
+                const orderInput = slideRow.querySelector('input[type="hidden"][name*="slide_order_"]');
+                if (orderInput) orderInput.value = String(index);
+                const upButton = slideRow.querySelector('[data-website-slide-move="up"]');
+                const downButton = slideRow.querySelector('[data-website-slide-move="down"]');
+                if (upButton) upButton.disabled = index === 0;
+                if (downButton) downButton.disabled = index === rows.length - 1;
+            });
+        });
         document.addEventListener("change", function (event) {
             const input = event.target;
-            if (!input.matches || !input.matches("[data-website-post-create] input[type='file'], [data-website-post-save] input[type='file']")) return;
+            if (!input.matches || !input.matches("input[data-website-post-file-input]")) {
+                if (input.matches && input.matches("input[type='checkbox'][name*='existing_assets']")) {
+                    const row = input.closest("[data-existing-website-asset]");
+                    const tools = row && row.querySelector("[data-existing-video-tools]");
+                    if (!tools) return;
+                    tools.hidden = !input.checked;
+                    const video = tools.querySelector("video[data-video-poster-capture]");
+                    const captureButton = tools.querySelector("[data-capture-video-frame]");
+                    const posterInput = posterInputFor(input.form, tools.dataset.posterInputName);
+                    if (!input.checked) {
+                        if (posterInput) posterInput.value = "";
+                        if (video) video.poster = tools.dataset.posterPlaceholder;
+                    } else if (video && captureButton) {
+                        autoCaptureVideoPoster(video, captureButton);
+                    }
+                }
+                return;
+            }
             const form = input.closest("form");
             const review = form && form.querySelector("[data-website-post-file-review]");
             if (!review) return;
+            if (!(event.detail && event.detail.restoring)) {
+                form.querySelectorAll("input[type='file'][name*='new_poster_']").forEach(function (posterInput) {
+                    posterInput.value = "";
+                });
+            }
             review.querySelectorAll("[data-object-url]").forEach(function (element) {
                 URL.revokeObjectURL(element.dataset.objectUrl);
             });
@@ -2838,7 +3137,7 @@
                 const card = document.createElement("div");
                 card.className = "website-post-file-chip";
                 const previewUrl = URL.createObjectURL(file);
-                const isVideo = file.type.indexOf("video/") === 0 || /\.(mp4|mov|webm)$/i.test(file.name);
+                const isVideo = /\.(mp4|mov)$/i.test(file.name);
                 const preview = isVideo
                     ? document.createElement("video")
                     : document.createElement("img");
@@ -2847,6 +3146,9 @@
                 if (preview.tagName === "VIDEO") {
                     preview.controls = true;
                     preview.preload = "metadata";
+                    preview.poster = form.dataset.websitePosterPlaceholder || "";
+                    preview.dataset.videoPosterCapture = "";
+                    preview.setAttribute("aria-label", "Preview " + file.name + " and choose a thumbnail frame");
                 } else {
                     preview.alt = "Preview of " + file.name;
                 }
@@ -2858,16 +3160,50 @@
                 remove.dataset.removeWebsitePostFile = String(index);
                 remove.setAttribute("aria-label", "Remove " + file.name + " from this post");
                 remove.textContent = "Remove file";
-                card.append(preview, label, remove);
+                card.append(preview, label);
+                if (isVideo) {
+                    const posterButton = document.createElement("button");
+                    posterButton.type = "button";
+                    posterButton.className = "button button-quiet";
+                    posterButton.dataset.captureVideoFrame = "";
+                    posterButton.dataset.posterInputName = (form.dataset.websitePosterPrefix || "") + index;
+                    posterButton.dataset.posterPlaceholder = form.dataset.websitePosterPlaceholder || "";
+                    posterButton.textContent = "Set thumbnail from current frame";
+                    const status = document.createElement("small");
+                    status.className = "field-help";
+                    status.dataset.posterCaptureStatus = "";
+                    status.setAttribute("aria-live", "polite");
+                    status.textContent = "Capturing the video’s opening frame…";
+                    card.append(posterButton, status);
+                    preview.addEventListener("loadeddata", function () {
+                        autoCaptureVideoPoster(preview, posterButton);
+                    }, { once: true });
+                    preview.addEventListener("error", function () {
+                        if (status) status.textContent = "This browser could not read the video. The branded placeholder will be used.";
+                    }, { once: true });
+                    if (preview.readyState >= 2) autoCaptureVideoPoster(preview, posterButton);
+                }
+                card.appendChild(remove);
                 review.appendChild(card);
             });
         });
         document.addEventListener("click", function (event) {
+            const captureButton = event.target.closest && event.target.closest("[data-capture-video-frame]");
+            if (captureButton) {
+                event.preventDefault();
+                captureButton.dataset.posterManuallySelected = "true";
+                const root = captureButton.closest(".website-post-file-chip, [data-existing-video-tools], .website-post-slide-media, .website-post-slide-thumb");
+                const slideRow = captureButton.closest(".website-post-slide-row");
+                const video = (root && root.querySelector("video[data-video-poster-capture]"))
+                    || (slideRow && slideRow.querySelector("video[data-video-poster-capture]"));
+                captureVideoPoster(video, captureButton, false);
+                return;
+            }
             const removeButton = event.target.closest && event.target.closest("[data-remove-website-post-file]");
             if (removeButton) {
                 event.preventDefault();
                 const form = removeButton.closest("form");
-                const input = form && form.querySelector("input[type='file']");
+                const input = form && form.querySelector("input[data-website-post-file-input]");
                 if (!input || typeof DataTransfer !== "function") {
                     setWebsiteStatus("This browser cannot remove one selected file. Clear the selection and choose the files again.", true);
                     return;
@@ -2931,7 +3267,7 @@
                 ? submitter.formAction
                 : (form.getAttribute("action") || window.location.href);
             const key = galleryPostFormKey(form);
-            const hasFiles = Array.from(form.querySelectorAll("input[type='file']")).some(function (input) {
+            const hasFiles = Array.from(form.querySelectorAll("input[data-website-post-file-input]")).some(function (input) {
                 return input.files && input.files.length > 0;
             });
             websiteMutation.busy = true;
@@ -2945,6 +3281,10 @@
                 false
             );
             try {
+                if (action !== "remove_asset" && action !== "delete" && action !== "unpublish") {
+                    startPendingWebsitePosterCaptures(form);
+                    await waitForWebsitePosterCaptures(form);
+                }
                 const payload = new FormData(form);
                 if (action === "remove_asset") {
                     form.querySelectorAll("input[type='file'][name]").forEach(function (input) {
@@ -3129,12 +3469,156 @@
             renderFiles();
         }, root);
     }
+    function initPublicPageMotion() {
+        if (!document.body.classList.contains("public-site") || !("IntersectionObserver" in window)) return;
+        const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (reducedMotion) return;
+
+        const main = document.querySelector("body.public-site main");
+        if (!main) return;
+        const heading = main.querySelector("h1");
+        const repeatedSelector = ".process-detail, .service-row, .service-detail, .public-gallery-post";
+        const repeatedItems = Array.from(main.querySelectorAll(repeatedSelector));
+        repeatedItems.forEach(function (item) {
+            const siblings = item.parentElement ? Array.from(item.parentElement.children).filter(function (child) {
+                return child.matches(repeatedSelector);
+            }) : [];
+            const itemIndex = Math.max(0, siblings.indexOf(item));
+            item.style.setProperty("--public-item-delay", ((itemIndex % 5) * 70) + "ms");
+            item.classList.add("public-item-reveal");
+        });
+        const sections = Array.from(main.children).filter(function (child) {
+            return child.tagName === "SECTION" && !child.querySelector(repeatedSelector);
+        });
+        if (heading) heading.classList.add("public-heading-reveal");
+        sections.forEach(function (section) { section.classList.add("public-section-reveal"); });
+
+        const observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting) return;
+                entry.target.classList.add("is-visible");
+                observer.unobserve(entry.target);
+            });
+        }, { threshold: 0.08, rootMargin: "0px 0px -72px 0px" });
+
+        sections.forEach(function (section) { observer.observe(section); });
+        repeatedItems.forEach(function (item) { observer.observe(item); });
+        document.body.classList.add("public-motion-ready");
+        if (heading) window.requestAnimationFrame(function () { heading.classList.add("is-visible"); });
+    }
+
+    function initHomeProcessKiosk() {
+        const kiosk = document.querySelector("[data-home-process-kiosk]");
+        const rail = kiosk && kiosk.querySelector("[data-process-rail]");
+        const steps = rail ? Array.from(rail.querySelectorAll("[data-process-slide]")) : [];
+        if (!kiosk || !rail || steps.length < 2) return;
+
+        const reduceQuery = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+        const touchQuery = window.matchMedia ? window.matchMedia("(hover: none), (pointer: coarse)") : null;
+        const toggle = kiosk.querySelector("[data-process-kiosk-toggle]");
+        let track = null;
+        let hoverPaused = false;
+        let touchPaused = false;
+        let manuallyPaused = false;
+        let motionEnabled = !(reduceQuery && reduceQuery.matches);
+
+        const syncPauseState = function () {
+            kiosk.classList.toggle("is-paused", hoverPaused || touchPaused || manuallyPaused || document.hidden);
+            if (!toggle) return;
+            toggle.setAttribute("aria-pressed", manuallyPaused ? "true" : "false");
+            toggle.textContent = manuallyPaused ? "Resume steps" : "Pause steps";
+        };
+
+        const removeTrack = function () {
+            if (!track) return;
+            steps.forEach(function (step) {
+                step.removeAttribute("aria-hidden");
+                rail.appendChild(step);
+            });
+            track.remove();
+            track = null;
+            rail.classList.remove("is-animated");
+            rail.style.removeProperty("--process-loop-duration");
+        };
+
+        const createTrack = function () {
+            if (track || !motionEnabled) return;
+            track = document.createElement("div");
+            track.className = "process-rail-track";
+            const group = document.createElement("div");
+            group.className = "process-rail-group";
+            steps.forEach(function (step) { group.appendChild(step); });
+
+            const duplicate = group.cloneNode(true);
+            duplicate.setAttribute("aria-hidden", "true");
+            duplicate.setAttribute("inert", "");
+            duplicate.querySelectorAll("[data-process-slide]").forEach(function (step) {
+                step.removeAttribute("data-process-slide");
+            });
+            track.appendChild(group);
+            track.appendChild(duplicate);
+            rail.replaceChildren(track);
+            rail.classList.add("is-animated");
+            rail.style.setProperty("--process-loop-duration", Math.max(20, steps.length * 6) + "s");
+        };
+
+        const applyMotionPreference = function () {
+            motionEnabled = !(reduceQuery && reduceQuery.matches);
+            if (motionEnabled) createTrack();
+            else {
+                removeTrack();
+                kiosk.classList.remove("is-paused");
+            }
+            if (toggle) toggle.hidden = !motionEnabled || !(touchQuery && touchQuery.matches);
+            syncPauseState();
+        };
+
+        if (toggle) {
+            toggle.addEventListener("click", function () {
+                manuallyPaused = !manuallyPaused;
+                syncPauseState();
+            });
+        }
+        kiosk.addEventListener("pointerenter", function (event) {
+            if (event.pointerType !== "mouse") return;
+            hoverPaused = true;
+            syncPauseState();
+        });
+        kiosk.addEventListener("pointerleave", function (event) {
+            if (event.pointerType !== "mouse") return;
+            hoverPaused = false;
+            syncPauseState();
+        });
+        kiosk.addEventListener("pointerdown", function (event) {
+            if (event.pointerType !== "touch") return;
+            touchPaused = true;
+            syncPauseState();
+        });
+        const resumeAfterTouch = function (event) {
+            if (event.pointerType !== "touch" || !touchPaused) return;
+            touchPaused = false;
+            syncPauseState();
+        };
+        window.addEventListener("pointerup", resumeAfterTouch, { passive: true });
+        window.addEventListener("pointercancel", resumeAfterTouch, { passive: true });
+        document.addEventListener("visibilitychange", syncPauseState);
+        if (reduceQuery && reduceQuery.addEventListener) reduceQuery.addEventListener("change", applyMotionPreference);
+        if (touchQuery && touchQuery.addEventListener) {
+            touchQuery.addEventListener("change", function () {
+                if (toggle) toggle.hidden = !motionEnabled || !touchQuery.matches;
+            });
+        }
+        applyMotionPreference();
+    }
+
     function init() {
         // Bind the admin-wide POST handler first so other optional UI setup cannot
         // leave ordinary save and upload forms falling back to full-page submits.
         initAdminAsyncForms();
         initMediaPublishing();
         initAdminWorkspaceContent();
+        initPublicPageMotion();
+        initHomeProcessKiosk();
     }
 
     if (document.readyState === "loading") {

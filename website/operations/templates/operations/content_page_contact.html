@@ -3,8 +3,67 @@
         <div>
             <span class="section-kicker">Contact</span>
             <h3 id="publish-contact-title">Contact page</h3>
-            <p>The estimate request form is live. Its copy and service-area details are currently system-managed.</p>
+            <p>Edit the page copy, ways to reach you, and the wording around the estimate form.</p>
         </div>
-        <a class="button button-outline" href="{% url 'operations:contact' %}" target="_blank" rel="noopener">Preview Contact ↗</a>
+        <a class="button button-outline" href="{% url 'operations:contact' %}" target="_blank" rel="noopener">Preview Contact &#8599;</a>
     </header>
+
+    <form id="content-contact-editor" class="content-page-editor contact-content-editor" method="post" action="{% url 'operations:content-update' %}" data-publication-save>
+        {% csrf_token %}
+        <input type="hidden" name="content_page" value="contact">
+
+        <section class="content-contact-group" aria-labelledby="contact-page-copy-heading">
+            <header class="content-section-subheading">
+                <div><span class="section-kicker">Page introduction</span><h4 id="contact-page-copy-heading">First impression</h4></div>
+            </header>
+            <div class="content-page-field-grid">
+                <label class="form-field" for="{{ content_form.contact_page_kicker.id_for_label }}">{{ content_form.contact_page_kicker.label }}{{ content_form.contact_page_kicker }}{{ content_form.contact_page_kicker.errors }}</label>
+                <label class="form-field" for="{{ content_form.contact_page_title.id_for_label }}">{{ content_form.contact_page_title.label }}{{ content_form.contact_page_title }}{{ content_form.contact_page_title.errors }}</label>
+                <label class="form-field content-page-field-wide" for="{{ content_form.contact_page_intro.id_for_label }}">{{ content_form.contact_page_intro.label }}{{ content_form.contact_page_intro }}{{ content_form.contact_page_intro.errors }}</label>
+            </div>
+        </section>
+
+        <section class="content-contact-group" aria-labelledby="contact-service-area-heading">
+            <header class="content-section-subheading">
+                <div><span class="section-kicker">Service areas</span><h4 id="contact-service-area-heading">Where you work</h4><p>These areas appear on the Contact page and in the footer.</p></div>
+            </header>
+            <div class="content-page-field-grid">
+                <label class="form-field" for="{{ content_form.contact_service_areas_heading.id_for_label }}">{{ content_form.contact_service_areas_heading.label }}{{ content_form.contact_service_areas_heading }}{{ content_form.contact_service_areas_heading.errors }}</label>
+                <label class="form-field content-page-field-wide" for="{{ content_form.contact_service_areas.id_for_label }}">{{ content_form.contact_service_areas.label }}{{ content_form.contact_service_areas }}{{ content_form.contact_service_areas.errors }}{% if content_form.contact_service_areas.help_text %}<small class="service-field-help">{{ content_form.contact_service_areas.help_text }}</small>{% endif %}</label>
+            </div>
+        </section>
+
+        <section class="content-contact-group" aria-labelledby="contact-details-heading">
+            <header class="content-section-subheading">
+                <div><span class="section-kicker">Direct contact</span><h4 id="contact-details-heading">Phone, email, and Instagram</h4><p>These values appear on the Contact page and in the footer. Phone and email stay clickable.</p></div>
+            </header>
+            <div class="content-page-field-grid">
+                <label class="form-field" for="{{ content_form.contact_direct_heading.id_for_label }}">{{ content_form.contact_direct_heading.label }}{{ content_form.contact_direct_heading }}{{ content_form.contact_direct_heading.errors }}</label>
+                <label class="form-field" for="{{ content_form.contact_phone.id_for_label }}">{{ content_form.contact_phone.label }}{{ content_form.contact_phone }}{{ content_form.contact_phone.errors }}</label>
+                <label class="form-field" for="{{ content_form.contact_email.id_for_label }}">{{ content_form.contact_email.label }}{{ content_form.contact_email }}{{ content_form.contact_email.errors }}</label>
+                <label class="form-field content-page-field-wide" for="{{ content_form.contact_instagram_url.id_for_label }}">{{ content_form.contact_instagram_url.label }}{{ content_form.contact_instagram_url }}{{ content_form.contact_instagram_url.errors }}</label>
+            </div>
+        </section>
+
+        <section class="content-contact-group" aria-labelledby="contact-form-copy-heading">
+            <header class="content-section-subheading">
+                <div><span class="section-kicker">Estimate form</span><h4 id="contact-form-copy-heading">Form introduction and notes</h4><p>This changes the wording only. Form fields, required settings, uploads, and spam protection stay the same.</p></div>
+            </header>
+            <div class="content-page-field-grid">
+                <label class="form-field" for="{{ content_form.contact_form_kicker.id_for_label }}">{{ content_form.contact_form_kicker.label }}{{ content_form.contact_form_kicker }}{{ content_form.contact_form_kicker.errors }}</label>
+                <label class="form-field" for="{{ content_form.contact_form_title.id_for_label }}">{{ content_form.contact_form_title.label }}{{ content_form.contact_form_title }}{{ content_form.contact_form_title.errors }}</label>
+                <label class="form-field content-page-field-wide" for="{{ content_form.contact_form_intro.id_for_label }}">{{ content_form.contact_form_intro.label }}{{ content_form.contact_form_intro }}{{ content_form.contact_form_intro.errors }}</label>
+                <label class="form-field" for="{{ content_form.contact_form_privacy_note.id_for_label }}">{{ content_form.contact_form_privacy_note.label }}{{ content_form.contact_form_privacy_note }}{{ content_form.contact_form_privacy_note.errors }}</label>
+                <label class="form-field" for="{{ content_form.contact_form_footer_note.id_for_label }}">{{ content_form.contact_form_footer_note.label }}{{ content_form.contact_form_footer_note }}{{ content_form.contact_form_footer_note.errors }}</label>
+                <label class="form-field" for="{{ content_form.contact_form_submit_label.id_for_label }}">{{ content_form.contact_form_submit_label.label }}{{ content_form.contact_form_submit_label }}{{ content_form.contact_form_submit_label.errors }}</label>
+                <label class="form-field" for="{{ content_form.contact_success_message.id_for_label }}">{{ content_form.contact_success_message.label }}{{ content_form.contact_success_message }}{{ content_form.contact_success_message.errors }}</label>
+            </div>
+
+        </section>
+
+        <footer class="content-page-save-row">
+            <span>Saved changes appear on Contact and in shared footer details.</span>
+            <button class="button button-primary" type="submit">Save Contact page</button>
+        </footer>
+    </form>
 </section>

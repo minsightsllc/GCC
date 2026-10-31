@@ -12,7 +12,7 @@
             {% if service and service.image %}
             <img src="{% url 'operations:service-image' pk=service.pk %}" alt="{{ service.title }} service image" loading="lazy">
             {% else %}
-            <div class="service-image-placeholder"><span aria-hidden="true">▧</span><strong>No image selected</strong><small>Optional · JPG, PNG, WebP, or GIF</small></div>
+            <div class="service-image-placeholder"><span aria-hidden="true">▧</span><strong>No image selected</strong><small>Optional · JPG, PNG, or WebP</small></div>
             {% endif %}
         </div>
         <div class="service-image-fields">

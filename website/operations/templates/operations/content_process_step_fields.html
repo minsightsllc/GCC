@@ -1,0 +1,31 @@
+<div class="service-editor-grid process-step-editor-grid">
+    <div class="form-field service-title-field">
+        <label for="{{ process_form.title.id_for_label }}">Step title</label>
+        {{ process_form.title }}{{ process_form.title.errors }}
+    </div>
+    <div class="form-field service-description-field">
+        <label for="{{ process_form.description.id_for_label }}">Description</label>
+        {{ process_form.description }}{{ process_form.description.errors }}
+    </div>
+    <section class="service-image-editor process-step-image-editor" aria-label="Process step image">
+        <div class="service-image-preview">
+            {% if step and step.image %}
+            <img src="{% url 'operations:process-step-image' pk=step.pk %}" alt="{{ step.title }} process image" loading="lazy">
+            {% else %}
+            <div class="service-image-placeholder"><span aria-hidden="true">+</span><strong>No image selected</strong><small>Optional · JPG, PNG, or WebP</small></div>
+            {% endif %}
+        </div>
+        <div class="service-image-fields">
+            <label class="service-image-label" for="{{ process_form.image.id_for_label }}">{{ process_form.image.label }}</label>
+            {{ process_form.image }}{{ process_form.image.errors }}
+            {% if process_form.image.help_text %}<small class="service-field-help">{{ process_form.image.help_text }}</small>{% endif %}
+        </div>
+    </section>
+    <div class="service-visibility">
+        <label class="form-check service-visibility-toggle" for="{{ process_form.is_active.id_for_label }}">
+            {{ process_form.is_active }}
+            <span><strong>{{ process_form.is_active.label }}</strong><small>{{ process_form.is_active.help_text }}</small></span>
+        </label>
+        {{ process_form.is_active.errors }}
+    </div>
+</div>

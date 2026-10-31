@@ -1,12 +1,12 @@
 {% load static %}
-<div class="staging-bar"><span class="staging-label">GRAND COAST</span><span>Thoughtful construction. Clear communication. Better builds.</span><span class="staging-spacer"></span></div>
+<div class="staging-bar"><span class="staging-label">GRAND COAST CONSTRUCTION INC.</span><span>Thoughtful construction. Clear communication. Better builds.</span><span class="staging-spacer"></span></div>
 <header class="site-header">
     <div class="container header-inner">
         <a class="brand" href="{% url 'operations:home' %}" aria-label="Grand Coast Construction home">
             <img class="brand-logo" src="{% static 'operations/images/gcc-logo.png' %}" alt="Grand Coast Construction Inc. logo">
             <span class="brand-name">Grand Coast <strong>Construction Inc.</strong></span>
         </a>
-        <button class="mobile-nav-toggle" type="button" aria-expanded="false" aria-controls="public-nav" data-mobile-nav-toggle><span></span><span></span><span></span><span class="sr-only">Open navigation</span></button>
+        <button class="mobile-nav-toggle" type="button" aria-expanded="false" aria-controls="public-nav" data-mobile-nav-toggle><span class="mobile-nav-icon" aria-hidden="true"><span class="mobile-nav-bar mobile-nav-bar-top"></span><span class="mobile-nav-bar mobile-nav-bar-middle"></span><span class="mobile-nav-bar mobile-nav-bar-bottom"></span></span><span class="sr-only">Open navigation</span></button>
         <nav class="site-nav" id="public-nav" aria-label="Primary navigation">
             <a class="{% if page == 'home' %}is-current{% endif %}" href="{% url 'operations:home' %}">Home</a>
             <a class="{% if page == 'services' %}is-current{% endif %}" href="{% url 'operations:services' %}">Services</a>
@@ -14,7 +14,7 @@
             <a class="{% if page == 'process' %}is-current{% endif %}" href="{% url 'operations:process' %}">Process</a>
             <a class="{% if page == 'contact' %}is-current{% endif %}" href="{% url 'operations:contact' %}">Contact</a>
             {% if public_dashboard_url %}<a href="{{ public_dashboard_url }}">Dashboard</a>{% elif not request.user.is_authenticated %}<a href="{% url 'operations:login' %}">Sign in</a>{% endif %}
-            <a class="button button-primary nav-cta" href="{% url 'operations:contact' %}">Request an Estimate</a>
+            <a class="button button-primary nav-cta" href="{% url 'operations:contact' %}">Request an Estimate <span aria-hidden="true">&rarr;</span></a>
         </nav>
     </div>
 </header>

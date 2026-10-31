@@ -104,18 +104,19 @@ def can_view_agreement(user, agreement):
 
 def visible_projects(user):
     """Return only projects the actor may know exist."""
+    operational_projects = Project.objects.filter(is_portfolio_only=False)
     if not can_access_operating_system(user):
         return Project.objects.none()
     if is_owner(user):
-        return Project.objects.all()
+        return operational_projects
     if is_manager(user) or is_office(user) or is_field(user):
-        return Project.objects.filter(
+        return operational_projects.filter(
             Q(project_manager=user) | Q(assigned_staff=user)
         ).distinct()
     if is_client(user):
-        return Project.objects.filter(client__user=user)
+        return operational_projects.filter(client__user=user)
     if is_subcontractor(user):
-        return Project.objects.filter(
+        return operational_projects.filter(
             subcontractor_assignments__subcontractor__portal_user=user
         ).distinct()
     return Project.objects.none()

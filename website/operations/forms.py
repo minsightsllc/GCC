@@ -36,10 +36,14 @@ from .models import (
     MediaPublication,
     WebsiteGalleryPost,
     WebsiteGalleryPostItem,
+    WEBSITE_GALLERY_MAX_SLIDES_PER_POST,
+    WEBSITE_GALLERY_MAX_UPLOAD_SIZE,
+    WEBSITE_VIDEO_POSTER_MAX_UPLOAD_SIZE,
     ProjectDocument,
     Project,
     ProjectUpdate,
     ProjectUpdateDraft,
+    ProcessStep,
     ScheduleEvent,
     Service,
     Subcontractor,
@@ -59,6 +63,42 @@ def user_choice_label(user):
     """Show a person's name in staff selectors, with a safe username fallback."""
     full_name = user.get_full_name().strip()
     return full_name or user.get_username()
+
+
+def _normalize_image_upload_extension(upload):
+    """Match supported image filenames to their actual file signatures."""
+    if not upload:
+        return
+
+    try:
+        position = upload.tell()
+    except (AttributeError, OSError):
+        position = 0
+    try:
+        upload.seek(0)
+        header = upload.read(12) or b""
+    except (AttributeError, OSError):
+        return
+    finally:
+        try:
+            upload.seek(position)
+        except (AttributeError, OSError):
+            pass
+
+    if header.startswith(b"\xff\xd8\xff"):
+        actual_extension = ".jpg"
+    elif header.startswith(b"\x89PNG\r\n\x1a\n"):
+        actual_extension = ".png"
+    elif header[:4] == b"RIFF" and header[8:12] == b"WEBP":
+        actual_extension = ".webp"
+    else:
+        return
+
+    filename = str(upload.name or "image")
+    stem = filename.rsplit(".", 1)[0] if "." in filename else filename
+    if filename.lower().endswith(actual_extension):
+        return
+    upload.name = f"{stem}{actual_extension}"
 
 
 class MultipleFileInput(forms.FileInput):
@@ -93,15 +133,36 @@ class ContactUploadField(MultipleFileField):
     upload_validator = staticmethod(validate_contact_upload)
 
 
+class WebsitePosterImageField(forms.ImageField):
+    """Accept and sanitize only supported, non-animated poster photos."""
+
+    def clean(self, data, initial=None):
+        upload = super().clean(data, initial)
+        if upload:
+            extension = str(upload.name).rsplit(".", 1)[-1].lower()
+            if f".{extension}" not in {".jpg", ".jpeg", ".png", ".webp"}:
+                raise ValidationError("Choose a JPG, PNG, or WebP video thumbnail.")
+            validate_contact_upload(upload)
+        return upload
+
+
 class ContactLeadForm(forms.Form):
-    first_name = forms.CharField(max_length=80)
-    last_name = forms.CharField(max_length=80)
-    email = forms.EmailField()
-    phone = forms.CharField(max_length=40, required=False)
-    project_type = forms.CharField(max_length=120)
-    location = forms.CharField(max_length=160)
-    message = forms.CharField(widget=forms.Textarea, max_length=20000)
-    photos = ContactUploadField(required=False)
+    first_name = forms.CharField(max_length=80, label="First name")
+    last_name = forms.CharField(max_length=80, label="Last name")
+    email = forms.EmailField(label="Email")
+    phone = forms.CharField(max_length=40, required=False, label="Phone")
+    project_type = forms.CharField(max_length=120, label="Project type")
+    location = forms.CharField(max_length=160, label="Location")
+    message = forms.CharField(
+        widget=forms.Textarea,
+        max_length=20000,
+        label="Tell us about the project",
+    )
+    photos = ContactUploadField(
+        required=False,
+        label="Add photos or files",
+        help_text="Optional · photos, video, PDF, DOCX, spreadsheet, or text file",
+    )
 
     def __init__(self, *args, request=None, **kwargs):
         self.request = request
@@ -238,7 +299,7 @@ class TaskForm(forms.ModelForm):
             client_queryset if client_queryset is not None else Client.objects.all()
         )
         self.fields["project"].queryset = (
-            project_queryset if project_queryset is not None else Project.objects.all()
+            project_queryset if project_queryset is not None else Project.objects.filter(is_portfolio_only=False)
         )
 
         if (
@@ -550,7 +611,7 @@ class MediaUploadForm(forms.Form):
     def __init__(self, *args, project_queryset=None, require_client=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["project"].queryset = project_queryset if project_queryset is not None else Project.objects.none()
-        self.fields["files"].widget.attrs["accept"] = ".jpg,.jpeg,.png,.webp,.gif,.heic,.mp4,.mov,.webm"
+        self.fields["files"].widget.attrs["accept"] = ".jpg,.jpeg,.png,.webp,.mp4,.mov"
         self.require_client = require_client
 
     def clean_files(self):
@@ -593,7 +654,7 @@ class WebsiteGalleryPostForm(forms.ModelForm):
 
     class Meta:
         model = WebsiteGalleryPost
-        fields = ["title", "caption", "label", "show_client_name", "layout", "accent", "sort_order"]
+        fields = ["title", "caption", "label", "show_client_name", "layout", "accent"]
         widgets = {"caption": forms.Textarea(attrs={"rows": 3})}
         labels = {
             "title": "Post title",
@@ -602,7 +663,6 @@ class WebsiteGalleryPostForm(forms.ModelForm):
             "show_client_name": "Show the client's name on this post",
             "layout": "Post layout",
             "accent": "Accent color",
-            "sort_order": "Post order",
         }
 
     def __init__(self, *args, project=None, **kwargs):
@@ -610,9 +670,14 @@ class WebsiteGalleryPostForm(forms.ModelForm):
         project = project or getattr(self.instance, "project", None)
         self.project = project
         self.fields["files"].widget.attrs.update({
-            "accept": ".jpg,.jpeg,.png,.webp,.gif,.heic,.mp4,.mov,.webm",
+            "accept": ".jpg,.jpeg,.png,.webp,.mp4,.mov",
             "multiple": True,
+            "data-website-post-file-input": "",
         })
+        self.fields["files"].help_text = (
+            f"Choose up to {WEBSITE_GALLERY_MAX_SLIDES_PER_POST} slides per post. "
+            f"New project-gallery files can be up to {WEBSITE_GALLERY_MAX_UPLOAD_SIZE // (1024 * 1024)} MB each."
+        )
         if project:
             current_items = WebsiteGalleryPostItem.objects.filter(post=self.instance) if self.instance.pk else WebsiteGalleryPostItem.objects.none()
             current_asset_ids = current_items.values_list("asset_id", flat=True)
@@ -633,12 +698,51 @@ class WebsiteGalleryPostForm(forms.ModelForm):
             self.fields["items_to_keep"].initial = list(
                 current_items.filter(is_in_draft=True).values_list("asset_id", flat=True)
             )
-        self.fields["title"].help_text = "One title for the whole post, not a separate title for each slide."
-        self.fields["caption"].help_text = "One caption for the whole post. The arrows move through its photos and videos."
-        self.fields["show_client_name"].help_text = "Only this post shows the client name, and only when checked."
+        self.new_poster_prefix = self.add_prefix("new_poster_")
+        self.new_poster_fields = []
+        self.new_poster_field_names = []
+        self.existing_poster_fields_by_asset = {}
+        self.existing_video_assets = []
+        poster_widget_attrs = {
+            "accept": "image/jpeg,image/png,image/webp",
+            "class": "website-video-poster-input",
+        }
+        for index in range(WEBSITE_GALLERY_MAX_SLIDES_PER_POST):
+            field_name = f"new_poster_{index}"
+            self.fields[field_name] = WebsitePosterImageField(
+                required=False,
+                label=f"Thumbnail for uploaded video {index + 1}",
+                widget=forms.FileInput(attrs=poster_widget_attrs.copy()),
+            )
+            self.new_poster_fields.append(self[field_name])
+            self.new_poster_field_names.append(field_name)
+        if project:
+            for item in WebsiteGalleryPostItem.objects.filter(
+                post=self.instance,
+                asset__media_type=MediaAsset.MediaType.VIDEO,
+            ).select_related("asset"):
+                field_name = f"slide_poster_{item.asset_id}"
+                self.fields[field_name] = WebsitePosterImageField(
+                    required=False,
+                    label=f"Thumbnail for {item.asset.title}",
+                    widget=forms.FileInput(attrs=poster_widget_attrs.copy()),
+                )
+            for asset in self.fields["existing_assets"].queryset.filter(
+                media_type=MediaAsset.MediaType.VIDEO
+            ):
+                field_name = f"existing_poster_{asset.pk}"
+                self.fields[field_name] = WebsitePosterImageField(
+                    required=False,
+                    label=f"Thumbnail for {asset.title}",
+                    widget=forms.FileInput(attrs=poster_widget_attrs.copy()),
+                )
+                self.existing_poster_fields_by_asset[str(asset.pk)] = self[field_name]
+                self.existing_video_assets.append(asset)
+        self.fields["title"].help_text = "One title for the whole post."
+        self.fields["caption"].help_text = "One caption for the whole post."
+        self.fields["show_client_name"].help_text = "Shown only when selected."
         self.fields["layout"].choices = WebsiteGalleryPost.Layout.choices
         self.fields["accent"].choices = WebsiteGalleryPost.Accent.choices
-        self.fields["sort_order"].help_text = "Lower numbers appear first on the public Projects page."
         if self.instance.pk:
             for item in WebsiteGalleryPostItem.objects.filter(post=self.instance).select_related("asset"):
                 self.fields[f"slide_order_{item.asset_id}"] = forms.IntegerField(
@@ -646,15 +750,21 @@ class WebsiteGalleryPostForm(forms.ModelForm):
                     min_value=0,
                     initial=item.sort_order,
                     label=f"Order for {item.asset.title}",
+                    widget=forms.HiddenInput(),
                 )
 
     def clean_files(self):
         files = self.cleaned_data.get("files", [])
-        if len(files) > 20:
-            raise ValidationError("Add up to 20 slides to one post.")
+        if len(files) > WEBSITE_GALLERY_MAX_SLIDES_PER_POST:
+            raise ValidationError(
+                f"Add up to {WEBSITE_GALLERY_MAX_SLIDES_PER_POST} slides to one post."
+            )
         for upload in files:
             if upload.size == 0:
                 raise ValidationError(f"{upload.name} is empty.")
+            if upload.size > WEBSITE_GALLERY_MAX_UPLOAD_SIZE:
+                max_size_mb = WEBSITE_GALLERY_MAX_UPLOAD_SIZE // (1024 * 1024)
+                raise ValidationError(f"{upload.name}: project-gallery files must be {max_size_mb} MB or smaller.")
             try:
                 validate_contact_upload(upload)
             except ValidationError as exc:
@@ -663,12 +773,24 @@ class WebsiteGalleryPostForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        for field_name, upload in cleaned.items():
+            if not upload or not field_name.startswith((
+                "new_poster_",
+                "slide_poster_",
+                "existing_poster_",
+            )):
+                continue
+            if upload.size > WEBSITE_VIDEO_POSTER_MAX_UPLOAD_SIZE:
+                self.add_error(field_name, "Video thumbnails must be 5 MB or smaller.")
         keep_count = len(cleaned.get("items_to_keep", []))
         existing_count = len(cleaned.get("existing_assets", []))
         upload_count = len(cleaned.get("files", []))
         action = self.data.get("action", "save")
-        if keep_count + existing_count + upload_count > 20:
-            self.add_error("files", "A post can contain up to 20 photos or videos.")
+        if keep_count + existing_count + upload_count > WEBSITE_GALLERY_MAX_SLIDES_PER_POST:
+            self.add_error(
+                "files",
+                f"A post can contain up to {WEBSITE_GALLERY_MAX_SLIDES_PER_POST} photos or videos.",
+            )
         if (
             keep_count + existing_count + upload_count == 0
             and (not self.instance.pk or action == "publish")
@@ -677,6 +799,15 @@ class WebsiteGalleryPostForm(forms.ModelForm):
         if existing_count and not self.project:
             self.add_error("existing_assets", "Choose a project before adding existing media.")
         return cleaned
+
+
+class WebsitePastProjectForm(forms.Form):
+    title = forms.CharField(
+        max_length=180,
+        strip=True,
+        label="Past project name",
+        help_text="This name appears on the public Projects page. Avoid client names and street addresses.",
+    )
 
 
 class ClientMediaAssetField(forms.ModelChoiceField):
@@ -750,7 +881,7 @@ class ServiceForm(forms.ModelForm):
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
             "image": ServiceImageInput(attrs={
-                "accept": ".jpg,.jpeg,.png,.webp,.gif",
+                "accept": ".jpg,.jpeg,.png,.webp",
                 "class": "service-image-file-input",
             }),
         }
@@ -771,8 +902,42 @@ class ServiceForm(forms.ModelForm):
 
     def clean_image(self):
         image = self.cleaned_data.get("image")
-        if image and str(image.name).rsplit(".", 1)[-1].lower() not in {"jpg", "jpeg", "png", "webp", "gif"}:
+        _normalize_image_upload_extension(image)
+        if image and str(image.name).rsplit(".", 1)[-1].lower() not in {"jpg", "jpeg", "png", "webp"}:
             raise ValidationError("Choose an image for this service.")
+        if image and hasattr(image, "content_type"):
+            validate_contact_upload(image)
+        return image
+
+
+class ProcessStepForm(forms.ModelForm):
+    class Meta:
+        model = ProcessStep
+        fields = ["title", "description", "image", "is_active"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+            "image": ServiceImageInput(attrs={
+                "accept": ".jpg,.jpeg,.png,.webp",
+                "class": "process-step-image-file-input",
+            }),
+        }
+        labels = {"is_active": "Show on website"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk and self.instance.image:
+            self.fields["image"].widget.preview_url = reverse(
+                "operations:process-step-image", kwargs={"pk": self.instance.pk}
+            )
+        self.fields["image"].label = "Step image (optional)"
+        self.fields["image"].help_text = "This image appears on the Process page, not in the Home process summary."
+        self.fields["is_active"].help_text = "Active steps appear on both the Process page and Home."
+
+    def clean_image(self):
+        image = self.cleaned_data.get("image")
+        _normalize_image_upload_extension(image)
+        if image and str(image.name).rsplit(".", 1)[-1].lower() not in {"jpg", "jpeg", "png", "webp"}:
+            raise ValidationError("Choose an image for this process step.")
         if image and hasattr(image, "content_type"):
             validate_contact_upload(image)
         return image
@@ -787,11 +952,28 @@ class ContentStudioForm(forms.Form):
     services_title = forms.CharField(max_length=180, label="Services page heading")
     services_intro = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=2000, label="Services introduction")
     services_note = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), max_length=1000, required=False, label="Services supporting note")
+    process_page_title = forms.CharField(max_length=180, label="Process page heading")
+    process_page_intro = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=2000, label="Process page introduction")
+
+    contact_page_kicker = forms.CharField(max_length=100, label="Page eyebrow")
+    contact_page_title = forms.CharField(max_length=180, label="Page heading")
+    contact_page_intro = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=2000, label="Page introduction")
+    contact_service_areas_heading = forms.CharField(max_length=100, label="Service area heading")
+    contact_service_areas = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=1000, required=False, label="Service areas", help_text="Enter one area per line.")
+    contact_form_kicker = forms.CharField(max_length=100, label="Form eyebrow")
+    contact_form_title = forms.CharField(max_length=180, label="Form heading")
+    contact_form_intro = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=2000, label="Form introduction")
+    contact_form_privacy_note = forms.CharField(max_length=180, label="Privacy note")
+    contact_form_footer_note = forms.CharField(max_length=180, label="Form footer note")
+    contact_direct_heading = forms.CharField(max_length=100, label="Direct contact heading")
+    contact_phone = forms.CharField(max_length=40, required=False, label="Phone number")
+    contact_email = forms.EmailField(max_length=254, required=False, label="Email address")
+    contact_instagram_url = forms.URLField(max_length=500, required=False, label="Instagram URL")
+    contact_success_message = forms.CharField(max_length=240, label="After-submission message")
+    contact_form_submit_label = forms.CharField(max_length=80, label="Submit button")
 
     def __init__(self, *args, services=None, process_steps=None, **kwargs):
         super().__init__(*args, **kwargs)
-        for step in process_steps or []:
-            self.fields[f"step_{step.key}"] = forms.CharField(max_length=120)
 
 
 class ClientMessageForm(forms.ModelForm):
@@ -877,7 +1059,7 @@ class ScheduleEventForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["assignees"].queryset = staff_queryset if staff_queryset is not None else get_user_model().objects.filter(is_staff=True)
         self.fields["assignees"].label_from_instance = user_choice_label
-        self.fields["project"].queryset = project_queryset if project_queryset is not None else Project.objects.all()
+        self.fields["project"].queryset = project_queryset if project_queryset is not None else Project.objects.filter(is_portfolio_only=False)
         self.fields["task"].queryset = task_queryset if task_queryset is not None else Task.objects.all()
 
 
@@ -1046,7 +1228,7 @@ class TimeEntryForm(forms.ModelForm):
 
     def __init__(self, *args, project_queryset=None, task_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["project"].queryset = project_queryset if project_queryset is not None else Project.objects.all()
+        self.fields["project"].queryset = project_queryset if project_queryset is not None else Project.objects.filter(is_portfolio_only=False)
         self.fields["task"].queryset = task_queryset if task_queryset is not None else Task.objects.all()
 
 
@@ -1058,7 +1240,7 @@ class ProjectDocumentForm(forms.ModelForm):
 
     def __init__(self, *args, project_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["project"].queryset = project_queryset if project_queryset is not None else Project.objects.all()
+        self.fields["project"].queryset = project_queryset if project_queryset is not None else Project.objects.filter(is_portfolio_only=False)
 
 
 class ClientForm(forms.ModelForm):

@@ -15,23 +15,28 @@ from django.utils import timezone
 from django.utils.text import get_valid_filename
 
 from .storage import ContactSubmissionStorage
+from .media_sanitization import sanitize_uploaded_media
 
 
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024
+WEBSITE_GALLERY_MAX_POSTS = 4
+WEBSITE_GALLERY_MAX_SLIDES_PER_POST = 5
+WEBSITE_GALLERY_MAX_UPLOAD_SIZE = 20 * 1024 * 1024
+WEBSITE_VIDEO_POSTER_MAX_UPLOAD_SIZE = 5 * 1024 * 1024
 CALENDAR_TIME_ZONE = ZoneInfo('America/Los_Angeles')
 CONTACT_MAX_FILES = 8
 CONTACT_MAX_TOTAL_SIZE = 100 * 1024 * 1024
-ALLOWED_UPLOAD_EXTENSIONS = {
+ALLOWED_IMAGE_UPLOAD_EXTENSIONS = {
     ".jpg",
     ".jpeg",
     ".png",
     ".webp",
-    ".gif",
-    ".heic",
+}
+ALLOWED_VIDEO_UPLOAD_EXTENSIONS = {
     ".mp4",
     ".mov",
-    ".webm",
 }
+ALLOWED_UPLOAD_EXTENSIONS = ALLOWED_IMAGE_UPLOAD_EXTENSIONS | ALLOWED_VIDEO_UPLOAD_EXTENSIONS
 
 
 def validate_uploaded_media(upload):
@@ -39,9 +44,25 @@ def validate_uploaded_media(upload):
         return
     if upload.size > MAX_UPLOAD_SIZE:
         raise ValidationError("Files must be 50 MB or smaller.")
-    name = upload.name.lower()
-    if not any(name.endswith(extension) for extension in ALLOWED_UPLOAD_EXTENSIONS):
-        raise ValidationError("Upload a JPG, PNG, WEBP, GIF, HEIC, MP4, MOV, or WEBM file.")
+    extension = Path(str(upload.name)).suffix.lower()
+    if extension not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise ValidationError("Upload a JPG, PNG, or WebP photo, or an MP4 or MOV video.")
+    if not _contact_file_signature_matches(upload, extension):
+        raise ValidationError("The file contents do not match the selected photo or video type.")
+    sanitize_uploaded_media(upload)
+
+
+def media_asset_upload_to(instance, filename):
+    """Keep each original under the folder for the workflow that uploaded it.
+
+    A single original may later be published to another audience. Reusing it
+    does not create a second storage object or move the original.
+    """
+    storage_area = getattr(instance, "_storage_area", "Client Media")
+    if storage_area not in {"Client Media", "Public Content"}:
+        storage_area = "Client Media"
+    month_path = timezone.now().strftime("%Y/%m")
+    return f"{storage_area}/projects/media/{month_path}/{filename}"
 
 
 ALLOWED_DOCUMENT_EXTENSIONS = {
@@ -85,18 +106,10 @@ def _contact_file_signature_matches(upload, extension):
         return header.startswith(b"\xff\xd8\xff")
     if extension == ".png":
         return header.startswith(b"\x89PNG\r\n\x1a\n")
-    if extension == ".gif":
-        return header.startswith((b"GIF87a", b"GIF89a"))
     if extension == ".webp":
         return header[:4] == b"RIFF" and header[8:12] == b"WEBP"
-    if extension == ".heic":
-        return b"ftyp" in header[:32] and any(
-            brand in header[:64] for brand in (b"heic", b"heix", b"hevc", b"hevx", b"mif1", b"msf1")
-        )
     if extension in {".mp4", ".mov"}:
         return b"ftyp" in header[:32]
-    if extension == ".webm":
-        return header.startswith(b"\x1a\x45\xdf\xa3")
     if extension == ".pdf":
         return header.startswith(b"%PDF-")
     if extension in {".doc", ".xls"}:
@@ -116,10 +129,12 @@ def validate_contact_upload(upload):
     extension = Path(str(upload.name)).suffix.lower()
     if extension not in ALLOWED_CONTACT_UPLOAD_EXTENSIONS:
         raise ValidationError(
-            "Upload a JPG, PNG, WEBP, GIF, HEIC, MP4, MOV, WEBM, PDF, DOC, DOCX, XLS, XLSX, CSV, or TXT file."
+            "Upload a JPG, PNG, or WebP photo; an MP4 or MOV video; or a supported document."
         )
     if not _contact_file_signature_matches(upload, extension):
         raise ValidationError("The file contents do not match the selected file type.")
+    if extension in ALLOWED_UPLOAD_EXTENSIONS:
+        sanitize_uploaded_media(upload)
 
 
 def validate_uploaded_document(upload):
@@ -655,6 +670,7 @@ class Project(TimeStampedModel):
         default=HealthStatus.ON_TRACK,
         db_index=True,
     )
+    is_portfolio_only = models.BooleanField(default=False)
     health_note = models.CharField(max_length=240, blank=True)
     address_line1 = models.CharField(max_length=180, blank=True)
     address_line2 = models.CharField(max_length=180, blank=True)
@@ -682,7 +698,7 @@ class Project(TimeStampedModel):
     gallery_accent = models.CharField(max_length=16, default="gold", choices=[
         ("gold", "Coast gold"), ("blue", "Brand blue"), ("navy", "Deep navy"),
     ])
-    cover = models.FileField(upload_to="projects/covers/", blank=True, validators=[validate_uploaded_media])
+    cover = models.FileField(upload_to="Public Content/projects/covers/", blank=True, validators=[validate_uploaded_media])
     fallback_image = models.CharField(max_length=255, blank=True)
     start_date = models.DateField(null=True, blank=True)
     target_date = models.DateField(null=True, blank=True)
@@ -824,7 +840,7 @@ class MediaAsset(models.Model):
         related_name="media_assets",
     )
     title = models.CharField(max_length=180)
-    file = models.FileField(upload_to="projects/media/%Y/%m/", blank=True, validators=[validate_uploaded_media])
+    file = models.FileField(upload_to=media_asset_upload_to, blank=True, validators=[validate_uploaded_media])
     media_type = models.CharField(max_length=10, choices=MediaType.choices, default=MediaType.PHOTO)
     context = models.CharField(max_length=24, choices=Context.choices, default=Context.PROGRESS)
     visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.INTERNAL)
@@ -842,6 +858,15 @@ class MediaAsset(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+    @classmethod
+    def create_for_upload(cls, storage_area, **values):
+        if storage_area not in {"Client Media", "Public Content"}:
+            raise ValueError("Unsupported media storage area.")
+        asset = cls(**values)
+        asset._storage_area = storage_area
+        asset.save()
+        return asset
 
     def __str__(self):
         return self.title
@@ -927,7 +952,15 @@ class WebsiteGalleryPost(TimeStampedModel):
         ):
             client_name = self.project.client.name
         slides = [
-            {"asset_id": str(item.asset_id), "sort_order": item.sort_order}
+            {
+                "asset_id": str(item.asset_id),
+                "sort_order": item.sort_order,
+                "poster_image": (
+                    item.poster_image.name
+                    if item.asset.media_type == MediaAsset.MediaType.VIDEO and item.poster_image
+                    else ""
+                ),
+            }
             for item in self.items.filter(is_in_draft=True).order_by("sort_order", "created_at", "pk")
         ]
         return {
@@ -954,6 +987,9 @@ class WebsiteGalleryPostItem(models.Model):
     asset = models.OneToOneField(MediaAsset, on_delete=models.CASCADE, related_name="website_post_item")
     sort_order = models.PositiveIntegerField(default=0)
     is_in_draft = models.BooleanField(default=True)
+    # Website-only video poster. The default storage backend uses local /media
+    # in development and Supabase Storage in production, independent of Client Media.
+    poster_image = models.ImageField(blank=True, upload_to="Public Content/website-posters/%Y/%m/")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -965,7 +1001,7 @@ class LeadAttachment(models.Model):
     lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="attachments")
     file = models.FileField(
         storage=ContactSubmissionStorage,
-        upload_to="contact-form/%Y/%m/",
+        upload_to="Documents and Files/contact-form/%Y/%m/",
         validators=[validate_contact_upload],
     )
     original_name = models.CharField(max_length=255, blank=True)
@@ -1021,6 +1057,40 @@ class SiteSettings(models.Model):
     services_title = models.CharField(max_length=180, default="Construction with a clear plan.")
     services_intro = models.TextField(default="Every project is different. Our job is to make the path from idea to finished space feel straightforward.")
     services_note = models.TextField(blank=True, default="Residential, commercial, renovation, restoration, and project oversight across Southern California.")
+    process_page_title = models.CharField(max_length=180, default="A clearer way to build.")
+    process_page_intro = models.TextField(
+        default="A strong project experience comes from good communication, visible next steps, and an organized handoff."
+    )
+    contact_page_kicker = models.CharField(max_length=100, default="Start here")
+    contact_page_title = models.CharField(max_length=180, default="Tell us what you’re building.")
+    contact_page_intro = models.TextField(
+        default="Share a few details and our team will use them to shape the right next conversation."
+    )
+    contact_service_areas_heading = models.CharField(max_length=100, default="Proudly serving")
+    contact_service_areas = models.TextField(
+        default="Ventura County\nSanta Barbara County\nLos Angeles County", blank=True
+    )
+    contact_form_kicker = models.CharField(max_length=100, default="Request an estimate")
+    contact_form_title = models.CharField(max_length=180, default="A better first step.")
+    contact_form_intro = models.TextField(
+        default="Your request is securely saved for the Grand Coast team to review. We’ll follow up with a clear next step."
+    )
+    contact_form_privacy_note = models.CharField(max_length=180, default="Private request · No payment required")
+    contact_form_footer_note = models.CharField(max_length=180, default="Your request stays with Grand Coast.")
+    contact_direct_heading = models.CharField(max_length=100, default="Contact us directly")
+    contact_phone = models.CharField(max_length=40, blank=True, default="(805) 718-1502")
+    contact_email = models.EmailField(blank=True, default="kevin@grandcoastconstruction.com")
+    contact_instagram_url = models.URLField(
+        blank=True,
+        max_length=500,
+        default="https://www.instagram.com/grandcoastconstruction/?igsh=MzRIODBiNWFIZA%3D%3D",
+    )
+    contact_success_message = models.CharField(
+        max_length=240, default="Thanks for sharing your project. We will be in touch soon."
+    )
+    contact_form_submit_label = models.CharField(max_length=80, default="Send request")
+    contact_form_labels = models.JSONField(default=dict, blank=True)
+    contact_form_help = models.JSONField(default=dict, blank=True)
     google_places_display_name = models.CharField(max_length=180, blank=True)
     google_places_rating = models.DecimalField(max_digits=2, decimal_places=1, null=True, blank=True)
     google_places_review_count = models.PositiveIntegerField(null=True, blank=True)
@@ -1068,7 +1138,7 @@ class Service(models.Model):
     title = models.CharField(max_length=120)
     description = models.TextField()
     image_path = models.CharField(max_length=255, blank=True)
-    image = models.FileField(upload_to="services/", blank=True, validators=[validate_uploaded_media])
+    image = models.FileField(upload_to="Public Content/services/", blank=True, validators=[validate_uploaded_media])
     sort_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
 
@@ -1084,9 +1154,11 @@ class ProcessStep(models.Model):
     title = models.CharField(max_length=120)
     description = models.TextField()
     sort_order = models.PositiveIntegerField(default=0)
+    image = models.FileField(upload_to="Public Content/process-steps/", blank=True, validators=[validate_uploaded_media])
+    is_active = models.BooleanField(default=True)
 
     class Meta:
-        ordering = ["sort_order"]
+        ordering = ["sort_order", "pk"]
 
     def __str__(self):
         return self.title
@@ -1844,7 +1916,7 @@ class ProjectDocument(models.Model):
     title = models.CharField(max_length=180)
     category = models.CharField(max_length=80, default="Project document")
     description = models.TextField(blank=True)
-    file = models.FileField(upload_to="projects/documents/%Y/%m/", validators=[validate_uploaded_document])
+    file = models.FileField(upload_to="Documents and Files/projects/documents/%Y/%m/", validators=[validate_uploaded_document])
     visibility = models.CharField(max_length=20, choices=Visibility.choices, default=Visibility.INTERNAL)
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -2447,7 +2519,7 @@ class Agreement(TimeStampedModel):
     accepted_user_agent = models.CharField(max_length=500, blank=True)
     acceptance_hash = models.CharField(max_length=64, blank=True)
     signed_pdf = models.FileField(
-        upload_to="projects/agreements/%Y/%m/",
+        upload_to="Documents and Files/projects/agreements/%Y/%m/",
         blank=True,
         validators=[validate_signed_pdf],
     )
@@ -2755,7 +2827,7 @@ class CostEntry(TimeStampedModel):
     incurred_on = models.DateField(default=timezone.localdate)
     source = models.CharField(max_length=40, default="manual")
     receipt = models.FileField(
-        upload_to="projects/receipts/%Y/%m/",
+        upload_to="Documents and Files/projects/receipts/%Y/%m/",
         blank=True,
         validators=[validate_construction_document],
     )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from functools import update_wrapper
 from urllib.parse import urlencode
 from datetime import timedelta
@@ -45,7 +46,6 @@ from .forms import (
 from .models import AdminAccessBlock, AdminSecurityEvent
 from .services import record_activity
 from .security import (
-    ADMIN_RECOVERY_ATTEMPT_LIMIT,
     ADMIN_GATE_PENDING_PIN,
     ADMIN_GATE_NEXT,
     ADMIN_OTP_ENROLLMENT_DEVICE,
@@ -59,10 +59,11 @@ from .security import (
     clear_mobile_owner_session,
     clear_gate,
     clear_otp_challenge,
-    clear_recovery_failures,
     consume_admin_recovery_token,
     confirmed_totp_device,
     create_admin_recovery_token,
+    admin_password_attempt_allowed,
+    admin_recovery_request_allowed,
     client_ip,
     find_admin_recovery_token,
     gate_is_valid,
@@ -75,12 +76,9 @@ from .security import (
     pending_otp_next,
     pending_otp_user,
     pin_is_enabled,
-    PasswordResetThrottleMixin,
     register_gate_failure,
     register_otp_failure,
-    register_recovery_failure,
     record_admin_security_event,
-    recovery_is_locked,
     remove_totp_devices,
     reset_admin_security,
     revoke_user_sessions,
@@ -91,6 +89,8 @@ from .security import (
 )
 from .turnstile import is_mobile_webview
 
+
+logger = logging.getLogger(__name__)
 
 
 class GrandCoastAdminLoginView(LoginView):
@@ -107,6 +107,13 @@ class GrandCoastAdminLoginView(LoginView):
                     detail="The source IP is blocked from administration access.",
                 )
             return HttpResponseForbidden("Administration access is restricted.")
+        if request.method == "POST" and not admin_password_attempt_allowed(
+            request,
+            request.POST.get("username", ""),
+        ):
+            form = self.get_form()
+            form.add_error(None, "Too many sign-in attempts. Try again in 15 minutes.")
+            return self.render_to_response(self.get_context_data(form=form), status=429)
         return super().dispatch(request, *args, **kwargs)
 
     def form_invalid(self, form):
@@ -191,8 +198,7 @@ class GrandCoastAdminLoginView(LoginView):
         return gate_next(self.request)
 
 
-class GrandCoastAdminPasswordResetView(PasswordResetThrottleMixin, PasswordResetView):
-    password_reset_reject_unknown_email = True
+class GrandCoastAdminPasswordResetView(PasswordResetView):
     form_class = AdminPasswordResetForm
     template_name = "admin/password_reset_form.html"
     email_template_name = "admin/password_reset_email.txt"
@@ -213,7 +219,9 @@ class GrandCoastAdminPasswordResetView(PasswordResetThrottleMixin, PasswordReset
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
-        users = tuple(form.get_users(form.cleaned_data["email"]))
+        email = form.cleaned_data["email"].strip()
+        allowed = admin_recovery_request_allowed(self.request, email)
+        users = tuple(form.get_users(email))
         if not users:
             record_admin_security_event(
                 self.request,
@@ -221,7 +229,21 @@ class GrandCoastAdminPasswordResetView(PasswordResetThrottleMixin, PasswordReset
                 attempted_identifier=form.cleaned_data.get("email", ""),
                 detail="The email does not match an active administrator.",
             )
-        return super().form_valid(form)
+        if users and allowed:
+            try:
+                form.save(
+                    use_https=self.request.is_secure(),
+                    token_generator=self.token_generator,
+                    from_email=self.from_email,
+                    email_template_name=self.email_template_name,
+                    subject_template_name=self.subject_template_name,
+                    request=self.request,
+                    html_email_template_name=self.html_email_template_name,
+                    extra_email_context=self.extra_email_context,
+                )
+            except Exception:
+                logger.exception("Admin password reset email could not be sent.")
+        return HttpResponseRedirect(self.get_success_url())
 
 
 class GrandCoastAdminPasswordResetConfirmView(PasswordResetConfirmView):
@@ -690,78 +712,26 @@ class GrandCoastAdminSite(UnfoldAdminSite):
                 )
             return HttpResponseForbidden("Administration access is restricted.")
         form = AdminRecoveryRequestForm(request.POST or None)
-        if recovery_is_locked(request):
-            return self._render_admin_page(
-                request,
-                "admin/recovery.html",
-                {
-                    "title": "Recover administration access",
-                    "site_title": self.site_title,
-                    "form": form,
-                    "locked": True,
-                },
-                status=429,
-            )
         if request.method == "POST" and form.is_valid():
             email = form.cleaned_data["email"].strip()
+            allowed = admin_recovery_request_allowed(request, email)
             admin_user = get_user_model().objects.filter(
                 email__iexact=email,
                 is_active=True,
                 is_staff=True,
                 is_superuser=True,
             ).first()
-            if admin_user is not None and admin_user.email:
-                clear_recovery_failures(request)
-                create_admin_recovery_token(request, admin_user)
-            else:
-                attempts = register_recovery_failure(request)
+            if admin_user is not None and admin_user.email and allowed:
+                try:
+                    create_admin_recovery_token(request, admin_user)
+                except Exception:
+                    logger.exception("Admin security recovery email could not be sent.")
+            elif admin_user is None:
                 record_admin_security_event(
                     request,
                     AdminSecurityEvent.EventType.RECOVERY_FAILURE,
                     attempted_identifier=form.cleaned_data.get("email", ""),
                     detail="The email does not match an active administrator.",
-                )
-                if recovery_is_locked(request):
-                    return self._render_admin_page(
-                        request,
-                        "admin/recovery.html",
-                        {
-                            "title": "Recover administration access",
-                            "site_title": self.site_title,
-                            "form": form,
-                            "locked": True,
-                        },
-                        status=429,
-                    )
-                remaining = ADMIN_RECOVERY_ATTEMPT_LIMIT - attempts
-                attempt_word = "attempt" if remaining == 1 else "attempts"
-                form.add_error(
-                    "email",
-                    (
-                        "That email does not match an active administrator account. "
-                        f"You have {remaining} {attempt_word} remaining."
-                    ),
-                )
-                return self._render_admin_page(
-                    request,
-                    "admin/recovery.html",
-                    {
-                        "title": "Recover administration access",
-                        "site_title": self.site_title,
-                        "form": form,
-                    },
-                )
-            if recovery_is_locked(request):
-                return self._render_admin_page(
-                    request,
-                    "admin/recovery.html",
-                    {
-                        "title": "Recover administration access",
-                        "site_title": self.site_title,
-                        "form": form,
-                        "locked": True,
-                    },
-                    status=429,
                 )
             return self._render_admin_page(
                 request,

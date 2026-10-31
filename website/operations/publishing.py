@@ -2,6 +2,7 @@
 
 from django.core.exceptions import ValidationError
 from django.urls import reverse
+from django.templatetags.static import static
 from django.utils import timezone
 
 from .models import MediaAsset, MediaPublication, WebsiteGalleryPost
@@ -60,6 +61,19 @@ def website_post_presentation(post, *, preview=False):
             "asset_id": asset.pk,
             "media_type": asset.media_type,
             "display_url": reverse("operations:media-file", kwargs={"pk": asset.pk}),
+            "poster_url": (
+                reverse(
+                    "operations:website-post-poster",
+                    kwargs={"pk": post.pk, "asset_id": asset.pk},
+                )
+                + (
+                    f"?preview=1&v={int(post.updated_at.timestamp())}"
+                    if preview
+                    else f"?v={int(post.updated_at.timestamp())}"
+                )
+                if slide.get("poster_image") and asset.media_type == MediaAsset.MediaType.VIDEO
+                else static("operations/images/video-poster-placeholder.svg")
+            ),
             "alt_text": data.get("title") or "Project photo or video",
         })
     return {

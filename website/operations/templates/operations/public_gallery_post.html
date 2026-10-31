@@ -10,7 +10,7 @@
             {% for slide in post.slides %}
             <div class="public-post-slide" data-gallery-slide role="group" aria-roledescription="slide" aria-label="{{ forloop.counter }} of {{ post.slides|length }}" aria-hidden="{% if forloop.first %}false{% else %}true{% endif %}" {% if not forloop.first %}hidden{% endif %}>
                 {% if slide.media_type == 'video' %}
-                <video src="{{ slide.display_url }}" controls preload="metadata" aria-label="{{ slide.alt_text }}"></video>
+                <video src="{{ slide.display_url }}" poster="{{ slide.poster_url }}" controls preload="metadata" aria-label="{{ slide.alt_text }}"></video>
                 {% else %}
                 <img src="{{ slide.display_url }}" alt="{{ slide.alt_text }}" {% if not forloop.first %}loading="lazy"{% endif %}>
                 {% endif %}

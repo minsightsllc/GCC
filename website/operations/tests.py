@@ -250,7 +250,7 @@ class OperationsWorkflowTests(TestCase):
         )
         self.assertRedirects(response, reverse("operations:contact"))
         attachment = LeadAttachment.objects.get(lead__email="reference.uploader@example.com")
-        self.assertTrue(attachment.file.name.startswith("contact-form/"))
+        self.assertTrue(attachment.file.name.startswith("Documents and Files/contact-form/"))
         self.assertTrue((TEST_MEDIA_ROOT / Path(*attachment.file.name.split("/"))).exists())
 
     def test_contact_form_accepts_documents_and_admin_can_view_message_and_file(self):

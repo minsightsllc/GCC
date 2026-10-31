@@ -17,9 +17,11 @@ from .construction_policies import can_view_media
 from .forms import MediaUploadForm
 from .models import (
     Client,
+    Lead,
     MediaAsset,
     MediaPublication,
     Project,
+    ProcessStep,
     Service,
     SiteSettings,
     WebsiteGalleryPost,
@@ -195,6 +197,87 @@ class PublishingWorkflowTests(TestCase):
         response = self.browser.get(reverse("operations:projects"))
         self.assertContains(response, "Live title")
         self.assertNotContains(response, "Draft title")
+
+    def test_video_poster_draft_stays_private_until_republished(self):
+        from io import BytesIO
+
+        from PIL import Image
+
+        video = MediaAsset.objects.create(
+            project=self.project,
+            title="Project walkthrough",
+            media_type=MediaAsset.MediaType.VIDEO,
+            fallback_image="operations/images/project-bathroom.png",
+        )
+        video.file.save(
+            "walkthrough.mp4",
+            SimpleUploadedFile("walkthrough.mp4", b"video data", content_type="video/mp4"),
+            save=True,
+        )
+        WebsiteGalleryPost.objects.create(
+            project=self.project,
+            title="Project walkthrough",
+        )
+        post = WebsiteGalleryPost.objects.get(project=self.project)
+        WebsiteGalleryPostItem.objects.create(post=post, asset=video, sort_order=0)
+        self.login_owner()
+
+        def poster_upload(name, color):
+            output = BytesIO()
+            Image.new("RGB", (4, 3), color).save(output, format="JPEG")
+            return SimpleUploadedFile(name, output.getvalue(), content_type="image/jpeg")
+
+        prefix = f"post-{post.pk}"
+        update_url = reverse("operations:website-post-update", args=[post.pk])
+
+        def save_post(action, poster=None):
+            data = {
+                "website_project": str(self.project.pk),
+                "action": action,
+                f"{prefix}-title": "Project walkthrough",
+                f"{prefix}-caption": "",
+                f"{prefix}-label": "",
+                f"{prefix}-layout": WebsiteGalleryPost.Layout.SPLIT,
+                f"{prefix}-accent": WebsiteGalleryPost.Accent.GOLD,
+                f"{prefix}-items_to_keep": str(video.pk),
+                f"{prefix}-slide_order_{video.pk}": "0",
+            }
+            if poster:
+                data[f"{prefix}-slide_poster_{video.pk}"] = poster
+            return self.browser.post(update_url, data)
+
+        response = save_post("publish", poster_upload("opening.jpg", (200, 40, 30)))
+        self.assertEqual(response.status_code, 302)
+        post.refresh_from_db()
+        live_poster = post.published_data["slides"][0]["poster_image"]
+        self.assertTrue(live_poster)
+
+        response = save_post("save", poster_upload("draft.jpg", (30, 80, 200)))
+        self.assertEqual(response.status_code, 302)
+        post.refresh_from_db()
+        item = post.items.get(asset=video)
+        draft_poster = item.poster_image.name
+        self.assertNotEqual(draft_poster, live_poster)
+        self.assertEqual(post.published_data["slides"][0]["poster_image"], live_poster)
+
+        poster_url = reverse(
+            "operations:website-post-poster",
+            kwargs={"pk": post.pk, "asset_id": video.pk},
+        )
+        preview_response = self.browser.get(f"{poster_url}?preview=1")
+        self.assertEqual(preview_response.status_code, 200)
+        self.assertEqual(preview_response["Content-Type"], "image/jpeg")
+        public_response = self.browser.get(poster_url)
+        self.assertEqual(public_response.status_code, 200)
+        self.assertEqual(public_response["Content-Type"], "image/jpeg")
+
+        response = save_post("publish")
+        self.assertEqual(response.status_code, 302)
+        post.refresh_from_db()
+        self.assertEqual(post.published_data["slides"][0]["poster_image"], draft_poster)
+        public_response = self.browser.get(poster_url)
+        self.assertEqual(public_response.status_code, 200)
+        self.assertEqual(public_response["Content-Type"], "image/jpeg")
 
     def test_client_shares_do_not_move_to_a_different_client(self):
         publish(self.publication("client"))
@@ -589,6 +672,135 @@ class PublishingWorkflowTests(TestCase):
         response = self.browser.get(reverse("operations:services"))
         self.assertContains(response, "Our services")
         self.assertContains(response, "Your next project starts here.")
+
+    def test_process_page_steps_are_editable_ordered_and_shared_with_home(self):
+        self.login_owner()
+        response = self.browser.post(reverse("operations:content-update"), {
+            "content_page": "process",
+            "process_page_title": "A thoughtful process",
+            "process_page_intro": "Clear stages and steady communication.",
+        })
+        self.assertEqual(response.status_code, 302)
+
+        first = self.browser.post(reverse("operations:process-step-add"), {
+            "new-process-step-title": "Plan the work",
+            "new-process-step-description": "Confirm the scope and next steps.",
+            "new-process-step-image": SimpleUploadedFile(
+                "plan.png", b"\x89PNG\r\n\x1a\nprocess-step-image", content_type="image/png"
+            ),
+            "new-process-step-is_active": "on",
+        })
+        self.assertEqual(first.status_code, 302)
+        plan = ProcessStep.objects.get(title="Plan the work")
+
+        second = self.browser.post(reverse("operations:process-step-add"), {
+            "new-process-step-title": "Build with care",
+            "new-process-step-description": "Keep the project moving with clear updates.",
+            "new-process-step-is_active": "on",
+        })
+        self.assertEqual(second.status_code, 302)
+        build = ProcessStep.objects.get(title="Build with care")
+
+        response = self.browser.post(reverse("operations:process-step-move", args=[build.pk]), {"direction": "up"})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(list(ProcessStep.objects.values_list("title", flat=True)), [
+            "Build with care", "Plan the work",
+        ])
+
+        self.browser.logout()
+        response = self.browser.get(reverse("operations:process"))
+        self.assertContains(response, "A thoughtful process")
+        self.assertContains(response, "Clear stages and steady communication.")
+        self.assertLess(response.content.index(b"Build with care"), response.content.index(b"Plan the work"))
+        image_url = reverse("operations:process-step-image", args=[plan.pk])
+        self.assertContains(response, image_url)
+        image_response = self.browser.get(image_url)
+        self.assertEqual(image_response.status_code, 200)
+        self.assertEqual(b"".join(image_response.streaming_content), b"\x89PNG\r\n\x1a\nprocess-step-image")
+
+        response = self.browser.get(reverse("operations:home"))
+        self.assertContains(response, "Build with care")
+        self.assertNotContains(response, image_url)
+
+        self.login_owner()
+        hidden = self.browser.post(reverse("operations:process-step-save", args=[plan.pk]), {
+            f"process-step-{plan.pk}-title": "Plan the work",
+            f"process-step-{plan.pk}-description": "Confirm the scope and next steps.",
+        })
+        self.assertEqual(hidden.status_code, 302)
+        plan.refresh_from_db()
+        self.assertFalse(plan.is_active)
+        self.browser.logout()
+        response = self.browser.get(reverse("operations:process"))
+        self.assertNotContains(response, "Plan the work")
+        self.assertContains(response, "Build with care")
+
+        self.login_owner()
+        deleted = self.browser.post(reverse("operations:process-step-remove", args=[plan.pk]))
+        self.assertEqual(deleted.status_code, 302)
+        self.assertFalse(ProcessStep.objects.filter(pk=plan.pk).exists())
+
+    def test_contact_content_updates_public_copy_footer_and_lead_capture(self):
+        self.login_owner()
+        response = self.browser.post(reverse("operations:content-update"), {
+            "content_page": "contact",
+            "contact_page_kicker": "Start a conversation",
+            "contact_page_title": "Tell us about your next project.",
+            "contact_page_intro": "We will help you find a clear next step.",
+            "contact_service_areas_heading": "Serving the coast",
+            "contact_service_areas": "North Coast\nCentral Valley",
+            "contact_direct_heading": "Call our team",
+            "contact_phone": "(805) 555-0199",
+            "contact_email": "hello@example.test",
+            "contact_instagram_url": "https://instagram.com/grandcoast",
+            "contact_form_kicker": "Estimate request",
+            "contact_form_title": "Start with the basics.",
+            "contact_form_intro": "Tell us what you are planning.",
+            "contact_form_privacy_note": "Your inquiry is private.",
+            "contact_form_footer_note": "We will follow up soon.",
+            "contact_form_submit_label": "Request a conversation",
+            "contact_success_message": "Your request is on its way.",
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.browser.logout()
+        response = self.browser.get(reverse("operations:contact"))
+        self.assertContains(response, "Tell us about your next project.")
+        self.assertContains(response, "Serving the coast")
+        self.assertContains(response, "North Coast")
+        self.assertContains(response, "Central Valley")
+        self.assertContains(response, 'href="tel:8055550199"')
+        self.assertContains(response, 'href="mailto:hello@example.test"')
+        self.assertContains(response, 'href="https://instagram.com/grandcoast"')
+        self.assertContains(response, "Call our team")
+        self.assertContains(response, "First name")
+        self.assertContains(response, "Tell us about the project")
+        self.assertContains(response, "We will follow up soon.")
+        form = response.context["contact_form"]
+        self.assertEqual(list(form.fields), [
+            "first_name", "last_name", "email", "phone", "project_type", "location", "message", "photos",
+        ])
+        self.assertEqual(
+            {name for name, field in form.fields.items() if field.required},
+            {"first_name", "last_name", "email", "project_type", "location", "message"},
+        )
+
+        response = self.browser.post(reverse("operations:contact"), {
+            "first_name": "Alex",
+            "last_name": "Visitor",
+            "email": "alex@example.test",
+            "phone": "805-555-0100",
+            "project_type": "Kitchen renovation",
+            "location": "Ventura",
+            "message": "We would like to discuss a remodel.",
+        }, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Your request is on its way.")
+        lead = Lead.objects.get(email="alex@example.test")
+        self.assertEqual(lead.name, "Alex Visitor")
+        self.assertEqual(lead.service, "Kitchen renovation")
+        self.assertEqual(lead.location, "Ventura")
+        self.assertEqual(lead.note, "We would like to discuss a remodel.")
 
     @patch("operations.views._notify_project_client")
     def test_legacy_migration_preserves_destinations_without_alerts(self, notify):

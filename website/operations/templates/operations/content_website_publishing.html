@@ -1,34 +1,54 @@
+{% load static %}
 <section class="content-page-panel content-projects-panel" id="publish-page-projects" aria-labelledby="publish-projects-title">
     <header class="content-page-heading">
         <div>
             <span class="section-kicker">Projects</span>
             <h3 id="publish-projects-title">Projects</h3>
-            <p>Build one public post from a set of photos and videos. Client Media stays separate.</p>
+            <p>Publish photo and video posts on the public Projects page.</p>
         </div>
         <a class="button button-outline" href="{% url 'operations:projects' %}" target="_blank" rel="noopener">Open public Projects page &rarr;</a>
     </header>
 
+    <section class="website-past-project-create" aria-labelledby="website-past-project-title">
+        <div>
+            <span class="section-kicker">Past work</span>
+            <h3 id="website-past-project-title">Add a past project</h3>
+            <p>Name the public gallery grouping for work completed before this system was in use. This creates a portfolio entry only; it does not create a client or operational job.</p>
+        </div>
+        <form class="workspace-form website-past-project-form" method="post" action="{% url 'operations:website-past-project-create' %}">
+            {% csrf_token %}
+            <input type="hidden" name="content_page_focus" value="projects">
+            {% if website_project %}<input type="hidden" name="website_project" value="{{ website_project.pk }}">{% endif %}
+            <div class="form-field">
+                <label for="{{ website_past_project_create_form.title.id_for_label }}">{{ website_past_project_create_form.title.label }}{{ website_past_project_create_form.title }}</label>
+                {% if website_past_project_create_form.title.help_text %}<small class="field-help">{{ website_past_project_create_form.title.help_text }}</small>{% endif %}
+                {{ website_past_project_create_form.title.errors }}
+            </div>
+            <button class="button button-primary" type="submit">Add past project</button>
+        </form>
+    </section>
+
     {% if website_projects %}
     <form class="website-project-picker" method="get" aria-label="Choose a project gallery">
         <input type="hidden" name="content_page_focus" value="projects">
-        <label class="form-field" for="website-project-picker">Project<select id="website-project-picker" name="website_project">{% for project in website_projects %}<option value="{{ project.pk }}" {% if website_project.pk == project.pk %}selected{% endif %}>{{ project.title }}</option>{% endfor %}</select></label>
-        <button class="button button-outline" type="submit">Load project</button>
+        <label class="form-field" for="website-project-picker">Or choose an existing project<select id="website-project-picker" name="website_project">{% for project in website_projects %}<option value="{{ project.pk }}" {% if website_project.pk == project.pk %}selected{% endif %}>{% if project.is_portfolio_only %}Past project: {% endif %}{{ project.title }}</option>{% endfor %}</select></label>
+        <button class="button button-outline" type="submit">Load gallery</button>
     </form>
 
     {% if website_project %}
     <div class="website-publishing-workflow" data-website-publishing-workflow>
         <section class="website-selected-project" aria-label="Selected project gallery">
             <div>
-                <span class="section-kicker">Selected project</span>
+                <span class="section-kicker">{% if website_project.is_portfolio_only %}Past project gallery{% else %}Existing project gallery{% endif %}</span>
                 <h3>{{ website_project.title }}</h3>
-                <p class="detail-value">Each post can contain up to 20 ordered photos or videos, shown with previous and next arrows.</p>
+                <p class="detail-value">Across all projects: {{ website_post_count }} of {{ website_post_limit }} posts used. Each post can include up to {{ website_max_slides_per_post }} photos or videos.</p>
             </div>
         </section>
 
         <div class="website-gallery-toolbar">
             <div>
                 <h3>Project posts</h3>
-                <p class="detail-value">One post title and caption describe all its slides.</p>
+                <p class="detail-value">One title and caption describe the whole post. Posts appear in list order; use Move up or Move down to rearrange them.</p>
             </div>
             <form class="website-gallery-filter" method="get">
                 <input type="hidden" name="website_project" value="{{ website_project.pk }}">
@@ -39,16 +59,17 @@
         </div>
 
         <div class="website-media-library-shell" data-website-media-library>
+            {% if website_can_create_post %}
             <section class="website-post-create-panel" aria-labelledby="website-post-create-title">
                 <div class="website-post-step-heading">
                     <span class="website-upload-step-number">+</span>
                     <div>
                         <span class="section-kicker">New post</span>
                         <h3 id="website-post-create-title">Create a project post</h3>
-                        <p>Choose the slides, describe the post, then choose its appearance.</p>
+                        <p>Choose media, add post details, then set its appearance.</p>
                     </div>
                 </div>
-                <form id="website-post-create-form" class="workspace-form website-post-form" method="post" action="{% url 'operations:website-post-create' %}" enctype="multipart/form-data" novalidate data-website-post-create>
+                <form id="website-post-create-form" class="workspace-form website-post-form" method="post" action="{% url 'operations:website-post-create' %}" enctype="multipart/form-data" novalidate data-website-post-create data-website-poster-prefix="{{ website_post_create_form.new_poster_prefix }}" data-website-poster-placeholder="{% static 'operations/images/video-poster-placeholder.svg' %}">
                     {% csrf_token %}
                     <input type="hidden" name="website_project" value="{{ website_project.pk }}">
                     <input type="hidden" name="website_state" value="{{ website_post_state }}">
@@ -56,40 +77,50 @@
                     <input type="hidden" name="content_page_focus" value="projects">
                     <div class="website-post-response-error" data-website-post-response-errors role="alert" hidden></div>
                     {{ website_post_create_form.non_field_errors }}
+                    <div class="website-video-poster-inputs" hidden>
+                        {% for poster_field in website_post_create_form.new_poster_fields %}{{ poster_field }}{% endfor %}
+                    </div>
 
                     <fieldset class="website-post-slides-setup">
-                        <legend>Step 1 · Choose photos and videos</legend>
-                        <p class="field-help website-post-step-help">Files you select below become slides in this post. Remove a new upload here before saving, or check existing project files to add them. Files left out stay in the project and are not deleted.</p>
+                        <legend>Step 1 · Select slides</legend>
+                        <p class="field-help website-post-step-help">Choose up to {{ website_max_slides_per_post }} photos or videos. New uploads can be up to {{ website_max_upload_mb }} MB each; unused files stay in the project.</p>
                         <div class="workspace-form-grid">
                             <div class="form-field publication-wide">
-                                <label for="{{ website_post_create_form.files.id_for_label }}">Choose new photos or videos{{ website_post_create_form.files }}</label>
+                                <label for="{{ website_post_create_form.files.id_for_label }}">Upload new photos or videos{{ website_post_create_form.files }}</label>
                                 {% if website_post_create_form.files.help_text %}<small class="field-help">{{ website_post_create_form.files.help_text }}</small>{% endif %}
                                 {{ website_post_create_form.files.errors }}
                                 <div class="website-post-file-review" data-website-post-file-review data-empty-message="No new files selected." aria-live="polite"><span>No new files selected.</span></div>
                             </div>
                             {% if website_post_create_form.existing_assets.field.queryset.exists %}
                             <div class="form-field publication-wide website-existing-assets">
-                                <strong class="website-post-field-title">Or add existing website files</strong>
-                                <p class="field-help">Only files set up for website publishing appear here. Remove takes a file out of this list and website publishing; its original and any Client Media share stay unchanged.</p>
-                                <ul class="website-existing-asset-list">
-                                    {% for choice in website_post_create_form.existing_assets %}
-                                    <li>
-                                        <label for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>
-                                        <button class="text-link-button website-existing-asset-remove" type="submit" name="website_asset_remove" value="{{ choice.data.value }}" aria-label="Remove {{ choice.choice_label }} from Publish Content" data-website-asset-remove-trigger>Remove</button>
+                                <strong class="website-post-field-title">Add existing website files</strong>
+                                <p class="field-help">Remove files from website publishing; originals and Client Media shares stay.</p>
+                                    <ul class="website-existing-asset-list">
+                                    {% for row in website_post_create_form.existing_asset_rows %}
+                                    <li data-existing-website-asset="{{ row.asset.pk }}">
+                                        <label for="{{ row.choice.id_for_label }}">{{ row.choice.tag }}<span>{{ row.choice.choice_label }}</span></label>
+                                        {% if row.is_video %}
+                                        {{ row.poster_field }}
+                                        <div class="website-video-capture-tools" data-existing-video-tools data-poster-input-name="{{ row.poster_field.html_name }}" data-poster-placeholder="{{ row.placeholder_url }}" hidden>
+                                            <video src="{{ row.display_url }}" poster="{{ row.placeholder_url }}" controls preload="none" aria-label="Preview {{ row.asset.title }} to select a thumbnail" data-video-poster-capture></video>
+                                            <button class="button button-quiet" type="button" data-capture-video-frame>Use current frame as thumbnail</button>
+                                            <small class="field-help" data-poster-capture-status>Optional. The placeholder is used until you capture a frame.</small>
+                                        </div>
+                                        {% endif %}
+                                        <button class="text-link-button website-existing-asset-remove" type="submit" name="website_asset_remove" value="{{ row.asset.pk }}" aria-label="Remove {{ row.choice.choice_label }} from Publish Content" data-website-asset-remove-trigger>Remove</button>
                                     </li>
                                     {% endfor %}
                                 </ul>
                                 {{ website_post_create_form.existing_assets.errors }}
                             </div>
                             {% else %}
-                            <p class="field-help publication-wide">There are no other website files available to add. Upload a new file above to add it to this post.</p>
+                            <p class="field-help publication-wide">No existing website files to add. Upload a new file above.</p>
                             {% endif %}
                         </div>
                     </fieldset>
 
                     <fieldset class="website-post-settings">
-                        <legend>Step 2 · Add the post title and caption</legend>
-                        <p class="field-help website-post-step-help">One title and caption appear with the whole slideshow, not separately on each photo or video.</p>
+                        <legend>Step 2 · Post details</legend>
                         <div class="workspace-form-grid">
                             {% for field in website_post_create_form %}
                             {% if field.name == 'title' or field.name == 'caption' or field.name == 'label' or field.name == 'show_client_name' %}
@@ -107,10 +138,10 @@
                     </fieldset>
 
                     <fieldset class="website-post-settings">
-                        <legend>Step 3 · Set the post appearance and order</legend>
+                        <legend>Step 3 · Appearance</legend>
                         <div class="workspace-form-grid">
                             {% for field in website_post_create_form %}
-                            {% if field.name == 'layout' or field.name == 'accent' or field.name == 'sort_order' %}
+                            {% if field.name == 'layout' or field.name == 'accent' %}
                             <div class="form-field">
                                 <label for="{{ field.id_for_label }}">{{ field.label }}{{ field }}</label>
                                 {% if field.help_text %}<small class="field-help">{{ field.help_text }}</small>{% endif %}
@@ -124,10 +155,19 @@
                     <div class="detail-actions website-post-actions">
                             <button class="button button-quiet" type="submit" name="action" value="save">Save draft</button>
                         <button class="button button-primary" type="submit" name="action" value="publish">Publish post</button>
-                            <span class="field-help">A saved draft is private. Publish it when it is ready for the public Projects page.</span>
+                            <span class="field-help">Drafts stay private until published.</span>
                     </div>
                 </form>
             </section>
+            {% else %}
+            <section class="website-post-create-panel website-post-limit-notice" aria-live="polite">
+                <span class="section-kicker">Post limit reached</span>
+                <h3>{{ website_post_count }} of {{ website_post_limit }} total posts used</h3>
+                {{ website_post_create_form.non_field_errors }}
+                {{ website_post_create_form.files.errors }}
+                <p>Drafts count toward the limit. Delete an existing draft, or unpublish and then delete a live post, to make room. Original files remain in the project.</p>
+            </section>
+            {% endif %}
 
             <div class="website-post-list" data-website-post-list>
                 {% for post in website_post_rows %}
@@ -136,9 +176,24 @@
                         <div>
                             <span class="section-kicker">Project post</span>
                             <h3>{{ post.title }}</h3>
-                            <p>{{ post.draft_slide_count }} slide{{ post.draft_slide_count|pluralize }} in the saved post</p>
+                            <p>{{ post.draft_slide_count }} slide{{ post.draft_slide_count|pluralize }}</p>
                         </div>
-                        <span class="status-badge">{% if post.is_live %}Published{% if post.has_draft_changes %} &middot; Draft changes{% endif %}{% else %}Draft{% endif %}</span>
+                        <div class="website-post-editor-tools">
+                            <span class="status-badge">{% if post.is_live %}Published{% if post.has_draft_changes %} &middot; Draft changes{% endif %}{% else %}Draft{% endif %}</span>
+                            {% if website_post_state == 'all' %}
+                            <form class="website-post-order-actions" method="post" action="{% url 'operations:website-post-move' pk=post.pk %}" data-publication-save>
+                                {% csrf_token %}
+                                <input type="hidden" name="website_project" value="{{ website_project.pk }}">
+                                <input type="hidden" name="website_state" value="{{ website_post_state }}">
+                                <input type="hidden" name="website_page" value="{{ website_post_page.number }}">
+                                <input type="hidden" name="content_page_focus" value="projects">
+                                <button class="button button-quiet" type="submit" name="direction" value="up" aria-label="Move {{ post.title }} up" {% if not post.can_move_up %}disabled{% endif %}>↑ <span>Move up</span></button>
+                                <button class="button button-quiet" type="submit" name="direction" value="down" aria-label="Move {{ post.title }} down" {% if not post.can_move_down %}disabled{% endif %}>↓ <span>Move down</span></button>
+                            </form>
+                            {% else %}
+                            <small class="field-help">Choose All posts to reorder.</small>
+                            {% endif %}
+                        </div>
                     </header>
 
                     <div class="website-post-editor-preview">
@@ -149,7 +204,7 @@
                         {% endif %}
                     </div>
 
-                    <form class="workspace-form website-post-form" method="post" action="{% url 'operations:website-post-update' pk=post.pk %}" enctype="multipart/form-data" novalidate data-website-post-save>
+                    <form class="workspace-form website-post-form" method="post" action="{% url 'operations:website-post-update' pk=post.pk %}" enctype="multipart/form-data" novalidate data-website-post-save data-website-poster-prefix="{{ post.form.new_poster_prefix }}" data-website-poster-placeholder="{% static 'operations/images/video-poster-placeholder.svg' %}">
                         {% csrf_token %}
                         <input type="hidden" name="website_project" value="{{ website_project.pk }}">
                         <input type="hidden" name="website_state" value="{{ website_post_state }}">
@@ -157,45 +212,74 @@
                         <input type="hidden" name="content_page_focus" value="projects">
                         <div class="website-post-response-error" data-website-post-response-errors role="alert" hidden></div>
                         {{ post.form.non_field_errors }}
+                        <div class="website-video-poster-inputs" hidden>
+                            {% for poster_field in post.form.new_poster_fields %}{{ poster_field }}{% endfor %}
+                        </div>
 
                         <fieldset class="website-post-slides-setup">
-                            <legend>Step 1 · Choose photos and videos</legend>
+                            <legend>Step 1 · Select slides</legend>
                             <p class="field-help website-post-step-help">
-                                {% if post.is_live %}Uncheck a slide to remove it from the next version, then republish. Saving draft changes alone keeps the current public post unchanged.{% else %}Uncheck a slide and save the draft to remove it from this post. Its original file stays in the project and can be reused.{% endif %}
+                                {% if post.is_live %}Uncheck a slide to remove it when you republish. Save draft keeps edits private; republish updates the live post. The original file stays in the project.{% else %}Choose which files belong in this post and move them to set their order. Removing a slide keeps its original in the project.{% endif %}
                             </p>
                             {% if post.items_for_editor %}
                             <div class="website-post-slide-list">
                                 {% for slide in post.items_for_editor %}
-                                <article class="website-post-slide-row{% if not slide.is_in_draft %} is-removed-from-draft{% endif %}">
-                                    <div class="website-post-slide-thumb">
-                                        {% if slide.asset.media_type == 'video' %}<video src="{{ slide.display_url }}" controls preload="metadata"></video>{% else %}<img src="{{ slide.display_url }}" alt="{{ slide.asset.title }}" loading="lazy">{% endif %}
+                                <article class="website-post-slide-row{% if slide.asset.media_type == 'video' and slide.poster_field %} has-poster{% endif %}{% if not slide.is_in_draft %} is-removed-from-draft{% endif %}">
+                                    <div class="website-post-slide-media">
+                                        <div class="website-post-slide-thumb">
+                                            {% if slide.asset.media_type == 'video' %}
+                                            <video src="{{ slide.display_url }}" poster="{{ slide.poster_preview_url }}" controls preload="metadata" data-video-poster-capture></video>
+                                            {% else %}<img src="{{ slide.display_url }}" alt="{{ slide.asset.title }}" loading="lazy">{% endif %}
+                                        </div>
                                     </div>
                                     <div class="website-post-slide-info">
                                         <strong>{{ slide.asset.title }}</strong>
-                                        <small>{% if post.is_live %}{% if slide.is_in_draft and slide.is_in_live %}Included in the live post and saved draft{% elif slide.is_in_draft %}Added to the draft; not public until republished{% elif slide.is_in_live %}Removed from the draft; still public until republished{% else %}Not included in the live post or saved draft{% endif %}{% elif slide.is_in_draft %}Included in this draft{% else %}Excluded from this draft; the original file is available to reuse{% endif %}</small>
-                                        <label class="form-check" for="{{ slide.keep_checkbox.id_for_label }}">{{ slide.keep_checkbox }}<span><strong>{% if post.is_live %}Include in the next version{% else %}Keep in this post{% endif %}</strong><small class="field-help">Uncheck to remove this slide; the original file is kept.</small></span></label>
-                                        <label class="form-field website-slide-order" for="{{ slide.order_field.id_for_label }}">Slide order{{ slide.order_field }}</label>
+                                        <small>{% if post.is_live %}{% if slide.is_in_draft and slide.is_in_live %}Live and draft{% elif slide.is_in_draft %}Draft only{% elif slide.is_in_live %}Live until republished{% else %}Not in the post{% endif %}{% elif slide.is_in_draft %}In draft{% else %}Not in draft; original remains available{% endif %}</small>
+                                        <div class="website-post-slide-keep">{{ slide.keep_checkbox }}</div>
+                                        <div class="website-slide-order-actions" role="group" aria-label="Reorder {{ slide.asset.title }}">
+                                            <button class="button button-quiet" type="button" data-website-slide-move="up" {% if forloop.first %}disabled{% endif %} aria-label="Move {{ slide.asset.title }} up">↑ <span>Move up</span></button>
+                                            <button class="button button-quiet" type="button" data-website-slide-move="down" {% if forloop.last %}disabled{% endif %} aria-label="Move {{ slide.asset.title }} down">↓ <span>Move down</span></button>
+                                        </div>
+                                        {% if slide.asset.media_type == 'video' and slide.poster_field %}
+                                        <button class="button button-quiet website-slide-thumbnail-action" type="button" data-capture-video-frame data-poster-input-name="{{ slide.poster_field.html_name }}" data-poster-placeholder="{% static 'operations/images/video-poster-placeholder.svg' %}">Set thumbnail from current frame</button>
+                                        {% endif %}
+                                        {{ slide.order_field }}
                                         {{ slide.order_field.errors }}
                                     </div>
+                                    {% if slide.asset.media_type == 'video' and slide.poster_field %}
+                                    <div class="website-slide-poster-editor">
+                                        {{ slide.poster_field }}
+                                        <strong>Video thumbnail</strong>
+                                        <small class="field-help" data-poster-capture-status role="status" aria-live="polite">Pause the video on the left on the frame you want, then use the button below the slide controls. {% if post.is_live %}Save draft keeps the current live thumbnail; republish applies this change.{% else %}Save draft or publish to use this thumbnail.{% endif %}</small>
+                                    </div>
+                                    {% endif %}
                                 </article>
                                 {% endfor %}
                             </div>
-                            {% else %}<div class="media-empty-state"><strong>No slides in this draft</strong><p>Add photos or videos below. Original files are kept even when removed from a post.</p></div>{% endif %}
+                            {% else %}<div class="media-empty-state"><strong>No slides in this draft</strong><p>Add photos or videos below. Original files stay in the project.</p></div>{% endif %}
 
                             <div class="workspace-form-grid website-post-add-slides">
                                 <div class="form-field publication-wide">
-                                    <label for="{{ post.form.files.id_for_label }}">Add new photos or videos{{ post.form.files }}</label>{{ post.form.files.errors }}
+                                    <label for="{{ post.form.files.id_for_label }}">Upload more photos or videos{{ post.form.files }}</label>{{ post.form.files.errors }}
                                     <div class="website-post-file-review" data-website-post-file-review data-empty-message="No new files selected." aria-live="polite"><span>No new files selected.</span></div>
                                 </div>
                                 {% if post.form.existing_assets.field.queryset.exists %}
                                 <div class="form-field publication-wide website-existing-assets">
-                                    <strong class="website-post-field-title">Or add existing website files</strong>
-                                    <p class="field-help">Only files set up for website publishing appear here. Remove takes a file out of this list and website publishing; its original and any Client Media share stay unchanged.</p>
+                                    <strong class="website-post-field-title">Add existing website files</strong>
+                                    <p class="field-help">Remove files from website publishing; originals and Client Media shares stay.</p>
                                     <ul class="website-existing-asset-list">
-                                        {% for choice in post.form.existing_assets %}
-                                        <li>
-                                            <label for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>
-                                            <button class="text-link-button website-existing-asset-remove" type="submit" name="website_asset_remove" value="{{ choice.data.value }}" aria-label="Remove {{ choice.choice_label }} from Publish Content" data-website-asset-remove-trigger>Remove</button>
+                                        {% for row in post.form.existing_asset_rows %}
+                                        <li{% if row.is_video %} class="website-existing-asset-video"{% endif %} data-existing-website-asset="{{ row.asset.pk }}">
+                                            <label for="{{ row.choice.id_for_label }}">{{ row.choice.tag }}<span>{{ row.choice.choice_label }}</span></label>
+                                            {% if row.is_video %}
+                                            {{ row.poster_field }}
+                                            <div class="website-video-capture-tools" data-existing-video-tools data-poster-input-name="{{ row.poster_field.html_name }}" data-poster-placeholder="{{ row.placeholder_url }}" hidden>
+                                                <video src="{{ row.display_url }}" poster="{{ row.placeholder_url }}" controls preload="none" aria-label="Preview {{ row.asset.title }} to select a thumbnail" data-video-poster-capture></video>
+                                                <button class="button button-quiet" type="button" data-capture-video-frame>Set thumbnail from current frame</button>
+                                                <small class="field-help" data-poster-capture-status role="status" aria-live="polite">Play or scrub the video, pause on the frame you want, then set it as the thumbnail.</small>
+                                            </div>
+                                            {% endif %}
+                                            <button class="text-link-button website-existing-asset-remove" type="submit" name="website_asset_remove" value="{{ row.asset.pk }}" aria-label="Remove {{ row.choice.choice_label }} from Publish Content" data-website-asset-remove-trigger>Remove</button>
                                         </li>
                                         {% endfor %}
                                     </ul>
@@ -209,8 +293,7 @@
                         </fieldset>
 
                         <fieldset class="website-post-settings">
-                            <legend>Step 2 · Edit the post title and caption</legend>
-                            <p class="field-help website-post-step-help">These details apply to every slide in this post.</p>
+                        <legend>Step 2 · Post details</legend>
                             <div class="workspace-form-grid">
                                 {% for field in post.form %}
                                 {% if field.name == 'title' or field.name == 'caption' or field.name == 'label' or field.name == 'show_client_name' %}
@@ -228,10 +311,10 @@
                         </fieldset>
 
                         <fieldset class="website-post-settings">
-                            <legend>Step 3 · Edit the appearance and order</legend>
+                        <legend>Step 3 · Appearance</legend>
                             <div class="workspace-form-grid">
                                 {% for field in post.form %}
-                                {% if field.name == 'layout' or field.name == 'accent' or field.name == 'sort_order' %}
+                                {% if field.name == 'layout' or field.name == 'accent' %}
                                 <div class="form-field">
                                     <label for="{{ field.id_for_label }}">{{ field.label }}{{ field }}</label>
                                     {% if field.help_text %}<small class="field-help">{{ field.help_text }}</small>{% endif %}
@@ -291,6 +374,6 @@
     </div>
     {% endif %}
     {% else %}
-    <div class="media-empty-state website-no-projects"><strong>No projects to publish yet</strong><p>Create an operational project first, then add its photos and videos here.</p><a class="button button-primary" href="{% url 'operations:dashboard-section' section='projects' %}">Open Projects</a></div>
+    <div class="media-empty-state website-no-projects"><strong>No existing projects yet</strong><p>Add a past project above to start its public gallery. Projects created in the operations system will also be available here.</p></div>
     {% endif %}
 </section>

@@ -251,10 +251,11 @@ STATICFILES_BACKEND = (
     else 'django.contrib.staticfiles.storage.StaticFilesStorage'
 )
 
-# User uploads (including contact-form attachments) use MEDIA_ROOT locally
-# and Supabase in production. The only development opt-in is the isolated
-# provider-certification runner, which exercises Supabase against disposable
-# data without changing normal local development behavior.
+# User uploads use MEDIA_ROOT locally and Supabase in production. Ordinary
+# model FileFields (project media, services, process steps, documents, etc.)
+# use STORAGES["default"]; contact-form attachments use the matching dedicated
+# alias. The only development opt-in is the isolated provider-certification
+# runner, which uses disposable data without changing normal local behavior.
 MEDIA_URL = '/media/'
 MEDIA_ROOT = _simulation_media_root or Path(
     _configured_media_root or (BASE_DIR / 'media')
@@ -341,6 +342,19 @@ if USE_SUPABASE_STORAGE:
     AWS_S3_FILE_OVERWRITE = False
     AWS_DEFAULT_ACL = None
     AWS_QUERYSTRING_AUTH = True
+
+# Keep the environment-selected backend (local /media or Supabase) underneath
+# a shared sanitizer so every photo/video is cleaned before its one storage
+# write, including direct FileField and client-upload paths.
+for _upload_storage_alias in ('default', 'contact_submissions'):
+    _upload_storage = STORAGES[_upload_storage_alias]
+    STORAGES[_upload_storage_alias] = {
+        'BACKEND': 'operations.storage.MetadataStrippingStorage',
+        'OPTIONS': {
+            'backend': _upload_storage['BACKEND'],
+            'options': _upload_storage.get('OPTIONS', {}),
+        },
+    }
 
 LOGIN_URL = 'operations:login'
 LOGIN_REDIRECT_URL = 'operations:dashboard'

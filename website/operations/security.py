@@ -17,8 +17,10 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.contrib.sessions.models import Session
 from django.core.mail import send_mail
-from django.db import transaction
+from django.db import DatabaseError, IntegrityError, transaction
+from django.http import HttpResponseRedirect
 from django.urls import reverse
+from django.utils.crypto import salted_hmac
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django_otp import login as otp_login
@@ -29,6 +31,7 @@ from .models import (
     AdminRecoveryToken,
     AdminSecurityEvent,
     AdminSecurityProfile,
+    APIRateLimitBucket,
     CALENDAR_TIME_ZONE,
 )
 
@@ -47,10 +50,6 @@ ADMIN_OTP_PENDING_NEXT = "gccad_otp_pending_next"
 ADMIN_OTP_ATTEMPTS = "gccad_otp_attempts"
 ADMIN_OTP_VERIFIED_USER = "gccad_otp_verified_user"
 ADMIN_OTP_ENROLLMENT_DEVICE = "gccad_otp_enrollment_device"
-ADMIN_RECOVERY_ATTEMPTS = "gccad_recovery_attempts"
-ADMIN_RECOVERY_LOCKED_UNTIL = "gccad_recovery_locked_until"
-PASSWORD_RESET_ATTEMPTS = "password_reset_attempts"
-PASSWORD_RESET_LOCKED_UNTIL = "password_reset_locked_until"
 MOBILE_OWNER_MODE = "gcc_mobile_owner_mode"
 MOBILE_OWNER_USER_ID = "gcc_mobile_owner_user_id"
 MOBILE_OWNER_PENDING_USER = "gcc_mobile_owner_pending_user"
@@ -64,11 +63,13 @@ MOBILE_OWNER_OTP_LOCKED_UNTIL = "gcc_mobile_owner_otp_locked_until"
 ADMIN_GATE_TTL = timedelta(minutes=10)
 ADMIN_RECOVERY_TTL = timedelta(minutes=30)
 ADMIN_RECOVERY_LOCKOUT = timedelta(minutes=15)
+ADMIN_PASSWORD_ATTEMPT_LIMIT = 10
+ADMIN_PASSWORD_ATTEMPT_WINDOW = timedelta(minutes=15)
+ADMIN_RECOVERY_ACCOUNT_LIMIT = 3
+ADMIN_RECOVERY_SOURCE_LIMIT = 10
+ADMIN_RECOVERY_RATE_WINDOW = timedelta(hours=1)
 ADMIN_PIN_ATTEMPT_LIMIT = 5
 ADMIN_OTP_ATTEMPT_LIMIT = 5
-ADMIN_RECOVERY_ATTEMPT_LIMIT = 5
-PASSWORD_RESET_ATTEMPT_LIMIT = 5
-PASSWORD_RESET_LOCKOUT = timedelta(minutes=15)
 MOBILE_OWNER_CHALLENGE_TTL = timedelta(minutes=10)
 MOBILE_OWNER_ATTEMPT_LIMIT = 5
 MOBILE_OWNER_LOCKOUT = timedelta(minutes=15)
@@ -146,6 +147,104 @@ def client_ip(request):
         if candidate not in _trusted_proxy_ips():
             return candidate
     return forwarded_ips[0]
+
+
+def _admin_rate_bucket_identity(namespace, subject):
+    digest = salted_hmac(
+        "operations.admin_rate_limit",
+        f"{namespace}:{subject}",
+    ).hexdigest()
+    return f"gcc-admin:{namespace}:{digest}"
+
+
+def _locked_admin_rate_bucket(identity, now):
+    try:
+        return APIRateLimitBucket.objects.select_for_update().get(identity=identity)
+    except APIRateLimitBucket.DoesNotExist:
+        try:
+            with transaction.atomic():
+                return APIRateLimitBucket.objects.create(
+                    identity=identity,
+                    window_started_at=now,
+                )
+        except IntegrityError:
+            return APIRateLimitBucket.objects.select_for_update().get(identity=identity)
+
+
+def _consume_admin_rate_buckets(specs):
+    """Consume fixed-window counters for admin auth, storing only HMAC identities."""
+    buckets = {}
+    for namespace, subject, limit, window in specs:
+        identity = _admin_rate_bucket_identity(namespace, subject)
+        buckets[identity] = (max(1, int(limit)), window)
+
+    now = timezone.now()
+    try:
+        with transaction.atomic():
+            locked = {
+                identity: _locked_admin_rate_bucket(identity, now)
+                for identity in sorted(buckets)
+            }
+            allowed = True
+            for identity, bucket in locked.items():
+                limit, window = buckets[identity]
+                if now >= bucket.window_started_at + window:
+                    bucket.window_started_at = now
+                    bucket.request_count = 0
+                if bucket.request_count >= limit:
+                    allowed = False
+
+            for identity, bucket in locked.items():
+                limit, _window = buckets[identity]
+                if bucket.request_count < limit:
+                    bucket.request_count += 1
+                bucket.save(update_fields=["window_started_at", "request_count", "updated_at"])
+        return allowed
+    except DatabaseError:
+        logger.exception("Admin authentication rate-limit storage is unavailable.")
+        return False
+
+
+def admin_password_attempt_allowed(request, identifier):
+    """Allow at most ten admin password submissions per account and source per 15 minutes."""
+    normalized_identifier = " ".join(str(identifier or "").split()).casefold() or "<empty>"
+    admin_user = resolve_admin_identifier(identifier)
+    account_subject = (
+        f"user:{admin_user.pk}"
+        if admin_user is not None
+        else f"identifier:{normalized_identifier}"
+    )
+    source_subject = client_ip(request) or "unknown"
+    return _consume_admin_rate_buckets(
+        (
+            ("admin-login-account", account_subject, ADMIN_PASSWORD_ATTEMPT_LIMIT, ADMIN_PASSWORD_ATTEMPT_WINDOW),
+            ("admin-login-source", source_subject, ADMIN_PASSWORD_ATTEMPT_LIMIT, ADMIN_PASSWORD_ATTEMPT_WINDOW),
+        )
+    )
+
+
+def admin_recovery_request_allowed(request, email):
+    """Limit syntactically valid admin recovery requests by email and source IP."""
+    normalized_email = (email or "").strip().casefold() or "<empty>"
+    source_subject = client_ip(request) or "unknown"
+    return _consume_admin_rate_buckets(
+        (
+            ("admin-recovery-account", normalized_email, ADMIN_RECOVERY_ACCOUNT_LIMIT, ADMIN_RECOVERY_RATE_WINDOW),
+            ("admin-recovery-source", source_subject, ADMIN_RECOVERY_SOURCE_LIMIT, ADMIN_RECOVERY_RATE_WINDOW),
+        )
+    )
+
+
+def public_password_reset_request_allowed(request, email):
+    """Limit public account-reset emails by address and source without exposing matches."""
+    normalized_email = (email or "").strip().casefold() or "<empty>"
+    source_subject = client_ip(request) or "unknown"
+    return _consume_admin_rate_buckets(
+        (
+            ("public-password-reset-account", normalized_email, 3, ADMIN_RECOVERY_RATE_WINDOW),
+            ("public-password-reset-source", source_subject, 10, ADMIN_RECOVERY_RATE_WINDOW),
+        )
+    )
 
 
 def admin_ip_block(request):
@@ -613,11 +712,6 @@ def totp_manual_key(device):
 @transaction.atomic
 def create_admin_recovery_token(request, user):
     now = timezone.now()
-    AdminRecoveryToken.objects.filter(
-        user=user,
-        purpose=AdminRecoveryToken.Purpose.SECURITY_RESET,
-        used_at__isnull=True,
-    ).update(used_at=now)
     raw_token = secrets.token_urlsafe(32)
     token = AdminRecoveryToken.objects.create(
         user=user,
@@ -655,46 +749,33 @@ def find_admin_recovery_token(raw_token):
 @transaction.atomic
 def consume_admin_recovery_token(raw_token):
     token_hash = hashlib.sha256((raw_token or "").encode("utf-8")).hexdigest()
+    candidate = AdminRecoveryToken.objects.filter(
+        token_hash=token_hash,
+        purpose=AdminRecoveryToken.Purpose.SECURITY_RESET,
+    ).first()
+    if candidate is None:
+        return None
+    # Serialize consumption across separate links for the same account. This
+    # keeps two concurrent valid links from both resetting security settings.
+    user = get_user_model().objects.select_for_update().filter(pk=candidate.user_id).first()
+    if user is None:
+        return None
     token = (
         AdminRecoveryToken.objects.select_for_update()
-        .select_related("user")
-        .filter(
-            token_hash=token_hash,
-            purpose=AdminRecoveryToken.Purpose.SECURITY_RESET,
-        )
+        .filter(pk=candidate.pk)
         .first()
     )
-    if token is None or not token.is_usable or not is_active_admin(token.user):
+    if token is None or not token.is_usable or not is_active_admin(user):
         return None
-    token.used_at = timezone.now()
+    now = timezone.now()
+    token.used_at = now
     token.save(update_fields=["used_at"])
+    AdminRecoveryToken.objects.filter(
+        user=token.user,
+        purpose=AdminRecoveryToken.Purpose.SECURITY_RESET,
+        used_at__isnull=True,
+    ).exclude(pk=token.pk).update(used_at=now)
     return token
-
-
-def recovery_is_locked(request):
-    locked_until = request.session.get(ADMIN_RECOVERY_LOCKED_UNTIL)
-    if not locked_until:
-        return False
-    try:
-        locked = float(locked_until) > timezone.now().timestamp()
-    except (TypeError, ValueError):
-        locked = False
-    if not locked:
-        request.session.pop(ADMIN_RECOVERY_LOCKED_UNTIL, None)
-        request.session.pop(ADMIN_RECOVERY_ATTEMPTS, None)
-        request.session.modified = True
-    return locked
-
-
-def register_recovery_failure(request):
-    attempts = int(request.session.get(ADMIN_RECOVERY_ATTEMPTS, 0)) + 1
-    request.session[ADMIN_RECOVERY_ATTEMPTS] = attempts
-    if attempts >= ADMIN_RECOVERY_ATTEMPT_LIMIT:
-        request.session[ADMIN_RECOVERY_LOCKED_UNTIL] = (
-            timezone.now() + ADMIN_RECOVERY_LOCKOUT
-        ).timestamp()
-    request.session.modified = True
-    return attempts
 
 
 def _mobile_owner_factor_keys(factor):
@@ -817,86 +898,27 @@ def is_mobile_owner_session(request):
     )
 
 
-def clear_recovery_failures(request):
-    request.session.pop(ADMIN_RECOVERY_ATTEMPTS, None)
-    request.session.pop(ADMIN_RECOVERY_LOCKED_UNTIL, None)
-    request.session.modified = True
-
-
-def password_reset_is_locked(request):
-    locked_until = request.session.get(PASSWORD_RESET_LOCKED_UNTIL)
-    if not locked_until:
-        return False
-    try:
-        locked = float(locked_until) > timezone.now().timestamp()
-    except (TypeError, ValueError):
-        locked = False
-    if not locked:
-        request.session.pop(PASSWORD_RESET_LOCKED_UNTIL, None)
-        request.session.pop(PASSWORD_RESET_ATTEMPTS, None)
-        request.session.modified = True
-    return locked
-
-
-def register_password_reset_failure(request):
-    attempts = int(request.session.get(PASSWORD_RESET_ATTEMPTS, 0)) + 1
-    request.session[PASSWORD_RESET_ATTEMPTS] = attempts
-    if attempts >= PASSWORD_RESET_ATTEMPT_LIMIT:
-        request.session[PASSWORD_RESET_LOCKED_UNTIL] = (
-            timezone.now() + PASSWORD_RESET_LOCKOUT
-        ).timestamp()
-    request.session.modified = True
-    return attempts
-
-
-def clear_password_reset_failures(request):
-    request.session.pop(PASSWORD_RESET_ATTEMPTS, None)
-    request.session.pop(PASSWORD_RESET_LOCKED_UNTIL, None)
-    request.session.modified = True
-
-
 class PasswordResetThrottleMixin:
-    password_reset_reject_unknown_email = False
-
-    def _password_reset_locked_response(self, form=None):
-        return self.render_to_response(
-            self.get_context_data(
-                form=form or self.get_form(),
-                password_reset_locked=True,
-            ),
-            status=429,
-        )
-
-    def get(self, request, *args, **kwargs):
-        if password_reset_is_locked(request):
-            return self._password_reset_locked_response()
-        return super().get(request, *args, **kwargs)
-
-    def post(self, request, *args, **kwargs):
-        if password_reset_is_locked(request):
-            return self._password_reset_locked_response()
-        return super().post(request, *args, **kwargs)
-
     def form_valid(self, form):
-        users = tuple(form.get_users(form.cleaned_data["email"]))
-        if users:
-            clear_password_reset_failures(self.request)
-        else:
-            attempts = register_password_reset_failure(self.request)
-            if password_reset_is_locked(self.request):
-                return self._password_reset_locked_response(form)
-            if self.password_reset_reject_unknown_email:
-                remaining = PASSWORD_RESET_ATTEMPT_LIMIT - attempts
-                attempt_word = "attempt" if remaining == 1 else "attempts"
-                form.add_error(
-                    "email",
-                    (
-                        "That email does not match an active administrator account. "
-                        f"You have {remaining} {attempt_word} remaining."
-                    ),
+        allowed = public_password_reset_request_allowed(
+            self.request,
+            form.cleaned_data["email"],
+        )
+        if allowed:
+            try:
+                form.save(
+                    use_https=self.request.is_secure(),
+                    token_generator=self.token_generator,
+                    from_email=self.from_email,
+                    email_template_name=self.email_template_name,
+                    subject_template_name=self.subject_template_name,
+                    request=self.request,
+                    html_email_template_name=self.html_email_template_name,
+                    extra_email_context=self.extra_email_context,
                 )
-                return self.form_invalid(form)
-        return super().form_valid(form)
+            except Exception:
+                logger.exception("Public password reset email could not be sent.")
+        return HttpResponseRedirect(self.get_success_url())
 
 
 def revoke_user_sessions(user):

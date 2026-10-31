@@ -266,7 +266,7 @@ def _search_documents(term: str) -> list[SearchResult]:
 
 def _search_projects(term: str) -> list[SearchResult]:
     projects = (
-        Project.objects.select_related('client', 'lead')
+        Project.objects.filter(is_portfolio_only=False).select_related('client', 'lead')
         .filter(
             _contains(
                 term,
