@@ -4,6 +4,89 @@ import uuid
 from django.db import migrations, models
 
 
+class AlterEmployeeNotificationId(migrations.AlterField):
+    """Convert the legacy integer key without relying on PostgreSQL's cast."""
+
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        connection = schema_editor.connection
+        if connection.vendor != "postgresql":
+            return super().database_forwards(
+                app_label, schema_editor, from_state, to_state
+            )
+
+        notification_model = from_state.apps.get_model(
+            app_label, self.model_name
+        )
+        push_delivery_model = from_state.apps.get_model(
+            app_label, "PushDelivery"
+        )
+        notification_table = schema_editor.quote_name(notification_model._meta.db_table)
+        notification_id = schema_editor.quote_name(
+            notification_model._meta.pk.column
+        )
+        delivery_table = schema_editor.quote_name(push_delivery_model._meta.db_table)
+        delivery_notification_id = schema_editor.quote_name(
+            push_delivery_model._meta.get_field("notification").column
+        )
+
+        with connection.cursor() as cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor, push_delivery_model._meta.db_table
+            )
+            notification_fks = [
+                name
+                for name, details in constraints.items()
+                if details.get("foreign_key")
+                == (notification_model._meta.db_table, notification_model._meta.pk.column)
+            ]
+
+            for constraint_name in notification_fks:
+                cursor.execute(
+                    f"ALTER TABLE {delivery_table} DROP CONSTRAINT "
+                    f"{schema_editor.quote_name(constraint_name)}"
+                )
+
+            # Newer PostgreSQL versions create BigAutoField columns as identity
+            # columns. Remove that property before changing the column's type.
+            cursor.execute(
+                f"ALTER TABLE {notification_table} ALTER COLUMN {notification_id} "
+                "DROP IDENTITY IF EXISTS"
+            )
+            cursor.execute(
+                f"ALTER TABLE {notification_table} ALTER COLUMN {notification_id} DROP DEFAULT"
+            )
+            cursor.execute(
+                f"ALTER TABLE {notification_table} ALTER COLUMN {notification_id} "
+                "TYPE uuid USING "
+                f"md5('grandcoast:employee-notification:' || {notification_id}::text)::uuid"
+            )
+            cursor.execute(
+                f"ALTER TABLE {delivery_table} ALTER COLUMN {delivery_notification_id} "
+                "TYPE uuid USING "
+                f"md5('grandcoast:employee-notification:' || "
+                f"{delivery_notification_id}::text)::uuid"
+            )
+
+            for constraint_name in notification_fks:
+                cursor.execute(
+                    f"ALTER TABLE {delivery_table} ADD CONSTRAINT "
+                    f"{schema_editor.quote_name(constraint_name)} "
+                    f"FOREIGN KEY ({delivery_notification_id}) "
+                    f"REFERENCES {notification_table} ({notification_id}) "
+                    "ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED"
+                )
+
+    def database_backwards(self, app_label, schema_editor, from_state, to_state):
+        if schema_editor.connection.vendor == "postgresql":
+            raise migrations.IrreversibleError(
+                "Employee notification UUIDs cannot be converted back to their "
+                "original integer IDs."
+            )
+        return super().database_backwards(
+            app_label, schema_editor, from_state, to_state
+        )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -11,7 +94,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterField(
+        AlterEmployeeNotificationId(
             model_name='employeenotification',
             name='id',
             field=models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False),

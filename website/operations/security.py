@@ -134,19 +134,32 @@ def _forwarded_client_ips(request):
 
 
 def client_ip(request):
-    """Return the normalized client address without trusting spoofable headers."""
+    """Return the visitor IP, consulting forwarding headers only behind a trusted proxy.
+
+    Render's Cloudflare edge supplies CF-Connecting-IP with the original visitor
+    address. The forwarded chain can also contain rotating private proxy hops, so
+    skip non-global addresses when resolving its right-hand side.
+    """
     remote_ip = _normalize_ip_address(request.META.get("REMOTE_ADDR"))
     if not remote_ip or remote_ip not in _trusted_proxy_ips():
         return remote_ip
+
+    cloudflare_ip = _forwarded_ip_value(request.META.get("HTTP_CF_CONNECTING_IP", ""))
+    if cloudflare_ip and ipaddress.ip_address(cloudflare_ip).is_global:
+        return cloudflare_ip
 
     forwarded_ips = _forwarded_client_ips(request)
     if not forwarded_ips:
         return remote_ip
 
     for candidate in [remote_ip, *reversed(forwarded_ips)]:
-        if candidate not in _trusted_proxy_ips():
+        if candidate in _trusted_proxy_ips():
+            continue
+        # Render's forwarding chain may include private addresses for internal
+        # load balancers. Those are proxy hops, not public visitor addresses.
+        if ipaddress.ip_address(candidate).is_global:
             return candidate
-    return forwarded_ips[0]
+    return remote_ip
 
 
 def _admin_rate_bucket_identity(namespace, subject):
