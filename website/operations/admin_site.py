@@ -658,7 +658,15 @@ class GrandCoastAdminSite(UnfoldAdminSite):
 
         form = AdminOtpForm(request.POST or None)
         if request.method == "POST" and form.is_valid():
-            if device.verify_token(form.cleaned_data["token"]):
+            verification_error = False
+            try:
+                verified = device.verify_token(form.cleaned_data["token"])
+            except Exception:
+                logger.exception("Administrator authenticator verification failed unexpectedly.")
+                verified = False
+                verification_error = True
+
+            if verified:
                 next_url = pending_otp_next(request)
                 login(request, user, backend="django.contrib.auth.backends.ModelBackend")
                 mark_otp_verified(request, user, device)
@@ -672,18 +680,31 @@ class GrandCoastAdminSite(UnfoldAdminSite):
                 )
                 return redirect(next_url)
             locked = register_otp_failure(request)
-            record_admin_security_event(
-                request,
-                AdminSecurityEvent.EventType.OTP_FAILURE,
-                user=user,
-                attempted_identifier=user.username,
-                detail="The authenticator code could not be verified.",
-            )
-            form.add_error(None, "That authenticator code could not be verified.")
+            try:
+                record_admin_security_event(
+                    request,
+                    AdminSecurityEvent.EventType.OTP_FAILURE,
+                    user=user,
+                    attempted_identifier=user.username,
+                    detail=(
+                        "Authenticator verification raised an unexpected error."
+                        if verification_error
+                        else "The authenticator code could not be verified."
+                    ),
+                )
+            except Exception:
+                logger.exception("Could not record a failed administrator authenticator attempt.")
             if locked:
                 clear_otp_challenge(request)
                 clear_gate(request)
                 form.add_error(None, "Too many attempts. Start again from the private admin URL.")
+            elif verification_error:
+                form.add_error(None, "We couldn't verify your code right now. Please try again.")
+            else:
+                form.add_error(
+                    None,
+                    "That code couldn't be verified. Check that it's current in your authenticator app and try again.",
+                )
 
         return self._render_admin_page(
             request,
