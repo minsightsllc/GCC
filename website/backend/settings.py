@@ -14,6 +14,7 @@ import os
 import re
 import tempfile
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 from dotenv import load_dotenv
 
 from django.core.exceptions import ImproperlyConfigured
@@ -174,6 +175,7 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 _configured_database_path = os.getenv("GCC_DATABASE_PATH", "").strip()
 _configured_media_root = os.getenv("GCC_MEDIA_ROOT", "").strip()
+_configured_database_url = os.getenv("DATABASE_URL", "").strip()
 if GCC_SIMULATION_MODE:
     if not DEBUG:
         raise ImproperlyConfigured(
@@ -207,6 +209,39 @@ DATABASES = {
         ).expanduser(),
     }
 }
+
+# Render provides a PostgreSQL connection URL. Prefer it for normal app runs;
+# local development remains SQLite unless DATABASE_URL is explicitly set.
+# Simulation mode intentionally stays on its isolated SQLite database.
+if _configured_database_url and not GCC_SIMULATION_MODE:
+    _database_url = urlparse(_configured_database_url)
+    if _database_url.scheme not in {"postgres", "postgresql"}:
+        raise ImproperlyConfigured("DATABASE_URL must be a PostgreSQL connection URL.")
+    try:
+        _database_port = _database_url.port
+    except ValueError as exc:
+        raise ImproperlyConfigured("DATABASE_URL contains an invalid port.") from exc
+    _database_name = unquote(_database_url.path.lstrip("/"))
+    if not _database_url.hostname or not _database_name:
+        raise ImproperlyConfigured("DATABASE_URL must include a database name and host.")
+
+    # Render PostgreSQL connections require TLS. Honor an explicit URL setting
+    # when present; otherwise default to the secure mode for both internal and
+    # external Render connection URLs.
+    _database_query = parse_qs(_database_url.query)
+    _database_options = {
+        "sslmode": _database_query.get("sslmode", ["require"])[0],
+    }
+    DATABASES["default"] = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": _database_name,
+        "USER": unquote(_database_url.username or ""),
+        "PASSWORD": unquote(_database_url.password or ""),
+        "HOST": _database_url.hostname,
+        "PORT": _database_port or "",
+        "CONN_MAX_AGE": 60,
+        "OPTIONS": _database_options,
+    }
 
 
 # Password validation
