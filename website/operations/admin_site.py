@@ -30,7 +30,6 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 from unfold.sites import UnfoldAdminSite
 
 from .forms import (
-    AdminGateIdentifierForm,
     AdminIPBlockForm,
     AdminOtpForm,
     AdminPasswordResetForm,
@@ -48,6 +47,7 @@ from .services import record_activity
 from .security import (
     ADMIN_GATE_PENDING_PIN,
     ADMIN_GATE_NEXT,
+    ADMIN_GATE_PIN_AUTHENTICATED,
     ADMIN_OTP_ENROLLMENT_DEVICE,
     admin_gate_locked,
     admin_ip_block,
@@ -153,18 +153,6 @@ class GrandCoastAdminLoginView(LoginView):
             )
             form.add_error(None, form.error_messages["invalid_login"])
             return LoginView.form_invalid(self, form)
-        if not gate_is_valid(self.request, user):
-            record_admin_security_event(
-                self.request,
-                AdminSecurityEvent.EventType.ACCESS_BLOCKED,
-                outcome=AdminSecurityEvent.Outcome.BLOCKED,
-                user=user,
-                attempted_identifier=form.cleaned_data.get("username", ""),
-                detail="The administration access gate was not completed.",
-            )
-            clear_gate(self.request)
-            form.add_error(None, form.error_messages["invalid_login"])
-            return LoginView.form_invalid(self, form)
         if admin_user_block(user) is not None:
             record_admin_security_event(
                 self.request,
@@ -177,25 +165,44 @@ class GrandCoastAdminLoginView(LoginView):
             form.add_error(None, "This administrator account is currently locked.")
             return LoginView.form_invalid(self, form)
 
-        next_url = gate_next(self.request)
-        device = confirmed_totp_device(user)
-        if device is not None:
-            begin_otp_challenge(self.request, user, next_url)
-            return redirect(reverse("admin:otp"))
-
-        login(self.request, user, backend="django.contrib.auth.backends.ModelBackend")
+        next_url = self.get_success_url()
+        # Do not leave another administrator authenticated while this account's
+        # remaining factors are still pending.
+        if self.request.user.is_authenticated:
+            logout(self.request)
+        clear_gate(self.request)
+        clear_otp_challenge(self.request)
         self.request.session.pop("gccad_otp_verified_user", None)
-        record_admin_security_event(
-            self.request,
-            AdminSecurityEvent.EventType.LOGIN_SUCCESS,
-            outcome=AdminSecurityEvent.Outcome.SUCCESS,
-            user=user,
-            attempted_identifier=form.cleaned_data.get("username", ""),
-        )
-        return HttpResponseRedirect(next_url)
+        if pin_is_enabled(user):
+            self.request.session[ADMIN_GATE_PENDING_PIN] = str(user.pk)
+            self.request.session[ADMIN_GATE_PIN_AUTHENTICATED] = True
+            self.request.session[ADMIN_GATE_NEXT] = next_url
+            self.request.session.modified = True
+            return redirect("admin:access")
+        return _complete_admin_sign_in(self.request, user, next_url)
 
     def get_success_url(self):
-        return gate_next(self.request)
+        return super().get_success_url()
+
+
+def _complete_admin_sign_in(request, user, next_url):
+    """Finish sign-in after password and any configured PIN have been verified."""
+    set_gate(request, user, next_url)
+    device = confirmed_totp_device(user)
+    if device is not None:
+        begin_otp_challenge(request, user, next_url)
+        return redirect(reverse("admin:otp"))
+
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+    request.session.pop("gccad_otp_verified_user", None)
+    record_admin_security_event(
+        request,
+        AdminSecurityEvent.EventType.LOGIN_SUCCESS,
+        outcome=AdminSecurityEvent.Outcome.SUCCESS,
+        user=user,
+        attempted_identifier=user.username,
+    )
+    return HttpResponseRedirect(next_url)
 
 
 class GrandCoastAdminPasswordResetView(PasswordResetView):
@@ -295,15 +302,6 @@ class GrandCoastAdminSite(UnfoldAdminSite):
             url = f"{url}?{urlencode({REDIRECT_FIELD_NAME: next_url})}"
         return url
 
-    def _single_admin_user(self):
-        admins = list(get_user_model().objects.filter(
-            is_active=True,
-            is_staff=True,
-            is_superuser=True,
-        ))
-        return admins[0] if len(admins) == 1 else None
-
-
     def _render_admin_page(self, request, template_name, context=None, **kwargs):
         page_context = self.each_context(request)
         page_context.update(context or {})
@@ -357,16 +355,15 @@ class GrandCoastAdminSite(UnfoldAdminSite):
                 )
             return HttpResponseForbidden("Administration access is restricted.")
         requested_next = request.GET.get(REDIRECT_FIELD_NAME) or request.POST.get(REDIRECT_FIELD_NAME)
-        if not gate_is_valid(request):
-            return redirect(self._access_url(requested_next or request.get_full_path()))
         if request.method == "GET" and self.has_permission(request):
-            if has_totp_enabled(request.user) and not otp_is_verified(request, request.user):
-                logout(request)
-                clear_admin_challenges(request)
-            else:
+            if gate_is_valid(request, request.user) and (
+                not has_totp_enabled(request.user) or otp_is_verified(request, request.user)
+            ):
                 return HttpResponseRedirect(gate_next(request))
+            logout(request)
+            clear_admin_challenges(request)
 
-        redirect_url = gate_next(request)
+        redirect_url = requested_next or reverse("admin:index")
         context = {
             **self.each_context(request),
             "title": "Log in",
@@ -476,47 +473,28 @@ class GrandCoastAdminSite(UnfoldAdminSite):
             return redirect("operations:dashboard")
         if request.user.is_authenticated and not self.has_permission(request):
             return HttpResponseForbidden("Administration access is restricted.")
+        if self.has_permission(request):
+            if gate_is_valid(request, request.user) and (
+                not has_totp_enabled(request.user) or otp_is_verified(request, request.user)
+            ):
+                return redirect(gate_next(request))
+            logout(request)
+            clear_admin_challenges(request)
         if not self.has_permission(request) and admin_ip_block(request) is not None:
             if request.method == "POST":
                 record_admin_security_event(
                     request,
                     AdminSecurityEvent.EventType.ACCESS_BLOCKED,
                     outcome=AdminSecurityEvent.Outcome.BLOCKED,
-                    attempted_identifier=request.POST.get("identifier", ""),
+                    attempted_identifier=request.POST.get("username", ""),
                     detail="The source IP is blocked from administration access.",
                 )
             return HttpResponseForbidden("Administration access is restricted.")
 
         next_url = request.GET.get(REDIRECT_FIELD_NAME) or request.POST.get(REDIRECT_FIELD_NAME)
         next_url = next_url or reverse("admin:index")
-        if request.method == "GET" and request.session.get(ADMIN_GATE_PENDING_PIN) is None:
-            default_admin = self._single_admin_user()
-            if default_admin is not None:
-                if pin_is_enabled(default_admin):
-                    request.session[ADMIN_GATE_PENDING_PIN] = str(default_admin.pk)
-                    request.session[ADMIN_GATE_NEXT] = next_url
-                    request.session.modified = True
-                else:
-                    set_gate(request, default_admin, next_url)
-                    return redirect("admin:login")
-
-        if gate_is_valid(request):
-            return redirect("admin:login")
-
-        if admin_gate_locked(request):
-            return self._render_admin_page(
-                request,
-                "admin/access.html",
-                {
-                    "title": "Administration access",
-                    "site_title": self.site_title,
-                    "locked": True,
-                    "next": next_url,
-                },
-                status=429,
-            )
-
         pending_user_id = request.session.get(ADMIN_GATE_PENDING_PIN)
+        pin_was_authenticated = request.session.get(ADMIN_GATE_PIN_AUTHENTICATED) is True
         pending_user = (
             get_user_model()
             .objects.filter(
@@ -526,9 +504,30 @@ class GrandCoastAdminSite(UnfoldAdminSite):
                 is_superuser=True,
             )
             .first()
-            if pending_user_id
+            if pending_user_id and pin_was_authenticated
             else None
         )
+        if pending_user is None:
+            if pending_user_id or pin_was_authenticated:
+                clear_gate(request)
+            login_url = reverse("admin:login")
+            return redirect(f"{login_url}?{urlencode({REDIRECT_FIELD_NAME: next_url})}")
+
+        next_url = gate_next(request)
+        if admin_gate_locked(request):
+            return self._render_admin_page(
+                request,
+                "admin/access.html",
+                {
+                    "title": "Administration access",
+                    "site_title": self.site_title,
+                    "locked": True,
+                    "pin_step": True,
+                    "next": next_url,
+                },
+                status=429,
+            )
+
         if pending_user is not None:
             form = AdminPinForm(request.POST or None)
             if admin_user_block(pending_user) is not None:
@@ -555,8 +554,7 @@ class GrandCoastAdminSite(UnfoldAdminSite):
                 )
             if request.method == "POST":
                 if form.is_valid() and verify_admin_pin(pending_user, form.cleaned_data["pin"]):
-                    set_gate(request, pending_user, next_url)
-                    return redirect("admin:login")
+                    return _complete_admin_sign_in(request, pending_user, next_url)
                 if form.is_valid():
                     register_gate_failure(request)
                     record_admin_security_event(
@@ -580,47 +578,6 @@ class GrandCoastAdminSite(UnfoldAdminSite):
                     "next": next_url,
                 },
             )
-
-        form = AdminGateIdentifierForm(request.POST or None)
-        if request.method == "POST" and form.is_valid():
-            admin_user = resolve_admin_identifier(form.cleaned_data["identifier"])
-            if admin_user is None:
-                record_admin_security_event(
-                    request,
-                    AdminSecurityEvent.EventType.IDENTIFIER_FAILURE,
-                    attempted_identifier=form.cleaned_data["identifier"],
-                    detail="The identifier did not match an active administrator.",
-                )
-                form.add_error(None, "We could not verify that administration account.")
-            elif admin_user_block(admin_user) is not None:
-                record_admin_security_event(
-                    request,
-                    AdminSecurityEvent.EventType.ACCESS_BLOCKED,
-                    outcome=AdminSecurityEvent.Outcome.BLOCKED,
-                    user=admin_user,
-                    attempted_identifier=form.cleaned_data["identifier"],
-                    detail="The administrator account is locked from new administration sign-ins.",
-                )
-                form.add_error(None, "This administrator account is currently locked.")
-            elif pin_is_enabled(admin_user):
-                request.session[ADMIN_GATE_PENDING_PIN] = str(admin_user.pk)
-                request.session["gccad_gate_next"] = next_url
-                request.session.modified = True
-                return redirect(self._access_url(next_url))
-            else:
-                set_gate(request, admin_user, next_url)
-                return redirect("admin:login")
-
-        return self._render_admin_page(
-            request,
-            "admin/access.html",
-            {
-                "title": "Administration access",
-                "site_title": self.site_title,
-                "form": form,
-                "next": next_url,
-            },
-        )
 
     def otp(self, request):
         if is_mobile_webview(request) and is_mobile_owner_session(request):

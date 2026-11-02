@@ -3,15 +3,9 @@
 {% load i18n %}
 
 {% block gate_content %}
-    {% if pin_step %}
-        <span class="gcc-admin-kicker">Secure access</span>
-        <h1>Enter your PIN.</h1>
-        <p class="gcc-login-intro">Enter your six-digit administration PIN before continuing to sign in.</p>
-    {% else %}
-        <span class="gcc-admin-kicker">Private access</span>
-        <h1>Before we begin.</h1>
-        <p class="gcc-login-intro">Enter the administrator username or email to continue.</p>
-    {% endif %}
+    <span class="gcc-admin-kicker">Secure access</span>
+    <h1>Confirm your PIN.</h1>
+    <p class="gcc-login-intro">Enter the six-digit PIN for the administrator account you just verified.</p>
 
     {% if locked %}
         <div class="gcc-login-errors">
@@ -37,7 +31,7 @@
             {% endfor %}
             <input type="hidden" name="next" value="{{ next }}">
             <button class="gcc-admin-button gcc-admin-button-primary gcc-login-submit" type="submit">
-                Continue to sign in <span aria-hidden="true">&rarr;</span>
+                Continue <span aria-hidden="true">&rarr;</span>
             </button>
         </form>
     {% endif %}

@@ -43,6 +43,7 @@ ADMIN_GATE_USER_ID = "gccad_gate_user_id"
 ADMIN_GATE_EXPIRES_AT = "gccad_gate_expires_at"
 ADMIN_GATE_NEXT = "gccad_gate_next"
 ADMIN_GATE_PENDING_PIN = "gccad_gate_pending_pin"
+ADMIN_GATE_PIN_AUTHENTICATED = "gccad_gate_pin_authenticated"
 ADMIN_GATE_PIN_ATTEMPTS = "gccad_gate_pin_attempts"
 ADMIN_GATE_LOCKED_UNTIL = "gccad_gate_locked_until"
 ADMIN_OTP_PENDING_USER = "gccad_otp_pending_user"
@@ -590,6 +591,7 @@ def set_gate(request, user, next_url=None):
     request.session[ADMIN_GATE_EXPIRES_AT] = (timezone.now() + ADMIN_GATE_TTL).timestamp()
     request.session[ADMIN_GATE_NEXT] = _safe_admin_next(next_url)
     request.session.pop(ADMIN_GATE_PENDING_PIN, None)
+    request.session.pop(ADMIN_GATE_PIN_AUTHENTICATED, None)
     request.session.pop(ADMIN_GATE_PIN_ATTEMPTS, None)
     request.session.modified = True
 
@@ -600,6 +602,7 @@ def clear_gate(request):
         ADMIN_GATE_EXPIRES_AT,
         ADMIN_GATE_NEXT,
         ADMIN_GATE_PENDING_PIN,
+        ADMIN_GATE_PIN_AUTHENTICATED,
         ADMIN_GATE_PIN_ATTEMPTS,
     ):
         request.session.pop(key, None)
