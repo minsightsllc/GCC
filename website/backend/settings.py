@@ -57,6 +57,24 @@ GCC_MOBILE_OWNER_PUSH_ENABLED = _env_flag("GCC_MOBILE_OWNER_PUSH_ENABLED", False
 GCC_GOOGLE_PLACES_API_KEY = os.getenv("GCC_GOOGLE_PLACES_API_KEY", "").strip()
 GCC_GOOGLE_PLACE_ID = os.getenv("GCC_GOOGLE_PLACE_ID", "").strip()
 GCC_GOOGLE_PLACES_TIMEOUT_SECONDS = int(os.getenv("GCC_GOOGLE_PLACES_TIMEOUT_SECONDS", "8"))
+# Send the review sync diagnostics to Render's captured process output.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "google_reviews_console": {
+            "class": "logging.StreamHandler",
+            "level": "WARNING",
+        },
+    },
+    "loggers": {
+        "operations.google_reviews": {
+            "handlers": ["google_reviews_console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
+}
 # Simulation mode is separate from the execution-loop pilot. It is only valid
 # against generated database/media paths beneath the system temporary folder.
 GCC_SIMULATION_MODE = _env_flag("GCC_SIMULATION_MODE", False)

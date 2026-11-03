@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from django.conf import settings
@@ -94,6 +95,41 @@ def _request_timeout(timeout):
         return 8.0
 
 
+def _google_error_summary(body, *, http_status=None, api_key=""):
+    """Extract a safe, concise diagnostic from a Google API error response."""
+    if isinstance(body, dict):
+        payload = body
+    else:
+        try:
+            payload = json.loads(body.decode("utf-8") if isinstance(body, bytes) else body)
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+            payload = {}
+
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(error, dict):
+        provider_status = " ".join(str(error.get("status") or "").split())[:80]
+        message = " ".join(str(error.get("message") or "").split())
+        error_code = error.get("code")
+    else:
+        provider_status = ""
+        message = " ".join(str(error or "").split())
+        error_code = None
+
+    if api_key and message:
+        message = message.replace(api_key, "[redacted]")
+    message = message[:360]
+
+    status_code = http_status or error_code
+    status_code = " ".join(str(status_code or "").split())[:40]
+    status = f"HTTP {status_code}" if status_code else "request rejected"
+    if provider_status:
+        status += f", {provider_status}"
+    summary = f"Google Places rejected the request ({status})"
+    if message:
+        summary += f": {message}"
+    return summary if summary.endswith((".", "!", "?")) else summary + "."
+
+
 def fetch_google_reviews(api_key=None, place_id=None, timeout=None, opener=None):
     """Fetch and normalize the configured place's Google reviews."""
     api_key = (api_key if api_key is not None else getattr(settings, "GCC_GOOGLE_PLACES_API_KEY", "")).strip()
@@ -104,7 +140,7 @@ def fetch_google_reviews(api_key=None, place_id=None, timeout=None, opener=None)
         )
 
     request = Request(
-        GOOGLE_PLACES_ENDPOINT.format(place_id=place_id),
+        GOOGLE_PLACES_ENDPOINT.format(place_id=quote(place_id, safe="")),
         headers={
             "Accept": "application/json",
             "X-Goog-Api-Key": api_key,
@@ -116,11 +152,34 @@ def fetch_google_reviews(api_key=None, place_id=None, timeout=None, opener=None)
     try:
         with opener(request, timeout=_request_timeout(timeout)) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        logger.warning("Google Places review fetch failed: %s", exc.__class__.__name__)
+    except HTTPError as exc:
+        try:
+            error_body = exc.read(16_384)
+        except OSError:
+            error_body = b""
+        finally:
+            exc.close()
+        message = _google_error_summary(
+            error_body,
+            http_status=exc.code,
+            api_key=api_key,
+        )
+        logger.warning("Google Places review fetch failed: %s", message)
+        raise GoogleReviewsFetchError(message) from exc
+    except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        logger.warning(
+            "Google Places review fetch failed (%s): %s",
+            exc.__class__.__name__,
+            exc,
+        )
         raise GoogleReviewsFetchError("Google reviews could not be fetched right now.") from exc
 
-    if not isinstance(payload, dict) or payload.get("error"):
+    if isinstance(payload, dict) and payload.get("error"):
+        message = _google_error_summary(payload, api_key=api_key)
+        logger.warning("Google Places review fetch failed: %s", message)
+        raise GoogleReviewsFetchError(message)
+    if not isinstance(payload, dict):
+        logger.warning("Google Places review fetch returned a non-object response.")
         raise GoogleReviewsFetchError("Google reviews returned an invalid response.")
 
     fallback_maps_uri = str(payload.get("googleMapsUri") or "").strip()

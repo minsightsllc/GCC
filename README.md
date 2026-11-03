@@ -1566,7 +1566,9 @@ The public homepage can show up to five cached Google Places reviews in the sect
 immediately below the hero. Google supplies the returned relevance order; GCC does
 not rewrite review text. The existing review-link CTA remains available separately.
 
-Keep the Google Places credentials only in website/.env:
+Keep the Google Places credentials in the server environment: `website/.env` for
+local development and the Render web service environment for production. Use
+these exact variable names:
 
 ~~~dotenv
 GCC_GOOGLE_PLACES_API_KEY=your_server_side_key
@@ -1580,6 +1582,11 @@ selects “Sync Google reviews” after the values are configured. A successful 
 replaces the cache and records the last-sync time; a failed request leaves the last
 successful reviews visible. If no cache exists, the carousel stays hidden and the
 existing Google review link is still available.
+
+After adding or changing these variables in Render, redeploy the web service so
+the running Django process loads them. Google API rejection details are shown in
+the Owner sync message and recorded in the Render logs; network failures retain a
+generic message and include the failure type in the logs.
 
 Run the migration and an initial sync from the website directory:
 
