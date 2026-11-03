@@ -8,7 +8,11 @@ from urllib.parse import urlparse
 
 from django import forms
 from django.contrib.auth import get_user_model
-from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm
+from django.contrib.auth.forms import (
+    AdminUserCreationForm,
+    AuthenticationForm,
+    PasswordResetForm,
+)
 from django.contrib.auth.models import Group
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
@@ -1413,6 +1417,32 @@ class GrandCoastAdminAuthenticationForm(AuthenticationForm):
     def confirm_login_allowed(self, user):
         if not (user.is_active and user.is_staff and user.is_superuser):
             raise self.get_invalid_login_error()
+
+
+class AdminSuperuserCreationForm(AdminUserCreationForm):
+    confirm_full_access = forms.BooleanField(
+        label="I confirm this account should have full administrator access.",
+        help_text="A superuser can manage every account and all admin records.",
+        required=True,
+    )
+
+    class Meta(AdminUserCreationForm.Meta):
+        model = get_user_model()
+        fields = ("username", "email", "first_name", "last_name")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["email"].required = True
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.is_active = True
+        user.is_staff = True
+        user.is_superuser = True
+        if commit:
+            user.save()
+            self.save_m2m()
+        return user
 
 
 class AdminGateIdentifierForm(forms.Form):

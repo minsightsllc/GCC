@@ -9,7 +9,7 @@ from django.utils.html import format_html
 from unfold.admin import ModelAdmin
 
 from .admin_site import GrandCoastAdminSite
-from .forms import user_choice_label
+from .forms import AdminSuperuserCreationForm, user_choice_label
 from .models import (
     Activity,
     AdminAccessBlock,
@@ -583,6 +583,44 @@ grand_coast_admin_site.register(PushDelivery, GrandCoastModelAdmin)
 # authenticator secrets in a model form.
 class GrandCoastUserAdmin(UserAdmin):
     action_form = GrandCoastActionForm
+    add_form = AdminSuperuserCreationForm
+    change_list_template = "admin/auth/user/change_list.html"
+    show_add_link = True
+    add_fieldsets = (
+        (
+            "Superuser account",
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "username",
+                    "email",
+                    "first_name",
+                    "last_name",
+                    "password1",
+                    "password2",
+                    "confirm_full_access",
+                ),
+            },
+        ),
+    )
+    list_display = (*UserAdmin.list_display, "is_superuser")
+
+    def has_add_permission(self, request):
+        user = request.user
+        return bool(
+            user.is_authenticated
+            and user.is_active
+            and user.is_staff
+            and user.is_superuser
+            and self.has_change_permission(request)
+        )
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.is_active = True
+            obj.is_staff = True
+            obj.is_superuser = True
+        super().save_model(request, obj, form, change)
 
 
 class GrandCoastGroupAdmin(GroupAdmin):
