@@ -110,7 +110,6 @@ body.public-site main { background: var(--white); }
 .service-row:nth-child(-n+2) { border-top-color: var(--brand-blue); }
 .service-row:hover { padding: 0 12px; background: #fafbfc; }
 .service-row strong { display: block; color: var(--brand-navy); font-size: .88rem; }
-.service-row small { display: block; max-width: 350px; color: var(--muted); font-size: .72rem; line-height: 1.55; margin-top: 5px; }
 .row-arrow { color: var(--brand-gold); font-size: 1.2rem; opacity: .7; }
 .service-icon { display: inline-flex; align-items: center; justify-content: center; width: 45px; height: 45px; }
 .service-icon svg { width: 36px; height: 36px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.6; }
@@ -2657,6 +2656,11 @@ body.public-site.public-motion-ready main h1.public-heading-reveal.is-visible {
     width: max-content;
     animation: process-rail-loop var(--process-loop-duration, 24s) linear infinite;
     will-change: transform;
+}
+.process-rail-cycle {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: flex-start;
 }
 .process-rail-group {
     display: flex;

@@ -69,7 +69,7 @@
     <section class="section services-section" id="services"><div class="container">
         <div class="section-intro split-intro"><div><span class="section-kicker">What we do</span><h2>Built around your vision.</h2></div><p>From focused remodels to full project oversight, the right plan keeps every decision moving forward.</p></div>
         <div class="service-list service-list-home">
-            {% for service in services %}<a class="service-row" href="{% url 'operations:services' %}#{{ service.slug }}"><span class="service-icon {% if forloop.counter|divisibleby:2 %}icon-gold{% else %}icon-blue{% endif %}" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M7 22.5 24 8l17 14.5"/><path d="M11 20v21h26V20M19 41V28h10v13"/></svg></span><span><strong>{{ service.title }}</strong><small>{{ service.description }}</small></span><span class="row-arrow" aria-hidden="true">↗</span></a>{% endfor %}
+            {% for service in services %}<a class="service-row" href="{% url 'operations:services' %}#{{ service.slug }}"><span class="service-icon {% if forloop.counter|divisibleby:2 %}icon-gold{% else %}icon-blue{% endif %}" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M7 22.5 24 8l17 14.5"/><path d="M11 20v21h26V20M19 41V28h10v13"/></svg></span><span><strong>{{ service.title }}</strong></span><span class="row-arrow" aria-hidden="true">↗</span></a>{% endfor %}
         </div>
     </div></section>
 

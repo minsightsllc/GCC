@@ -3667,6 +3667,10 @@
         const touchQuery = window.matchMedia ? window.matchMedia("(hover: none), (pointer: coarse)") : null;
         const toggle = kiosk.querySelector("[data-process-kiosk-toggle]");
         let track = null;
+        let cycle = null;
+        let duplicateCycle = null;
+        let group = null;
+        let baseDuration = 20;
         let hoverPaused = false;
         let touchPaused = false;
         let manuallyPaused = false;
@@ -3681,35 +3685,68 @@
 
         const removeTrack = function () {
             if (!track) return;
+            if (railResizeObserver) railResizeObserver.unobserve(rail);
+            else window.removeEventListener("resize", ensureCoverage);
             steps.forEach(function (step) {
                 step.removeAttribute("aria-hidden");
                 rail.appendChild(step);
             });
             track.remove();
             track = null;
+            cycle = null;
+            duplicateCycle = null;
+            group = null;
             rail.classList.remove("is-animated");
             rail.style.removeProperty("--process-loop-duration");
         };
+
+        const makeDecorativeCopy = function (element) {
+            const copy = element.cloneNode(true);
+            copy.setAttribute("aria-hidden", "true");
+            copy.setAttribute("inert", "");
+            if (copy.matches && copy.matches("[data-process-slide]")) {
+                copy.removeAttribute("data-process-slide");
+            }
+            copy.querySelectorAll("[data-process-slide]").forEach(function (step) {
+                step.removeAttribute("data-process-slide");
+            });
+            return copy;
+        };
+
+        const ensureCoverage = function () {
+            if (!track || !cycle || !duplicateCycle || !group) return;
+            const groupWidth = group.getBoundingClientRect().width;
+            if (groupWidth <= 0) return;
+
+            const coverageWidth = Math.max(rail.clientWidth, window.innerWidth || 0, window.innerHeight || 0);
+            while (cycle.getBoundingClientRect().width < coverageWidth) {
+                cycle.appendChild(makeDecorativeCopy(group));
+                duplicateCycle.appendChild(makeDecorativeCopy(group));
+            }
+            rail.style.setProperty("--process-loop-duration", baseDuration * cycle.children.length + "s");
+        };
+
+        const railResizeObserver = window.ResizeObserver ? new window.ResizeObserver(ensureCoverage) : null;
 
         const createTrack = function () {
             if (track || !motionEnabled) return;
             track = document.createElement("div");
             track.className = "process-rail-track";
-            const group = document.createElement("div");
+            cycle = document.createElement("div");
+            cycle.className = "process-rail-cycle";
+            group = document.createElement("div");
             group.className = "process-rail-group";
             steps.forEach(function (step) { group.appendChild(step); });
-
-            const duplicate = group.cloneNode(true);
-            duplicate.setAttribute("aria-hidden", "true");
-            duplicate.setAttribute("inert", "");
-            duplicate.querySelectorAll("[data-process-slide]").forEach(function (step) {
-                step.removeAttribute("data-process-slide");
-            });
-            track.appendChild(group);
-            track.appendChild(duplicate);
+            cycle.appendChild(group);
+            duplicateCycle = makeDecorativeCopy(cycle);
+            track.appendChild(cycle);
+            track.appendChild(duplicateCycle);
             rail.replaceChildren(track);
             rail.classList.add("is-animated");
-            rail.style.setProperty("--process-loop-duration", Math.max(20, steps.length * 6) + "s");
+            baseDuration = Math.max(20, steps.length * 6);
+            ensureCoverage();
+            if (railResizeObserver) railResizeObserver.observe(rail);
+            else window.addEventListener("resize", ensureCoverage, { passive: true });
         };
 
         const applyMotionPreference = function () {
