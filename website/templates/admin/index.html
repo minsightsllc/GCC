@@ -44,7 +44,7 @@
                                 <span style='width: {{ meter.percent|floatformat:1 }}%'></span>
                             </div>
                             <div class='gcc-admin-storage-details'><span>{{ meter.remaining_gb|floatformat:2 }} GB left</span><span>{{ meter.percent|floatformat:1 }}% used</span></div>
-                            {% if meter.source == 'supabase' %}<p class='gcc-admin-storage-note'>Counts buckets in this project. Supabase's allowance is shared across the organization.</p>{% endif %}
+                            {% if meter.source == 'supabase' %}<p class='gcc-admin-storage-note'>Displays the storage usage for this website's static files.</p>{% endif %}
                         {% elif meter.source == 'supabase' %}
                             {% if meter.status == 'quota_not_configured' or meter.status == 'quota_custom' or meter.status == 'quota_unavailable' %}
                                 <p class='gcc-admin-storage-reading'><strong>{{ meter.used_gb|floatformat:2 }} GB</strong><span> currently in use</span></p>
