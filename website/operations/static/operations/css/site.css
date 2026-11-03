@@ -892,6 +892,8 @@ body.public-site main { background: var(--white); }
 .lead-trash-panel .admin-section-heading { align-items: flex-start; padding-bottom: 17px; margin-bottom: 17px; border-bottom: 1px solid var(--line); }
 .lead-trash-panel .admin-section-heading h3 { margin-top: 4px; }
 .lead-trash-panel .admin-section-heading p { margin-top: 4px; margin-bottom: 0; }
+.lead-trash-heading-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.lead-empty-trash-form { margin: 0; }
 .lead-trash-count { flex: 0 0 auto; padding: 7px 10px; color: var(--brand-navy); background: var(--white); border: 1px solid var(--line-blue); border-radius: 999px; font-size: .62rem; font-weight: 800; white-space: nowrap; }
 .lead-trash-list { display: grid; gap: 12px; }
 .lead-trash-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; min-width: 0; gap: 24px; padding: 20px; background: var(--white); border: 1px solid var(--line-blue); border-left: 3px solid #d8e0ed; border-radius: 4px; box-shadow: 0 4px 14px rgba(30, 48, 81, .04); transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
@@ -908,8 +910,9 @@ body.public-site main { background: var(--white); }
 .lead-trash-history span { display: flex; flex-direction: column; min-width: 0; gap: 3px; color: var(--muted); font-size: .57rem; line-height: 1.45; }
 .lead-trash-history strong { display: block; color: var(--brand-navy); font-size: .53rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .lead-trash-id { overflow-wrap: anywhere; }
-.lead-trash-row > form { flex: 0 0 auto; align-self: start; }
-.lead-trash-row > form .button { min-width: 124px; }
+.lead-trash-actions { display: flex; flex: 0 0 auto; flex-direction: column; align-items: stretch; gap: 8px; }
+.lead-trash-actions form { margin: 0; }
+.lead-trash-actions .button { min-width: 148px; }
 .inline-create { margin-bottom: 23px; }
 .media-upload-panel { padding: 25px; margin-bottom: 25px; background: var(--white); border: 1px solid var(--line-blue); scroll-margin-top: 110px; }
 .media-upload-heading h3 { margin: 4px 0 0; color: var(--brand-navy); font-size: 1.05rem; }
@@ -1375,12 +1378,13 @@ body.modal-open { overflow: hidden; }
     .leads-split .compact-form > .button { grid-column: auto; justify-self: stretch; }
     .lead-trash-panel { padding: 18px; }
     .lead-trash-panel .admin-section-heading { align-items: flex-start; flex-direction: column; gap: 12px; }
+    .lead-trash-heading-actions { width: 100%; justify-content: flex-start; }
     .lead-trash-count { align-self: flex-start; }
     .lead-trash-row { grid-template-columns: 1fr; }
     .lead-trash-title-row { align-items: flex-start; flex-direction: column; gap: 5px; }
     .lead-trash-details { grid-template-columns: 1fr; }
     .lead-trash-history { grid-template-columns: 1fr; }
-    .lead-trash-row > form, .lead-trash-row .button { width: 100%; }
+    .lead-trash-actions, .lead-trash-actions form, .lead-trash-actions .button, .lead-empty-trash-form, .lead-empty-trash-form .button { width: 100%; }
     .media-upload-fields { grid-template-columns: 1fr; }
     .media-upload-fields .file-drop { grid-column: auto; }
     .estimate-line-grid { grid-template-columns: 1fr 84px; }
@@ -2470,6 +2474,8 @@ body.native-media-enabled .native-media-actions {
 .website-post-delete-dialog h3 { margin: 8px 0 12px; color: var(--brand-navy); font-size: 1.45rem; }
 .website-post-delete-dialog p { margin: 0 0 22px; color: var(--muted); line-height: 1.65; }
 .website-post-delete-dialog .detail-actions { justify-content: flex-end; }
+.lead-permanent-delete-list { display: grid; max-height: min(34vh, 250px); gap: 7px; overflow-y: auto; padding: 0; margin: 0 0 18px; list-style: none; }
+.lead-permanent-delete-list li { padding: 9px 11px; color: var(--brand-navy); background: #f7f9fc; border: 1px solid #e7ecf4; border-radius: 3px; font-weight: 700; overflow-wrap: anywhere; }
 .website-post-delete-confirm { padding-top: 44px; padding-bottom: 64px; }
 .website-post-delete-confirm .content-editor-panel { max-width: 720px; padding: clamp(24px, 4vw, 44px); background: #fff; border: 1px solid var(--line-blue); border-top: 4px solid var(--danger, #a34843); }
 .website-post-delete-confirm h1 { margin: 10px 0 16px; color: var(--brand-navy); font-size: clamp(2rem, 4vw, 3.2rem); }

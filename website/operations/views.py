@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import calendar as calendar_module
 import json
-import logging
 import mimetypes
 import uuid
 from datetime import date, datetime, time, timedelta
@@ -219,7 +218,6 @@ DASHBOARD_SECTIONS = {"overview", "clients", "leads", "estimates", "projects", "
 TEAM_SECTIONS = {"overview", "projects", "tasks", "calendar", "time", "media", "profile", "notifications"}
 EMPLOYEE_GROUPS = {"Manager", "Office", "Field", "Sales"}
 LEADERSHIP_GROUPS = {"Owner", "Manager"}
-logger = logging.getLogger(__name__)
 
 
 def _prepare_client_invite_delivery(request, *, client, invite, raw_token, actor):
@@ -1363,6 +1361,7 @@ def _dashboard_context(request, section, form_overrides=None):
         "show_deleted_leads": show_deleted_leads,
         "deleted_leads": deleted_leads,
         "deleted_leads_count": deleted_leads_count,
+        "deleted_lead_ids": ",".join(str(lead.pk) for lead in deleted_leads),
         "selected_lead": selected_lead,
         "estimates": estimates,
         "selected_estimate": selected_estimate,
@@ -4133,6 +4132,64 @@ def lead_restore(request, pk):
 
 @require_POST
 @staff_required
+@transaction.atomic
+def lead_permanent_delete(request):
+    requested_ids = []
+    seen_ids = set()
+    try:
+        for submitted_value in request.POST.getlist("lead_ids"):
+            for raw_id in str(submitted_value).split(","):
+                raw_id = raw_id.strip()
+                if not raw_id:
+                    continue
+                lead_id = uuid.UUID(raw_id)
+                if lead_id not in seen_ids:
+                    requested_ids.append(lead_id)
+                    seen_ids.add(lead_id)
+    except (ValueError, TypeError, AttributeError):
+        messages.error(request, "The selected leads could not be verified. Reload Trash and try again.")
+        return _dashboard_redirect("leads", trash="1")
+
+    if not requested_ids:
+        messages.info(request, "There are no leads selected for permanent deletion.")
+        return _dashboard_redirect("leads", trash="1")
+
+    locked_leads = list(
+        Lead.objects.select_for_update()
+        .filter(pk__in=requested_ids, deleted_at__isnull=False)
+        .order_by("pk")
+    )
+    if len(locked_leads) != len(requested_ids):
+        messages.error(request, "One or more leads are no longer in Trash. Reload before deleting.")
+        return _dashboard_redirect("leads", trash="1")
+
+    leads_by_id = {lead.pk: lead for lead in locked_leads}
+    leads = [leads_by_id[lead_id] for lead_id in requested_ids]
+    if request.POST.get("confirm_delete") != "yes":
+        return render(
+            request,
+            "operations/lead_permanent_delete_confirm.html",
+            {"leads": leads, "lead_ids": ",".join(str(lead.pk) for lead in leads)},
+        )
+
+    deleted_count = len(leads)
+    for lead in leads:
+        lead.delete()
+
+    record_activity(
+        "Lead records permanently deleted",
+        f"{deleted_count} trashed lead(s)",
+        actor=request.user,
+    )
+    if deleted_count == 1:
+        messages.success(request, "Lead permanently deleted.")
+    else:
+        messages.success(request, f"{deleted_count} leads permanently deleted.")
+    return _dashboard_redirect("leads", trash="1")
+
+
+@require_POST
+@staff_required
 def lead_update_status(request, pk):
     lead = _active_lead_or_404(pk)
     form = LeadStatusForm(request.POST, instance=lead)
@@ -5918,13 +5975,6 @@ def service_save(request, pk=None):
     return _render_dashboard_form_error(request, "content", overrides)
 
 
-def _delete_service_image(storage, name):
-    try:
-        storage.delete(name)
-    except Exception:
-        logger.exception("Could not delete stored image for a removed service entry.")
-
-
 @require_POST
 @staff_required
 @transaction.atomic
@@ -5933,13 +5983,7 @@ def service_delete(request, pk):
         raise PermissionDenied
     service = get_object_or_404(Service.objects.select_for_update(), pk=pk)
     title = service.title
-    image_storage = service.image.storage if service.image else None
-    image_name = service.image.name if service.image else ""
     service.delete()
-    if image_storage and image_name:
-        transaction.on_commit(
-            lambda storage=image_storage, name=image_name: _delete_service_image(storage, name)
-        )
     record_activity("Service deleted", title, actor=request.user)
     messages.success(request, "Service deleted.")
     return _content_page_redirect("services")
@@ -5997,8 +6041,6 @@ def process_step_save(request, pk=None):
     prefix = f"process-step-{pk}" if pk else "new-process-step"
     form = ProcessStepForm(request.POST, request.FILES, instance=instance, prefix=prefix)
     if form.is_valid():
-        old_storage = instance.image.storage if instance.pk and instance.image else None
-        old_name = instance.image.name if instance.pk and instance.image else ""
         step = form.save(commit=False)
         if pk is None:
             base_key = slugify(step.title)[:32] or "step"
@@ -6011,10 +6053,6 @@ def process_step_save(request, pk=None):
             max_order = ProcessStep.objects.aggregate(max_order=Max("sort_order"))["max_order"]
             step.sort_order = (max_order if max_order is not None else -1) + 1
         step.save()
-        if old_storage and old_name and old_name != (step.image.name if step.image else ""):
-            transaction.on_commit(
-                lambda storage=old_storage, name=old_name: _delete_service_image(storage, name)
-            )
         record_activity("Process step saved", step.title, actor=request.user)
         messages.success(request, "Process step saved.")
         return _content_page_redirect("process")
@@ -6035,13 +6073,7 @@ def process_step_remove(request, pk):
         raise PermissionDenied
     step = get_object_or_404(ProcessStep.objects.select_for_update(), pk=pk)
     title = step.title
-    image_storage = step.image.storage if step.image else None
-    image_name = step.image.name if step.image else ""
     step.delete()
-    if image_storage and image_name:
-        transaction.on_commit(
-            lambda storage=image_storage, name=image_name: _delete_service_image(storage, name)
-        )
     for position, item in enumerate(ProcessStep.objects.select_for_update().order_by("sort_order", "pk")):
         if item.sort_order != position:
             item.sort_order = position

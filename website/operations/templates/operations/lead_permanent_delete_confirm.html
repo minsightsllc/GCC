@@ -1,0 +1,24 @@
+{% extends 'operations/base.html' %}
+{% block title %}Permanently delete leads | Grand Coast{% endblock %}
+{% block body_class %}admin-site{% endblock %}
+{% block body %}
+<main class="container publication-preview website-post-delete-confirm">
+    <section class="content-editor-panel">
+        <span class="section-kicker">Leads · Trash</span>
+        <h1>Are you sure you want to delete these lead(s)?</h1>
+        <ul class="lead-permanent-delete-list" aria-label="Leads to be permanently deleted">
+            {% for lead in leads %}<li>{{ lead.name }}</li>{% endfor %}
+        </ul>
+        <p>This cannot be undone. Lead attachments, tasks, site visits, activity, and attention items will be deleted. Linked estimates and projects will be kept but disconnected from the lead.</p>
+        <form method="post" action="{% url 'operations:lead-permanent-delete' %}" data-lead-permanent-delete-confirmed>
+            {% csrf_token %}
+            <input type="hidden" name="lead_ids" value="{{ lead_ids }}">
+            <input type="hidden" name="confirm_delete" value="yes">
+            <div class="detail-actions">
+                <a class="button button-outline" href="{% url 'operations:dashboard-section' section='leads' %}?trash=1">Cancel</a>
+                <button class="button button-danger" type="submit">Delete permanently</button>
+            </div>
+        </form>
+    </section>
+</main>
+{% endblock %}

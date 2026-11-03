@@ -2804,7 +2804,7 @@
                 || form.matches("[data-website-post-create], [data-website-post-save]")
                 || form.hasAttribute("onsubmit")
                 || form.hasAttribute("target")
-                || form.matches("[data-delete-form], .calendar-delete-form, .lead-detail-delete-form")
+                || form.matches("[data-delete-form], .calendar-delete-form, .lead-detail-delete-form, [data-lead-permanent-delete-form], [data-lead-permanent-delete-confirmed]")
             ) return;
 
             var submitter = event.submitter || null;
@@ -3798,10 +3798,88 @@
         applyMotionPreference();
     }
 
+    function initLeadPermanentDeleteConfirmation() {
+        const dialog = document.querySelector("[data-lead-permanent-delete-dialog]");
+        if (!dialog) return;
+
+        const leadList = dialog.querySelector("[data-lead-permanent-delete-list]");
+        const cancelButton = dialog.querySelector("[data-lead-permanent-delete-cancel]");
+        const confirmButton = dialog.querySelector("[data-lead-permanent-delete-confirm]");
+        if (!leadList || !cancelButton || !confirmButton) return;
+
+        dialog.addEventListener("close", function () {
+            const form = dialog._leadPermanentDeleteForm;
+            const trigger = dialog._leadPermanentDeleteTrigger;
+            dialog._leadPermanentDeleteForm = null;
+            dialog._leadPermanentDeleteTrigger = null;
+            if (trigger && trigger.isConnected) trigger.focus();
+            if (form && form.isConnected) form.removeAttribute("aria-busy");
+        });
+
+        document.addEventListener("submit", function (event) {
+            const form = event.target;
+            if (!form.matches || !form.matches("[data-lead-permanent-delete-form]")) return;
+            if (form.dataset.leadPermanentDeleteConfirmed === "true") {
+                delete form.dataset.leadPermanentDeleteConfirmed;
+                return;
+            }
+            if (typeof dialog.showModal !== "function") return;
+
+            event.preventDefault();
+            dialog._leadPermanentDeleteForm = form;
+            dialog._leadPermanentDeleteTrigger = event.submitter || form.querySelector("button[type='submit'], input[type='submit']");
+            leadList.replaceChildren();
+            const names = Array.from(form.querySelectorAll("[data-lead-permanent-delete-name]"))
+                .map(function (nameNode) { return (nameNode.textContent || "").trim(); })
+                .filter(Boolean);
+            (names.length ? names : ["Selected lead"]).forEach(function (name) {
+                const item = document.createElement("li");
+                item.textContent = name;
+                leadList.appendChild(item);
+            });
+
+            if (!dialog.open) dialog.showModal();
+            cancelButton.focus();
+        });
+
+        document.addEventListener("click", function (event) {
+            const cancel = event.target.closest && event.target.closest("[data-lead-permanent-delete-cancel]");
+            if (cancel) {
+                if (dialog.open) dialog.close();
+                return;
+            }
+
+            const confirm = event.target.closest && event.target.closest("[data-lead-permanent-delete-confirm]");
+            if (!confirm || !dialog.open) return;
+            const form = dialog._leadPermanentDeleteForm;
+            if (!form || !form.isConnected) {
+                dialog.close();
+                return;
+            }
+
+            const serverConfirmation = document.createElement("input");
+            serverConfirmation.type = "hidden";
+            serverConfirmation.name = "confirm_delete";
+            serverConfirmation.value = "yes";
+            form.appendChild(serverConfirmation);
+            form.dataset.leadPermanentDeleteConfirmed = "true";
+            form.setAttribute("aria-busy", "true");
+            confirm.disabled = true;
+            confirm.setAttribute("aria-busy", "true");
+            dialog.close();
+            if (typeof form.requestSubmit === "function") {
+                form.requestSubmit();
+            } else {
+                form.submit();
+            }
+        });
+    }
+
     function init() {
         // Bind the admin-wide POST handler first so other optional UI setup cannot
         // leave ordinary save and upload forms falling back to full-page submits.
         initAdminAsyncForms();
+        initLeadPermanentDeleteConfirmation();
         initMediaPublishing();
         initAdminWorkspaceContent();
         initPublicPageMotion();

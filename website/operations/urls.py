@@ -108,6 +108,7 @@ urlpatterns = [
     path("dashboard/leads/delete-all/", views.lead_delete_all, name="lead-delete-all"),
     path("dashboard/leads/<uuid:pk>/delete/", views.lead_delete, name="lead-delete"),
     path("dashboard/leads/<uuid:pk>/restore/", views.lead_restore, name="lead-restore"),
+    path("dashboard/leads/permanently-delete/", views.lead_permanent_delete, name="lead-permanent-delete"),
     path("dashboard/leads/<uuid:pk>/status/", views.lead_update_status, name="lead-status"),
     path("dashboard/leads/<uuid:pk>/assign/", views.lead_assign, name="lead-assign"),
     path("dashboard/leads/<uuid:pk>/priority/", views.lead_toggle_priority, name="lead-priority"),
