@@ -296,6 +296,13 @@ class GrandCoastAdminSite(UnfoldAdminSite):
             and request.user.is_superuser
         )
 
+    def index(self, request, extra_context=None):
+        from .admin_usage import get_admin_storage_usage
+
+        context = dict(extra_context or {})
+        context["storage_usage"] = get_admin_storage_usage()
+        return super().index(request, extra_context=context)
+
     def _access_url(self, next_url=None):
         url = reverse("admin:access")
         if next_url:

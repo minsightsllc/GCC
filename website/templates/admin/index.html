@@ -23,6 +23,52 @@
             </a>
         </div>
 
+        <section class='gcc-admin-storage' aria-label='Storage usage'>
+            <div class='gcc-admin-storage-heading'>
+                <div>
+                    <span class='gcc-admin-kicker'>Capacity</span>
+                    <h2>Storage usage</h2>
+                </div>
+                <p>Live estimates in decimal gigabytes. Refreshed every 15 minutes.</p>
+            </div>
+            <div class='gcc-admin-storage-grid'>
+                {% for meter in storage_usage.values %}
+                    <article class='gcc-admin-storage-card{% if meter.status == "unavailable" %} is-unavailable{% endif %}'>
+                        <div class='gcc-admin-storage-card-heading'>
+                            <h3>{% if meter.source == "supabase" %}Supabase Storage{% else %}Render PostgreSQL{% endif %}</h3>
+                            {% if meter.status == 'ready' %}<span class='gcc-admin-storage-state'>Available</span>{% endif %}
+                        </div>
+                        {% if meter.status == 'ready' %}
+                            <p class='gcc-admin-storage-reading'><strong>{{ meter.used_gb|floatformat:2 }} GB</strong><span> of {{ meter.capacity_gb|floatformat:2 }} GB</span></p>
+                            <div class='gcc-admin-storage-track' role='progressbar' aria-label='{% if meter.source == "supabase" %}Supabase Storage{% else %}Render PostgreSQL{% endif %} capacity used' aria-valuemin='0' aria-valuemax='100' aria-valuenow='{{ meter.percent|floatformat:1 }}' aria-valuetext='{{ meter.used_gb|floatformat:2 }} gigabytes used of {{ meter.capacity_gb|floatformat:2 }} gigabytes'>
+                                <span style='width: {{ meter.percent|floatformat:1 }}%'></span>
+                            </div>
+                            <div class='gcc-admin-storage-details'><span>{{ meter.remaining_gb|floatformat:2 }} GB left</span><span>{{ meter.percent|floatformat:1 }}% used</span></div>
+                            {% if meter.source == 'supabase' %}<p class='gcc-admin-storage-note'>Counts buckets in this project. Supabase's allowance is shared across the organization.</p>{% endif %}
+                        {% elif meter.status == 'quota_not_configured' or meter.status == 'quota_custom' or meter.status == 'quota_unavailable' %}
+                            <p class='gcc-admin-storage-reading'><strong>{{ meter.used_gb|floatformat:2 }} GB</strong><span> currently in use</span></p>
+                            {% if meter.status == 'quota_not_configured' %}
+                                <p class='gcc-admin-storage-message'>Add <code>SUPABASE_MANAGEMENT_API_TOKEN</code> and <code>SUPABASE_ORG_SLUG</code> to load your plan allowance automatically.</p>
+                            {% elif meter.status == 'quota_custom' %}
+                                <p class='gcc-admin-storage-message'>This Supabase plan has a custom storage allowance. Check the organization's Usage page for its current limit.</p>
+                            {% else %}
+                                <p class='gcc-admin-storage-message'>The Supabase plan allowance could not be loaded. Check the Management API token and server logs.</p>
+                            {% endif %}
+                        {% elif meter.status == 'not_configured' %}
+                            {% if meter.source == 'supabase' %}
+                                <p class='gcc-admin-storage-message'>Configure the Supabase S3 storage credentials to show usage.</p>
+                            {% else %}
+                                <p class='gcc-admin-storage-message'>Set <code>RENDER_API_KEY</code> and <code>RENDER_POSTGRES_ID</code> to show usage.</p>
+                            {% endif %}
+                        {% else %}
+                            <p class='gcc-admin-storage-message'>Usage is temporarily unavailable. Check the service configuration and server logs.</p>
+                        {% endif %}
+                    </article>
+                {% endfor %}
+            </div>
+            <p class='gcc-admin-storage-updated'>Last checked {{ storage_usage.checked_at|date:'M j, Y, g:i a T' }}</p>
+        </section>
+
         <div class='gcc-admin-launch-grid' aria-label='Administration destinations'>
             <a class='gcc-admin-launch-card gcc-admin-launch-card-primary' href='{% url "operations:dashboard" %}'>
                 <span class='gcc-admin-stat-label'>Daily work</span>

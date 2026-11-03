@@ -300,6 +300,138 @@ body.gcc-admin-records-page #content {
     font-size: .78rem;
 }
 
+.gcc-admin-storage {
+    padding: 24px 0 30px;
+    border-bottom: 1px solid var(--gcc-line);
+}
+
+.gcc-admin-storage-heading,
+.gcc-admin-storage-card-heading,
+.gcc-admin-storage-details {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.gcc-admin-storage-heading h2 {
+    margin: 7px 0 0;
+    color: var(--gcc-navy);
+    font-family: 'Merriweather', Georgia, serif;
+    font-size: 1.1rem;
+    font-weight: 800;
+}
+
+.gcc-admin-storage-heading > p,
+.gcc-admin-storage-updated {
+    margin: 0;
+    color: var(--gcc-muted);
+    font-size: .64rem;
+}
+
+.gcc-admin-storage-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.gcc-admin-storage-card {
+    min-width: 0;
+    padding: 18px 20px 16px;
+    border: 1px solid var(--gcc-line-blue);
+    border-top: 3px solid var(--gcc-blue);
+    border-radius: 4px;
+    background: var(--gcc-white);
+}
+
+.gcc-admin-storage-card:first-child {
+    border-top-color: var(--gcc-gold);
+}
+
+.gcc-admin-storage-card.is-unavailable {
+    border-top-color: #bd4d43;
+}
+
+.gcc-admin-storage-card-heading h3 {
+    margin: 0;
+    color: var(--gcc-navy);
+    font-size: .78rem;
+    font-weight: 900;
+}
+
+.gcc-admin-storage-state {
+    color: #315a45;
+    font-size: .58rem;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+.gcc-admin-storage-reading {
+    margin: 17px 0 12px;
+    color: var(--gcc-muted);
+    font-size: .72rem;
+}
+
+.gcc-admin-storage-reading strong {
+    color: var(--gcc-navy);
+    font-size: 1.55rem;
+    font-weight: 900;
+    letter-spacing: -.04em;
+}
+
+.gcc-admin-storage-track {
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e9edf3;
+}
+
+.gcc-admin-storage-track span {
+    display: block;
+    height: 100%;
+    min-width: 0;
+    border-radius: inherit;
+    background: var(--gcc-blue);
+}
+
+.gcc-admin-storage-card:first-child .gcc-admin-storage-track span {
+    background: var(--gcc-gold);
+}
+
+.gcc-admin-storage-details {
+    margin-top: 9px;
+    color: var(--gcc-muted);
+    font-size: .62rem;
+    font-weight: 700;
+}
+
+.gcc-admin-storage-message {
+    margin: 14px 0 0;
+    color: var(--gcc-muted);
+    font-size: .67rem;
+    line-height: 1.6;
+}
+
+.gcc-admin-storage-note {
+    margin: 11px 0 0;
+    color: var(--gcc-muted);
+    font-size: .58rem;
+    line-height: 1.5;
+}
+
+.gcc-admin-storage-message code {
+    color: var(--gcc-deep);
+    font-size: .92em;
+    overflow-wrap: anywhere;
+}
+
+.gcc-admin-storage-updated {
+    margin-top: 11px;
+    text-align: right;
+}
+
 .gcc-admin-button {
     display: inline-flex;
     align-items: center;
@@ -1414,6 +1546,11 @@ body.gcc-admin-login-page #page {
         flex-direction: column;
     }
 
+    .gcc-admin-storage-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
     .gcc-admin-stat-row {
         grid-template-columns: 1fr;
     }
@@ -1495,6 +1632,10 @@ body.gcc-admin-login-page #page {
     .gcc-admin-launch-grid {
         grid-template-columns: 1fr;
         margin-bottom: 36px;
+    }
+
+    .gcc-admin-storage-grid {
+        grid-template-columns: 1fr;
     }
 
     .gcc-admin-heading-actions {

@@ -1636,6 +1636,39 @@ and never open `/gccad/`. Logout deactivates the registered device. Passwords, P
 authenticator codes, session cookies, recovery tokens, and push credentials are not
 stored in native plaintext storage or written to logs.
 
+## 35. Admin storage usage meters
+
+The private Django Administration home shows current object storage usage for all
+Supabase Storage buckets in the configured Supabase project and disk usage/capacity
+for the Render PostgreSQL resource. It reads the Supabase organization's plan through
+the Management API and derives the published storage allowance for Free, Pro, or Team
+plans. The dashboard uses decimal gigabytes (1 GB = 1,000,000,000 bytes) and refreshes
+its cached values every 15 minutes. Supabase's allowance is shared across projects;
+the live object total is for the configured project. Supabase billing measures average
+GB-hours over the billing period, so this is a current snapshot, not the invoice's
+averaged usage.
+
+Add these server-side environment variables to the Render web service:
+
+~~~dotenv
+SUPABASE_MANAGEMENT_API_TOKEN=your_scoped_supabase_pat
+SUPABASE_ORG_SLUG=your_organization_slug
+RENDER_API_KEY=your_render_api_key
+RENDER_POSTGRES_ID=dpg-your_postgres_resource_id
+~~~
+
+Create a fine-grained Supabase personal access token scoped to the organization with
+Organization Settings read access. The app uses `GET /v1/organizations/{slug}` to read
+the plan. Free maps to 1 GB; Pro and Team map to 100 GB. Enterprise uses a custom
+allowance and is not guessed by the app. Keep the PAT server-side; never place it in
+the browser or source control. The Supabase S3 key must be able to list the configured
+project's buckets and objects. Create a Render API key in the Render account settings
+and copy the Postgres resource ID from its Render dashboard page. If a service cannot
+be reached, the admin home shows an unavailable state instead of displaying zero usage.
+
+After adding or changing the variables, redeploy the Render web service. The meters
+appear at the top of the protected Django Administration home (`/gccad/`).
+
 ### Mobile owner validation checklist
 
 1. Leave `GCC_MOBILE_OWNER_ACCESS_ENABLED=false` and verify the superuser is rejected by

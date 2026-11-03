@@ -57,6 +57,12 @@ GCC_MOBILE_OWNER_PUSH_ENABLED = _env_flag("GCC_MOBILE_OWNER_PUSH_ENABLED", False
 GCC_GOOGLE_PLACES_API_KEY = os.getenv("GCC_GOOGLE_PLACES_API_KEY", "").strip()
 GCC_GOOGLE_PLACE_ID = os.getenv("GCC_GOOGLE_PLACE_ID", "").strip()
 GCC_GOOGLE_PLACES_TIMEOUT_SECONDS = int(os.getenv("GCC_GOOGLE_PLACES_TIMEOUT_SECONDS", "8"))
+# Admin-only capacity meters use a scoped, server-side Management API token.
+# Never expose the token in templates or browser code.
+SUPABASE_MANAGEMENT_API_TOKEN = os.getenv("SUPABASE_MANAGEMENT_API_TOKEN", "").strip()
+SUPABASE_ORG_SLUG = os.getenv("SUPABASE_ORG_SLUG", "").strip()
+RENDER_API_KEY = os.getenv("RENDER_API_KEY", "").strip()
+RENDER_POSTGRES_ID = os.getenv("RENDER_POSTGRES_ID", "").strip()
 # Send the review sync diagnostics to Render's captured process output.
 LOGGING = {
     "version": 1,
