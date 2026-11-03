@@ -144,7 +144,11 @@ def _get_supabase_plan_quota() -> tuple[float | None, str, str]:
             organization = json.loads(response.read().decode("utf-8"))
         plan = str(organization.get("plan", "")).strip().lower()
     except HTTPError as exc:
-        diagnostic = _supabase_http_diagnostic(exc.code)
+        try:
+            response_body = exc.read(4096)
+        except Exception:
+            response_body = b""
+        diagnostic = _supabase_http_diagnostic(exc.code, response_body)
         logger.warning("Supabase organization plan lookup failed: %s", diagnostic)
         return None, "quota_unavailable", diagnostic
     except Exception as exc:
@@ -165,11 +169,31 @@ def _get_supabase_plan_quota() -> tuple[float | None, str, str]:
     return quota_gb, "ready", ""
 
 
-def _supabase_http_diagnostic(status_code: int) -> str:
+def _supabase_http_diagnostic(status_code: int, response_body: bytes = b"") -> str:
     if status_code == 401:
         return "Supabase rejected the Management API token (HTTP 401). Check that it is active."
     if status_code == 403:
-        return "Token needs Organization Settings read access for this organization (HTTP 403)."
+        try:
+            error_payload = json.loads(response_body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            error_payload = {}
+        missing_permissions = error_payload.get("missing_permissions", [])
+        if isinstance(missing_permissions, list):
+            permissions = [
+                permission.strip()[:80]
+                for permission in missing_permissions
+                if isinstance(permission, str) and permission.strip()
+            ]
+            if permissions:
+                return (
+                    "Supabase reports missing token permission(s): "
+                    f"{', '.join(permissions)[:240]} (HTTP 403)."
+                )
+        return (
+            "Supabase denied access to this organization (HTTP 403). "
+            "Verify the token's organization scope, the organization slug, "
+            "and your account role."
+        )
     if status_code == 404:
         return "Organization was not found (HTTP 404). Check the slug after /org/ in the dashboard URL."
     if status_code == 429:
