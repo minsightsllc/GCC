@@ -149,6 +149,10 @@ def _get_supabase_plan_quota() -> tuple[float | None, str, str]:
         except Exception:
             response_body = b""
         diagnostic = _supabase_http_diagnostic(exc.code, response_body)
+        if exc.code == 403 and diagnostic.startswith(
+            "Supabase denied access to this organization"
+        ):
+            diagnostic = _supabase_org_scope_diagnostic(token, org_slug, diagnostic)
         logger.warning("Supabase organization plan lookup failed: %s", diagnostic)
         return None, "quota_unavailable", diagnostic
     except Exception as exc:
@@ -167,6 +171,53 @@ def _get_supabase_plan_quota() -> tuple[float | None, str, str]:
         logger.warning("Supabase organization plan lookup failed: %s", diagnostic)
         return None, "quota_unavailable", diagnostic
     return quota_gb, "ready", ""
+
+
+def _supabase_org_scope_diagnostic(token: str, org_slug: str, fallback: str) -> str:
+    """Use Organizations: Read to distinguish an out-of-scope org from a role issue."""
+    request = Request(
+        "https://api.supabase.com/v1/organizations",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+    )
+    try:
+        with urlopen(request, timeout=4) as response:
+            organizations = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        if exc.code == 401:
+            return (
+                "Render's Supabase Management API token was rejected while checking "
+                "organization access (HTTP 401). Confirm the current token is saved "
+                "on this Render service."
+            )
+        if exc.code == 403:
+            return (
+                "Render's Supabase token cannot list organizations (HTTP 403). "
+                "Confirm the deployed token has Organizations: Read access and "
+                "includes the intended organization."
+            )
+        return fallback
+    except Exception:
+        return fallback
+
+    if not isinstance(organizations, list):
+        return fallback
+    target_is_visible = any(
+        isinstance(organization, dict)
+        and str(organization.get("slug", "")).strip() == org_slug
+        for organization in organizations
+    )
+    if not target_is_visible:
+        return (
+            "Render's Supabase token can list organizations, but the configured "
+            "organization is not visible to it. Check SUPABASE_ORG_SLUG and create "
+            "a replacement token scoped to that organization."
+        )
+    return (
+        "Render's Supabase token can see the configured organization but cannot read "
+        "its settings. Confirm Organization Settings: Read is enabled for that "
+        "organization and that your Supabase account role allows it; save a new "
+        "token in Render if its scope or permissions were changed."
+    )
 
 
 def _supabase_http_diagnostic(status_code: int, response_body: bytes = b"") -> str:
