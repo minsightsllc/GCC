@@ -63,13 +63,15 @@ def _photo_bytes(name, content):
                         cleaned = background
                     elif cleaned.mode not in {"RGB", "L", "CMYK"}:
                         cleaned = cleaned.convert("RGB")
-                    save_options.update(quality=95, optimize=True)
+                    save_options["quality"] = 95
                 elif expected_format == "PNG":
-                    save_options["optimize"] = True
+                    # optimize=True performs extra work to search for a smaller
+                    # encoding and forces zlib's slowest compression level.
+                    save_options["compress_level"] = 3
                 else:
                     if cleaned.mode not in {"RGB", "RGBA", "L"}:
                         cleaned = cleaned.convert("RGBA" if "A" in cleaned.getbands() else "RGB")
-                    save_options.update(lossless=True, method=4)
+                    save_options.update(lossless=True, method=2)
 
                 output = BytesIO()
                 cleaned.save(output, format=expected_format, **save_options)
@@ -226,7 +228,11 @@ def sanitize_uploaded_media(upload):
         return upload
 
     old_file = getattr(upload, "file", None)
-    upload.file = ContentFile(data, name=upload.name)
+    cleaned_file = ContentFile(data, name=upload.name)
+    # FileField storage receives upload.file rather than the outer upload
+    # object, so carry the marker onto the replacement to avoid a second encode.
+    setattr(cleaned_file, _SANITIZED_MARKER, True)
+    upload.file = cleaned_file
     # UploadedFile.size is writable, but FieldFile.size is a read-only
     # property derived from the replacement ContentFile.
     try:

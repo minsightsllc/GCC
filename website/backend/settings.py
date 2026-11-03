@@ -358,6 +358,7 @@ SUPABASE_STORAGE_OPTIONS = {
     'bucket_name': os.getenv('SUPABASE_STORAGE_BUCKET'),
     'region_name': os.getenv('SUPABASE_S3_REGION'),
     'signature_version': 's3v4',
+    'addressing_style': 'path',
     'file_overwrite': False,
     'default_acl': None,
     'querystring_auth': True,
