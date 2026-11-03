@@ -26,7 +26,10 @@ from .models import (
 from .security import client_ip, record_admin_security_event, retry_pending_admin_security_emails
 
 
-@override_settings(GCC_TURNSTILE_ENABLED=False)
+@override_settings(
+    GCC_TURNSTILE_ENABLED=False,
+    GCC_TURNSTILE_ALLOW_MISSING=True,
+)
 class PrivateAdminSecurityTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -45,11 +48,6 @@ class PrivateAdminSecurityTests(TestCase):
         TOTPDevice.objects.filter(user=self.admin_user).delete()
 
     def enter_password_login(self):
-        gate = self.browser.post(
-            reverse("admin:access"),
-            {"identifier": self.admin_user.username},
-        )
-        self.assertRedirects(gate, reverse("admin:login"))
         login_response = self.browser.post(
             reverse("admin:login"),
             {
@@ -57,28 +55,42 @@ class PrivateAdminSecurityTests(TestCase):
                 "password": "security-owner-pass",
             },
         )
-        self.assertRedirects(login_response, reverse("admin:index"))
+        if self.profile.pin_enabled:
+            self.assertRedirects(login_response, reverse("admin:access"))
+            login_response = self.browser.post(
+                reverse("admin:access"),
+                {"pin": "123456"},
+            )
+        if TOTPDevice.objects.filter(user=self.admin_user, confirmed=True).exists():
+            self.assertRedirects(login_response, reverse("admin:otp"))
+            device = TOTPDevice.objects.get(user=self.admin_user, confirmed=True)
+            login_response = self.browser.post(
+                reverse("admin:otp"),
+                {"token": f"{totp(device.bin_key):06d}"},
+            )
+        self.assertRedirects(login_response, reverse("operations:dashboard"))
 
     def test_legacy_admin_is_404_and_direct_login_cannot_bypass_gate(self):
         self.assertEqual(self.browser.get("/admin/").status_code, 404)
         response = self.browser.get(reverse("admin:login"))
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(
-            response['Location'],
-            reverse('admin:access') + '?next=%2Fgccad%2Flogin%2F',
-        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Welcome back.')
+        self.assertIsNone(self.browser.session.get('_auth_user_id'))
 
-    def test_pin_enabled_requires_pin_before_password_login(self):
+    def test_pin_enabled_is_required_after_password_login(self):
         self.profile.pin_enabled = True
         self.profile.pin_hash = make_password("123456")
         self.profile.save(update_fields=["pin_enabled", "pin_hash", "updated_at"])
 
-        identifier = self.browser.post(
-            reverse("admin:access"),
-            {"identifier": self.admin_user.email},
+        password_response = self.browser.post(
+            reverse("admin:login"),
+            {
+                "username": self.admin_user.username,
+                "password": "security-owner-pass",
+            },
         )
-        self.assertEqual(identifier.status_code, 302)
-        self.assertIn(reverse("admin:access"), identifier["Location"])
+        self.assertRedirects(password_response, reverse("admin:access"))
+        self.assertIsNone(self.browser.session.get("_auth_user_id"))
 
         wrong_pin = self.browser.post(
             reverse("admin:access"),
@@ -91,17 +103,7 @@ class PrivateAdminSecurityTests(TestCase):
             reverse("admin:access"),
             {"pin": "123456"},
         )
-        self.assertRedirects(correct_pin, reverse("admin:login"))
-        self.assertIsNone(self.browser.session.get("_auth_user_id"))
-
-        login_response = self.browser.post(
-            reverse("admin:login"),
-            {
-                "username": self.admin_user.username,
-                "password": "security-owner-pass",
-            },
-        )
-        self.assertRedirects(login_response, reverse("admin:index"))
+        self.assertRedirects(correct_pin, reverse("admin:index"))
         self.assertEqual(self.browser.session.get("_auth_user_id"), str(self.admin_user.pk))
 
     def test_admin_pin_gate_slides_with_dashboard_activity_and_expires_after_idle(self):
@@ -111,15 +113,6 @@ class PrivateAdminSecurityTests(TestCase):
         self.profile.pin_hash = make_password("123456")
         self.profile.save(update_fields=["pin_enabled", "pin_hash", "updated_at"])
 
-        self.browser.post(
-            reverse("admin:access"),
-            {"identifier": self.admin_user.username},
-        )
-        pin_response = self.browser.post(
-            reverse("admin:access"),
-            {"pin": "123456"},
-        )
-        self.assertRedirects(pin_response, reverse("admin:login"))
         login_response = self.browser.post(
             reverse("admin:login"),
             {
@@ -127,7 +120,9 @@ class PrivateAdminSecurityTests(TestCase):
                 "password": "security-owner-pass",
             },
         )
-        self.assertRedirects(login_response, reverse("admin:index"))
+        self.assertRedirects(login_response, reverse("admin:access"))
+        pin_response = self.browser.post(reverse("admin:access"), {"pin": "123456"})
+        self.assertRedirects(pin_response, reverse("admin:index"))
 
         session = self.browser.session
         near_expiry = (timezone.now() + timedelta(seconds=30)).timestamp()
@@ -144,7 +139,7 @@ class PrivateAdminSecurityTests(TestCase):
         session[ADMIN_GATE_EXPIRES_AT] = (timezone.now() - timedelta(seconds=1)).timestamp()
         session.save()
         expired_response = self.browser.get(reverse("admin:index"), follow=True)
-        self.assertContains(expired_response, "Enter your PIN.")
+        self.assertContains(expired_response, "Welcome back.")
 
     def test_gccad_entry_opens_branded_login_without_pin(self):
         response = self.browser.get(reverse('admin:index'), follow=True)
@@ -153,7 +148,7 @@ class PrivateAdminSecurityTests(TestCase):
         self.assertNotContains(response, 'Before we begin.')
         self.assertNotContains(response, 'Enter your PIN.')
 
-    def test_gccad_entry_starts_with_pin_when_admin_pin_is_enabled(self):
+    def test_gccad_entry_starts_with_password_when_admin_pin_is_enabled(self):
         self.profile.pin_enabled = True
         self.profile.pin_hash = make_password('123456')
         self.profile.save(update_fields=['pin_enabled', 'pin_hash', 'updated_at'])
@@ -161,12 +156,15 @@ class PrivateAdminSecurityTests(TestCase):
         response = self.browser.get(reverse('admin:index'), follow=True)
 
         self.assertContains(response, 'Secure access')
-        self.assertContains(response, 'Enter your PIN.')
-        self.assertNotContains(response, 'Welcome back.')
-        self.assertEqual(
-            self.browser.session.get('gccad_gate_pending_pin'),
-            str(self.admin_user.pk),
+        self.assertContains(response, 'Welcome back.')
+        self.assertNotContains(response, 'Enter your PIN.')
+        self.assertIsNone(self.browser.session.get('gccad_gate_pending_pin'))
+        password_response = self.browser.post(
+            reverse("admin:login"),
+            {"username": self.admin_user.username, "password": "security-owner-pass"},
         )
+        self.assertRedirects(password_response, reverse("admin:access"))
+        self.assertContains(self.browser.get(reverse("admin:access")), "Confirm your PIN.")
     @override_settings(
         CLOUDFLARE_TURNSTILE_SITE_KEY="",
         CLOUDFLARE_TURNSTILE_SECRET_KEY="",
@@ -466,21 +464,21 @@ class PrivateAdminSecurityTests(TestCase):
             confirmed=True,
         )
 
-        for attempt in range(4):
+        for attempt in range(3):
             response = self.browser.post(
                 reverse("admin:recovery"),
                 {"email": f"wrong-{attempt}@example.com"},
             )
             self.assertEqual(response.status_code, 200)
-            self.assertContains(response, "That email does not match an active administrator account.")
-            self.assertContains(response, f"You have {4 - attempt} attempt")
+            self.assertContains(response, "If the address matches an active administrator account")
 
-        locked = self.browser.post(
+        limited = self.browser.post(
             reverse("admin:recovery"),
-            {"email": "wrong-final@example.com"},
+            {"email": "wrong-2@example.com"},
         )
-        self.assertEqual(locked.status_code, 429)
-        self.assertIn("Too many attempts.", locked.content.decode())
+        self.assertEqual(limited.status_code, 200)
+        self.assertContains(limited, "If the address matches an active administrator account")
+        self.assertFalse(AdminRecoveryToken.objects.filter(user=self.admin_user).exists())
 
         self.browser = DjangoClient()
         sent = self.browser.post(
@@ -521,12 +519,13 @@ class PrivateAdminSecurityTests(TestCase):
 
     @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
     def test_recovery_email_accepts_correct_email_before_lockout(self):
-        for attempt in range(4):
+        for attempt in range(2):
             response = self.browser.post(
                 reverse("admin:recovery"),
                 {"email": f"wrong-before-match-{attempt}@example.com"},
             )
             self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "If the address matches an active administrator account")
 
         sent = self.browser.post(
             reverse("admin:recovery"),
@@ -534,8 +533,7 @@ class PrivateAdminSecurityTests(TestCase):
         )
         self.assertEqual(sent.status_code, 200)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIsNone(self.browser.session.get("gccad_recovery_attempts"))
-        self.assertIsNone(self.browser.session.get("gccad_recovery_locked_until"))
+        self.assertContains(sent, "If the address matches an active administrator account")
 
     @override_settings(
         EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
@@ -588,49 +586,40 @@ class PrivateAdminSecurityTests(TestCase):
     def test_admin_password_recovery_locks_after_five_unknown_emails(self):
         reset_url = reverse("admin:password-reset")
 
-        for attempt in range(4):
+        for attempt in range(3):
             response = self.browser.post(
                 reset_url,
                 {"email": f"unknown-admin-{attempt}@example.com"},
             )
-            self.assertEqual(response.status_code, 200)
-            self.assertContains(response, "That email does not match an active administrator account.")
-            remaining = 4 - attempt
-            self.assertContains(response, f"You have {remaining} attempt")
+            self.assertRedirects(response, reverse("admin:password-reset-done"))
         self.assertEqual(len(mail.outbox), 0)
 
-        locked = self.browser.post(
+        limited = self.browser.post(
             reset_url,
-            {"email": "unknown-admin-final@example.com"},
+            {"email": "unknown-admin-2@example.com"},
         )
-        self.assertEqual(locked.status_code, 429)
-        self.assertContains(locked, "Too many password reset attempts.", status_code=429)
-        self.assertEqual(self.browser.get(reset_url).status_code, 429)
+        self.assertRedirects(limited, reverse("admin:password-reset-done"))
+        self.assertEqual(len(mail.outbox), 0)
 
     @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
     def test_admin_password_recovery_accepts_correct_email_before_lockout(self):
         reset_url = reverse("admin:password-reset")
-        for attempt in range(4):
+        for attempt in range(2):
             response = self.browser.post(
                 reset_url,
                 {"email": f"unknown-admin-before-match-{attempt}@example.com"},
             )
-            self.assertEqual(response.status_code, 200)
+            self.assertRedirects(response, reverse("admin:password-reset-done"))
 
         response = self.browser.post(reset_url, {"email": self.admin_user.email})
         self.assertRedirects(response, reverse("admin:password-reset-done"))
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIsNone(self.browser.session.get("password_reset_attempts"))
 
     def test_totp_is_required_for_each_new_admin_session(self):
         device = TOTPDevice.objects.create(
             user=self.admin_user,
             name="Login test device",
             confirmed=True,
-        )
-        self.browser.post(
-            reverse("admin:access"),
-            {"identifier": self.admin_user.username},
         )
         password_response = self.browser.post(
             reverse("admin:login"),
@@ -659,20 +648,17 @@ class PrivateAdminSecurityTests(TestCase):
             name="Invalid-code test device",
             confirmed=True,
         )
-        self.browser.post(
-            reverse("admin:access"),
-            {"identifier": self.admin_user.username},
-        )
-        self.browser.post(
+        password_response = self.browser.post(
             reverse("admin:login"),
             {
                 "username": self.admin_user.username,
                 "password": "security-owner-pass",
             },
         )
+        self.assertRedirects(password_response, reverse("admin:otp"))
         response = self.browser.post(reverse("admin:otp"), {"token": "000000"})
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "could not be verified")
+        self.assertContains(response, "That code couldn&#x27;t be verified")
         self.assertIsNone(self.browser.session.get("_auth_user_id"))
 
     def test_security_settings_use_simple_pin_controls(self):
@@ -806,8 +792,8 @@ class PrivateAdminSecurityTests(TestCase):
 
         with self.captureOnCommitCallbacks(execute=True):
             response = self.browser.post(
-                reverse("admin:access"),
-                {"identifier": "intruder@example.com"},
+                reverse("admin:login"),
+                {"username": "intruder@example.com", "password": "wrong-password"},
                 REMOTE_ADDR="198.51.100.40",
                 HTTP_USER_AGENT="Security test browser",
             )
@@ -818,7 +804,7 @@ class PrivateAdminSecurityTests(TestCase):
         self.assertEqual(event.outcome, AdminSecurityEvent.Outcome.FAILURE)
         self.assertEqual(event.attempted_identifier, "intruder@example.com")
         self.assertEqual(event.ip_address, "198.51.100.40")
-        self.assertEqual(event.path, "/gccad/access/")
+        self.assertEqual(event.path, "/gccad/login/")
         self.assertIsNone(event.user)
         self.assertEqual(event.email_status, AdminSecurityEvent.EmailStatus.SENT)
         self.assertEqual(len(mail.outbox), 1)
@@ -833,10 +819,6 @@ class PrivateAdminSecurityTests(TestCase):
         DEFAULT_FROM_EMAIL="security@gcc.example.com",
     )
     def test_invalid_admin_password_creates_event_and_email_without_password(self):
-        self.browser.post(
-            reverse("admin:access"),
-            {"identifier": self.admin_user.username},
-        )
         with self.captureOnCommitCallbacks(execute=True):
             response = self.browser.post(
                 reverse("admin:login"),
@@ -865,9 +847,12 @@ class PrivateAdminSecurityTests(TestCase):
         self.profile.pin_enabled = True
         self.profile.pin_hash = make_password("111111")
         self.profile.save(update_fields=["pin_enabled", "pin_hash", "updated_at"])
-        self.browser.post(
+        self.assertRedirects(
+            self.browser.post(
+                reverse("admin:login"),
+                {"username": self.admin_user.username, "password": "security-owner-pass"},
+            ),
             reverse("admin:access"),
-            {"identifier": self.admin_user.username},
         )
 
         with self.captureOnCommitCallbacks(execute=True):
@@ -895,17 +880,14 @@ class PrivateAdminSecurityTests(TestCase):
             name="Email alert test device",
             confirmed=True,
         )
-        self.browser.post(
-            reverse("admin:access"),
-            {"identifier": self.admin_user.username},
-        )
-        self.browser.post(
+        password_response = self.browser.post(
             reverse("admin:login"),
             {
                 "username": self.admin_user.username,
                 "password": "security-owner-pass",
             },
         )
+        self.assertRedirects(password_response, reverse("admin:otp"))
 
         with self.captureOnCommitCallbacks(execute=True):
             response = self.browser.post(
@@ -941,7 +923,7 @@ class PrivateAdminSecurityTests(TestCase):
             )
 
         self.assertEqual(recovery.status_code, 200)
-        self.assertEqual(password_reset.status_code, 200)
+        self.assertRedirects(password_reset, reverse("admin:password-reset-done"))
         events = list(
             AdminSecurityEvent.objects.order_by("created_at").values_list(
                 "event_type", "email_status", "attempted_identifier"
@@ -1094,17 +1076,11 @@ class PrivateAdminSecurityTests(TestCase):
 
         locked_client = DjangoClient()
         locked = locked_client.post(
-            reverse("admin:access"),
-            {"identifier": other_admin.username},
-        )
-        self.assertEqual(locked.status_code, 200)
-        self.assertContains(locked, "currently locked")
-        direct_login = locked_client.post(
             reverse("admin:login"),
             {"username": other_admin.username, "password": "second-security-pass"},
         )
-        self.assertEqual(direct_login.status_code, 302)
-        self.assertTrue(direct_login["Location"].startswith(reverse("admin:access")))
+        self.assertEqual(locked.status_code, 200)
+        self.assertContains(locked, "currently locked")
         self.assertIsNone(locked_client.session.get("_auth_user_id"))
 
         unblock = self.browser.post(
@@ -1113,10 +1089,10 @@ class PrivateAdminSecurityTests(TestCase):
         self.assertRedirects(unblock, reverse("admin:security"))
         self.assertRedirects(
             locked_client.post(
-                reverse("admin:access"),
-                {"identifier": other_admin.username},
+                reverse("admin:login"),
+                {"username": other_admin.username, "password": "second-security-pass"},
             ),
-            reverse("admin:login"),
+            reverse("operations:dashboard"),
         )
 
     def test_security_event_delete_is_owner_only_and_audited(self):
@@ -1203,11 +1179,11 @@ class PrivateAdminSecurityTests(TestCase):
 
         trusted = factory.get(
             "/gccad/access/",
-            REMOTE_ADDR="198.51.100.71",
-            HTTP_X_FORWARDED_FOR="198.51.100.72, 198.51.100.71",
+            REMOTE_ADDR="10.0.0.71",
+            HTTP_X_FORWARDED_FOR="1.1.1.1, 10.0.0.71",
         )
-        with self.settings(ADMIN_TRUSTED_PROXY_IPS=("198.51.100.71",)):
-            self.assertEqual(client_ip(trusted), "198.51.100.72")
+        with self.settings(ADMIN_TRUSTED_PROXY_IPS=("10.0.0.71",)):
+            self.assertEqual(client_ip(trusted), "1.1.1.1")
 
     @override_settings(
         EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",

@@ -1,7 +1,6 @@
 import json
 import tempfile
 
-from django.test import Client as HttpClient
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -16,6 +15,7 @@ from .models import (
     WarrantyItem,
 )
 from .simulation import run_full_lifecycle
+from .test_helpers import GatedTestClient as HttpClient
 
 
 class FullLifecycleSimulationTests(TestCase):

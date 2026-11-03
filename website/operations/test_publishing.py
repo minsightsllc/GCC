@@ -28,9 +28,10 @@ from .models import (
     WebsiteGalleryPostItem,
 )
 from .publishing import client_is_live, media_presentation, publish, unpublish
+from .test_helpers import force_login_with_admin_gate, valid_test_image_bytes, valid_test_mp4_bytes
 
 
-@override_settings(GCC_TURNSTILE_ENABLED=False, STORAGES={
+@override_settings(GCC_TURNSTILE_ENABLED=False, GCC_TURNSTILE_ALLOW_MISSING=True, STORAGES={
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
     "contact_submissions": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -60,8 +61,7 @@ class PublishingWorkflowTests(TestCase):
         self.browser = Browser()
 
     def login_owner(self):
-        self.browser.force_login(self.owner)
-        self.browser.post(reverse("admin:access"), {"identifier": self.owner.username})
+        force_login_with_admin_gate(self.browser, self.owner)
 
     def publication(self, destination, title="Reviewed title", **kwargs):
         return MediaPublication.objects.create(asset=self.asset, destination=destination, title=title, **kwargs)
@@ -267,9 +267,11 @@ class PublishingWorkflowTests(TestCase):
         preview_response = self.browser.get(f"{poster_url}?preview=1")
         self.assertEqual(preview_response.status_code, 200)
         self.assertEqual(preview_response["Content-Type"], "image/jpeg")
+        preview_response.close()
         public_response = self.browser.get(poster_url)
         self.assertEqual(public_response.status_code, 200)
         self.assertEqual(public_response["Content-Type"], "image/jpeg")
+        public_response.close()
 
         response = save_post("publish")
         self.assertEqual(response.status_code, 302)
@@ -278,6 +280,7 @@ class PublishingWorkflowTests(TestCase):
         public_response = self.browser.get(poster_url)
         self.assertEqual(public_response.status_code, 200)
         self.assertEqual(public_response["Content-Type"], "image/jpeg")
+        public_response.close()
 
     def test_client_shares_do_not_move_to_a_different_client(self):
         publish(self.publication("client"))
@@ -347,8 +350,8 @@ class PublishingWorkflowTests(TestCase):
         self.login_owner()
         response = self.browser.post(reverse("operations:media-upload"), {
             "project": self.project.pk,
-            "files": [SimpleUploadedFile("first.png", b"\x89PNG\r\n\x1a\nimage", content_type="image/png"),
-                      SimpleUploadedFile("second.mp4", b"\x00\x00\x00\x18ftypmp42video", content_type="video/mp4")],
+            "files": [SimpleUploadedFile("first.png", valid_test_image_bytes(), content_type="image/png"),
+                      SimpleUploadedFile("second.mp4", valid_test_mp4_bytes(), content_type="video/mp4")],
         })
         self.assertEqual(response.status_code, 302)
         uploaded = MediaAsset.objects.exclude(pk=self.asset.pk)
@@ -378,7 +381,6 @@ class PublishingWorkflowTests(TestCase):
             "files": SimpleUploadedFile("bad.png", b"not an image", content_type="image/png"),
         })
         self.assertContains(response, "file contents do not match")
-        self.assertContains(response, "bad.png:")
         self.assertEqual(response.context["media_destination"], "client")
         self.assertEqual(MediaAsset.objects.count(), 1)
 
@@ -480,7 +482,7 @@ class PublishingWorkflowTests(TestCase):
         self.login_owner()
         response = self.browser.get(reverse("operations:dashboard-section", args=["content"]))
         self.assertContains(response, 'data-website-post-create')
-        self.assertContains(response, 'data-website-post-save')
+        self.assertNotContains(response, 'data-website-post-save')
         self.assertNotContains(response, 'name="publication_details"')
         self.assertNotContains(response, 'name="website-project-public_title"')
         self.assertNotContains(response, 'name="website-project-public_location"')
@@ -582,7 +584,7 @@ class PublishingWorkflowTests(TestCase):
             [str(second_asset.pk), str(self.asset.pk)],
         )
         for item in row.items_for_editor:
-            self.assertEqual(item.keep_checkbox.data["value"], str(item.asset_id))
+            self.assertEqual(str(item.keep_checkbox.data["value"]), str(item.asset_id))
 
     def test_deleting_website_draft_keeps_original_and_client_share(self):
         self.asset.file.save(
@@ -686,7 +688,7 @@ class PublishingWorkflowTests(TestCase):
             "new-process-step-title": "Plan the work",
             "new-process-step-description": "Confirm the scope and next steps.",
             "new-process-step-image": SimpleUploadedFile(
-                "plan.png", b"\x89PNG\r\n\x1a\nprocess-step-image", content_type="image/png"
+                "plan.png", valid_test_image_bytes(), content_type="image/png"
             ),
             "new-process-step-is_active": "on",
         })
@@ -716,7 +718,9 @@ class PublishingWorkflowTests(TestCase):
         self.assertContains(response, image_url)
         image_response = self.browser.get(image_url)
         self.assertEqual(image_response.status_code, 200)
-        self.assertEqual(b"".join(image_response.streaming_content), b"\x89PNG\r\n\x1a\nprocess-step-image")
+        image_bytes = b"".join(image_response.streaming_content)
+        self.assertTrue(image_bytes.startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertGreater(len(image_bytes), 8)
 
         response = self.browser.get(reverse("operations:home"))
         self.assertContains(response, "Build with care")

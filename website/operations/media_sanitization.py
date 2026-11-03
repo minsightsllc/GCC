@@ -227,7 +227,12 @@ def sanitize_uploaded_media(upload):
 
     old_file = getattr(upload, "file", None)
     upload.file = ContentFile(data, name=upload.name)
-    upload.size = len(data)
+    # UploadedFile.size is writable, but FieldFile.size is a read-only
+    # property derived from the replacement ContentFile.
+    try:
+        upload.size = len(data)
+    except AttributeError:
+        pass
     setattr(upload, _SANITIZED_MARKER, True)
     upload.seek(0)
     if old_file is not None and old_file is not upload.file:

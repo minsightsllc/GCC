@@ -36,20 +36,18 @@
         </div>
     </div>
 
-    {% if not portal_project.needs_staff_assignment %}
-        <div class="portal-progress-summary"><span>Project progress</span><strong>{{ portal_project.progress_percent }}% complete</strong></div>
-        <section class="portal-progress" aria-label="Project progress">
-            <div class="portal-progress-line"></div>
-            {% for milestone in portal_project.milestones.all %}
-                <div class="portal-progress-step {% if milestone.is_complete %}is-complete{% elif milestone.pk == portal_project.current_milestone_id %}is-current{% endif %}">
-                    <span>{% if milestone.is_complete %}&#10003;{% else %}{{ forloop.counter }}{% endif %}</span>
-                    <strong>{{ milestone.title }}</strong>
-                </div>
-            {% empty %}
-                <p class="detail-value">The project sequence will appear here soon.</p>
-            {% endfor %}
-        </section>
-    {% endif %}
+    <div class="portal-progress-summary"><span>Project progress</span><strong>{{ portal_project.progress_percent }}% complete</strong></div>
+    <section class="portal-progress" aria-label="Project progress">
+        <div class="portal-progress-line"></div>
+        {% for milestone in portal_project.milestones.all %}
+            <div class="portal-progress-step {% if milestone.is_complete %}is-complete{% elif milestone.pk == portal_project.current_milestone_id %}is-current{% endif %}">
+                <span>{% if milestone.is_complete %}&#10003;{% else %}{{ forloop.counter }}{% endif %}</span>
+                <strong>{{ milestone.title }}</strong>
+            </div>
+        {% empty %}
+            <p class="detail-value">The project sequence will appear here soon.</p>
+        {% endfor %}
+    </section>
 
     {% if portal_agreement or portal_selections or portal_change_orders or portal_payment_schedules %}
         <section class="portal-construction-strip" aria-labelledby="project-controls-title">

@@ -2422,6 +2422,11 @@ def account_delete(request):
                 updated_at=timezone.now(),
             )
 
+            # Keep historical projects and time entries, but detach a deleted
+            # employee from active task assignment and supervision lists.
+            user.assigned_tasks.clear()
+            user.watched_tasks.clear()
+
             user.groups.clear()
             user.user_permissions.clear()
             user.username = _deleted_account_username(user.pk)
@@ -3457,17 +3462,24 @@ def _notification_request_data(request):
     return request.POST
 
 
+def _require_notification_device_access(request):
+    if request.user.is_superuser:
+        if not _can_access_dashboard(request.user) or not gate_is_valid(request, request.user):
+            raise PermissionDenied
+        if (
+            not getattr(settings, "GCC_MOBILE_OWNER_PUSH_ENABLED", False)
+            or not is_mobile_webview(request)
+        ):
+            raise PermissionDenied
+        return
+    if not _can_access_team(request.user):
+        raise PermissionDenied
+
+
 @require_POST
-@team_required
+@login_required
 def notification_device_register(request):
-    if request.user.is_superuser and (
-        not getattr(settings, "GCC_MOBILE_OWNER_PUSH_ENABLED", False)
-        or not is_mobile_webview(request)
-    ):
-        return JsonResponse(
-            {"error": "Owner mobile notifications are disabled."},
-            status=403,
-        )
+    _require_notification_device_access(request)
     data = _notification_request_data(request)
     token = str(data.get('token') or data.get('expo_push_token') or '').strip()
     if not token or len(token) > 255 or not token.startswith(('ExpoPushToken[', 'ExponentPushToken[')):
@@ -3498,8 +3510,9 @@ def notification_device_register(request):
 
 
 @require_POST
-@team_required
+@login_required
 def notification_device_deactivate(request):
+    _require_notification_device_access(request)
     data = _notification_request_data(request)
     token = str(data.get('token') or data.get('expo_push_token') or '').strip()
     devices = MobilePushDevice.objects.filter(employee=request.user, is_active=True)
@@ -4028,11 +4041,11 @@ def employee_password_reset_create(request, pk):
 
 
 def employee_invite(request, token):
-    if request.user.is_authenticated:
-        raise PermissionDenied
     invite = find_employee_invite(token)
     if invite is None:
         return render(request, "operations/invite_invalid.html", {"invite_kind": "employee"}, status=410)
+    if request.user.is_authenticated:
+        raise PermissionDenied
     form = EmployeeInviteAcceptForm(
         request.POST or None,
         purpose=invite.purpose,
@@ -5174,7 +5187,7 @@ def media_edit(request, pk):
         raise PermissionDenied
     asset = get_object_or_404(MediaAsset.objects.select_for_update().select_related("project__client"), pk=pk)
     if not team_mode:
-        return _edit_media_publication(request, asset, MediaPublication.Destination.CLIENT)
+        return _edit_media_publication(request, asset)
     project_queryset = _visible_projects_for_user(request.user)
     if team_mode and (
         not asset.project_id

@@ -4,7 +4,7 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.test import Client as HttpClient, TestCase, override_settings
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -26,6 +26,7 @@ from .models import (
     Project,
     WorkflowEvent,
 )
+from .test_helpers import GatedTestClient as HttpClient
 
 
 User = get_user_model()
@@ -352,7 +353,10 @@ class ExternalEstimateStatusTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Estimate link")
         self.assertNotContains(response, "Deposit amount")
-        self.assertNotContains(response, "Title")
+        self.assertEqual(
+            list(response.context["estimate_create_form"].fields),
+            ["client", "external_url"],
+        )
         created = http.post(
             reverse("operations:estimate-create"),
             {
@@ -373,7 +377,10 @@ class ExternalEstimateStatusTests(TestCase):
         self.estimate.save(update_fields=["external_url", "updated_at"])
         http = HttpClient()
         http.force_login(self.owner)
-        payload = {"idempotency_key": "estimate-email-once"}
+        payload = {
+            "idempotency_key": "estimate-email-once",
+            "delivery_mode": ["email"],
+        }
         first = http.post(
             reverse("operations:external-estimate-send", kwargs={"pk": self.estimate.pk}),
             payload,
@@ -386,7 +393,7 @@ class ExternalEstimateStatusTests(TestCase):
         self.assertEqual(second.status_code, 302)
         self.estimate.refresh_from_db()
         self.assertEqual(self.estimate.external_status, Estimate.ExternalEstimateStatus.SENT)
-        self.assertTrue(self.estimate.external_client_visible)
+        self.assertFalse(self.estimate.external_client_visible)
         self.assertEqual(
             EmailOutbox.objects.filter(idempotency_key="estimate-email-once").count(),
             1,
@@ -406,7 +413,10 @@ class ExternalEstimateStatusTests(TestCase):
         http.force_login(self.owner)
         response = http.post(
             reverse("operations:external-estimate-send", kwargs={"pk": self.estimate.pk}),
-            {"idempotency_key": "already-sent-email"},
+            {
+                "idempotency_key": "already-sent-email",
+                "delivery_mode": ["email", "portal"],
+            },
         )
 
         self.assertEqual(response.status_code, 302)
@@ -431,10 +441,10 @@ class ExternalEstimateStatusTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Text client")
+        self.assertContains(response, "Mobile")
         self.assertContains(response, "sms:")
-        self.assertContains(response, "device's Messages app")
-        self.assertContains(response, "emails the saved estimate link")
+        self.assertContains(response, "Opens a message draft")
+        self.assertContains(response, "Sends the estimate link")
         self.assertContains(response, "client portal")
         self.assertNotContains(response, "Twilio")
 
@@ -444,7 +454,8 @@ class ExternalEstimateStatusTests(TestCase):
             reverse("operations:dashboard-section", kwargs={"section": "estimates"}),
             {"estimate": self.estimate.pk},
         )
-        self.assertNotContains(response, "Text client")
+        self.assertFalse(response.context["text_client_href"])
+        self.assertNotContains(response, "data-estimate-sms-link")
 
     def test_client_portal_never_falls_back_to_internal_estimate_details(self):
         project = self._approve_and_create_project()

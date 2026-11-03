@@ -1,7 +1,6 @@
 from django.core import mail
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.test import Client as TestClient
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -12,6 +11,7 @@ from .email_delivery import (
 )
 from .models import Client, ClientInvite, EmployeeInvite, EmailOutbox
 from .services import create_client_invite, create_employee_invite
+from .test_helpers import GatedTestClient as TestClient
 
 
 class ClientInviteEmailDeliveryTests(TestCase):
@@ -194,7 +194,7 @@ class EmployeeInviteEmailDeliveryTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(outbox.status, EmailOutbox.Status.PENDING)
         self.assertContains(response, 'Email is pending or disabled.')
-        self.assertContains(response, '/accounts/employee-invite/')
+        self.assertContains(response, '/accounts/invite/employee/')
         self.assertEqual(mail.outbox, [])
 
     @override_settings(
@@ -222,7 +222,7 @@ class EmployeeInviteEmailDeliveryTests(TestCase):
         self.assertEqual(mail.outbox[0].to, ['casey@example.test'])
         invite_link = next(
             line for line in mail.outbox[0].body.splitlines()
-            if '/accounts/employee-invite/' in line
+            if '/accounts/invite/employee/' in line
         )
         self.assertContains(response, 'Employee invite emailed.')
         self.assertContains(response, 'Sent to casey@example.test.')
@@ -253,5 +253,5 @@ class EmployeeInviteEmailDeliveryTests(TestCase):
         self.assertEqual(outbox.status, EmailOutbox.Status.FAILED)
         self.assertTrue(invite.is_usable)
         self.assertContains(response, 'Employee invite email failed.')
-        self.assertContains(response, '/accounts/employee-invite/')
+        self.assertContains(response, '/accounts/invite/employee/')
         self.assertEqual(mail.outbox, [])

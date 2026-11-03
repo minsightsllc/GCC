@@ -1595,8 +1595,10 @@ Run the migration and an initial sync from the website directory:
 .\venv\Scripts\python.exe manage.py sync_google_reviews
 ~~~
 
-Schedule the sync command daily in the deployment environment. The Places API
-returns a maximum of five reviews per request, and each displayed card includes
+Review syncing is manual by default: it runs when an Owner selects “Sync reviews”
+in Content Studio or when the management command is invoked explicitly. Do not
+create a recurring Render Cron Job unless automatic refresh is wanted. The Places
+API returns a maximum of five reviews per request, and each displayed card includes
 Google attribution plus a direct “Read on Google” link.
 
 ## 34. Mobile owner Operations access

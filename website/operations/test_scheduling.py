@@ -26,6 +26,7 @@ from .notifications import (
     queue_client_notifications,
 )
 from .services import ensure_role_groups
+from .test_helpers import force_login_with_admin_gate
 
 
 class EmployeeSchedulingTests(TestCase):
@@ -119,7 +120,7 @@ class EmployeeSchedulingTests(TestCase):
         self.client.force_login(self.manager)
         self.assertEqual(self.client.post(reverse('operations:weekly-schedule-update'), weekly_payload).status_code, 403)
 
-        self.client.force_login(self.owner)
+        force_login_with_admin_gate(self.client, self.owner)
         response = self.client.post(reverse('operations:weekly-schedule-update'), weekly_payload)
         self.assertEqual(response.status_code, 302)
         self.assertTrue(EmployeeWeeklySchedule.objects.filter(employee=self.employee, weekday=day.weekday(), is_working=True).exists())
@@ -151,7 +152,7 @@ class EmployeeSchedulingTests(TestCase):
             start_time=time(9),
             end_time=time(17),
         )
-        self.client.force_login(self.owner)
+        force_login_with_admin_gate(self.client, self.owner)
 
         response = self.client.get(
             reverse('operations:dashboard-section', kwargs={'section': 'calendar'}),
@@ -189,7 +190,7 @@ class EmployeeSchedulingTests(TestCase):
         self.assertFalse(device.is_active)
 
     def test_owner_device_registration_is_mobile_flag_controlled(self):
-        self.client.force_login(self.owner)
+        force_login_with_admin_gate(self.client, self.owner)
         token = 'ExponentPushToken[owner-mobile-device]'
         mobile_headers = {
             'HTTP_USER_AGENT': 'GrandCoastMobile/1.0',
@@ -215,7 +216,7 @@ class EmployeeSchedulingTests(TestCase):
                 {'token': token, 'platform': 'ios'},
                 **mobile_headers,
             )
-        self.assertEqual(enabled.status_code, 200)
+        self.assertEqual(enabled.status_code, 200, enabled.content.decode("utf-8", errors="replace"))
         device = MobilePushDevice.objects.get(token=token)
         self.assertEqual(device.employee_id, self.owner.pk)
         self.assertTrue(device.is_active)
@@ -422,7 +423,7 @@ class EmployeeSchedulingTests(TestCase):
 
     def test_blank_weekly_days_do_not_create_noop_notifications(self):
         day = self.pacific_day()
-        self.client.force_login(self.owner)
+        force_login_with_admin_gate(self.client, self.owner)
         response = self.client.post(
             reverse('operations:weekly-schedule-update'),
             {

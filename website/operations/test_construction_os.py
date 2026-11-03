@@ -5,7 +5,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client as HttpClient
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -33,6 +32,7 @@ from .construction_services import (
     submit_problem_report,
 )
 from .construction_forms import InspectionForm
+from .test_helpers import GatedTestClient as HttpClient, valid_test_image_bytes
 from .models import (
     Agreement,
     BudgetLine,
@@ -400,19 +400,20 @@ class ConstructionOperatingSystemTests(TestCase):
         self.http.force_login(self.field)
         grant_url = reverse("operations-api:native-upload-grant")
         complete_url = reverse("operations-api:native-upload-complete")
+        jpeg_bytes = valid_test_image_bytes("JPEG")
         grant_response = self.http.post(
             grant_url,
             data=(
                 '{"target":"project_media","project_id":"%s","file_name":"progress.jpg",'
-                '"file_size":3,"content_type":"image/jpeg"}'
-            ) % project.pk,
+                '"file_size":%s,"content_type":"image/jpeg"}'
+            ) % (project.pk, len(jpeg_bytes)),
             content_type="application/json",
         )
         self.assertEqual(grant_response.status_code, 201)
         grant = grant_response.json()
         upload = SimpleUploadedFile(
             "progress.jpg",
-            b"\xff\xd8\xff",
+            jpeg_bytes,
             content_type="image/jpeg",
         )
         uploaded = self.http.post(
@@ -431,7 +432,7 @@ class ConstructionOperatingSystemTests(TestCase):
 
         replay = self.http.post(
             complete_url,
-            data={"file": SimpleUploadedFile("progress.jpg", b"\xff\xd8\xff", content_type="image/jpeg")},
+            data={"file": SimpleUploadedFile("progress.jpg", jpeg_bytes, content_type="image/jpeg")},
             HTTP_X_GRAND_COAST_UPLOAD_TOKEN=grant["grant_token"],
             HTTP_IDEMPOTENCY_KEY=grant["idempotency_key"],
         )
@@ -479,8 +480,8 @@ class ConstructionOperatingSystemTests(TestCase):
             reverse("operations-api:native-upload-grant"),
             data=(
                 '{"target":"project_media","project_id":"%s","file_name":"expired.jpg",'
-                '"file_size":3,"content_type":"image/jpeg"}'
-            ) % project.pk,
+                '"file_size":%s,"content_type":"image/jpeg"}'
+            ) % (project.pk, len(valid_test_image_bytes("JPEG"))),
             content_type="application/json",
         )
         expired = expired_response.json()
@@ -489,7 +490,7 @@ class ConstructionOperatingSystemTests(TestCase):
         )
         expired_upload = self.http.post(
             reverse("operations-api:native-upload-complete"),
-            data={"file": SimpleUploadedFile("expired.jpg", b"\xff\xd8\xff", content_type="image/jpeg")},
+            data={"file": SimpleUploadedFile("expired.jpg", valid_test_image_bytes("JPEG"), content_type="image/jpeg")},
             HTTP_X_GRAND_COAST_UPLOAD_TOKEN=expired["grant_token"],
         )
         self.assertEqual(expired_upload.status_code, 410)
@@ -958,11 +959,11 @@ class ConstructionOperatingSystemTests(TestCase):
         self.assertTrue(CostEntry.objects.filter(project=project).exists())
 
         self.http.force_login(self.field)
-        self.assertEqual(
-            self.http.get(project_url).status_code,
-            200,
-        )
-        self.assertNotContains(self.http.get(project_url), "Financial ledger")
+        field_workspace_redirect = self.http.get(project_url)
+        self.assertEqual(field_workspace_redirect.status_code, 302)
+        field_workspace = self.http.get(field_workspace_redirect["Location"])
+        self.assertEqual(field_workspace.status_code, 200)
+        self.assertNotContains(field_workspace, "Financial ledger")
         self.assertEqual(
             self.http.post(
                 reverse("operations:project-cost-record", kwargs={"pk": project.pk}),

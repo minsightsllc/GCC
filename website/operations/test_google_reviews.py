@@ -3,7 +3,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import Client as DjangoClient, TestCase, override_settings
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .google_reviews import (
@@ -13,6 +13,7 @@ from .google_reviews import (
     sync_google_reviews,
 )
 from .models import GoogleReview, SiteSettings
+from .test_helpers import GatedTestClient as DjangoClient
 
 
 class FakeGoogleResponse:
@@ -179,7 +180,10 @@ class GoogleReviewViewTests(TestCase):
         }
         self.browser.force_login(self.owner)
         response = self.browser.post(reverse("operations:google-reviews-sync"))
-        self.assertRedirects(response, reverse("operations:dashboard-section", kwargs={"section": "content"}))
+        self.assertRedirects(
+            response,
+            reverse("operations:dashboard-section", kwargs={"section": "content"}) + "#publish-page-home",
+        )
         sync.assert_called_once()
 
         self.browser.force_login(self.employee)

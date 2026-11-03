@@ -2178,6 +2178,13 @@ body.native-media-enabled .native-media-actions {
 .content-page-nav a { display: inline-flex; align-items: center; justify-content: center; min-width: 94px; min-height: 40px; padding: 8px 16px; color: var(--brand-navy); background: #fff; border: 1px solid transparent; border-radius: 5px; font-size: .75rem; font-weight: 800; white-space: nowrap; }
 .content-page-nav a:hover, .content-page-nav a[aria-current="location"] { color: #fff; background: var(--brand-blue); border-color: var(--brand-blue); }
 .content-page-panel { min-width: 0; padding: 30px; margin: 0 0 28px; background: var(--white); border: 1px solid var(--line-blue); border-top: 3px solid var(--brand-gold); border-radius: 8px; scroll-margin-top: 174px; }
+.content-page-stage.is-page-mode { position: relative; margin-bottom: 28px; }
+.content-page-stage.is-page-mode > .content-page-panel { margin: 0; }
+.content-page-stage.is-page-mode > .content-page-panel[hidden] { display: none; }
+.content-page-stage.is-transitioning { overflow: hidden; }
+.content-page-stage.is-transitioning > .content-page-panel:not([hidden]) { position: absolute; top: 0; right: 0; left: 0; width: 100%; will-change: transform; }
+.content-page-stage.is-transitioning > .content-page-panel.is-transition-outgoing { z-index: 1; }
+.content-page-stage.is-transitioning > .content-page-panel.is-transition-incoming { z-index: 2; }
 .content-page-heading { display: flex; align-items: center; justify-content: space-between; gap: 28px; padding-bottom: 24px; margin-bottom: 26px; border-bottom: 1px solid var(--line-blue); }
 .content-page-heading h3 { margin: 0 0 7px; color: var(--brand-navy); font-size: clamp(1.5rem, 2vw, 1.8rem); line-height: 1.2; letter-spacing: -.02em; }
 .content-page-heading p { max-width: 72ch; margin: 0; color: var(--muted); font-size: .98rem; line-height: 1.5; }
@@ -2279,6 +2286,7 @@ body.native-media-enabled .native-media-actions {
     .mobile-app-webview .content-page-nav { top: 0; }
     .mobile-app-webview .content-page-panel { scroll-margin-top: 72px; }
     .content-page-panel { padding: 20px; margin-bottom: 20px; scroll-margin-top: 150px; }
+    .content-page-stage.is-page-mode { margin-bottom: 20px; }
     .content-page-heading, .content-page-subpanel-heading, .content-page-save-row { align-items: stretch; flex-direction: column; }
     .content-page-heading h3 { font-size: 1.5rem; }
     .content-page-heading p { font-size: .94rem; }
@@ -2611,6 +2619,14 @@ body.public-site.public-motion-ready main .public-item-reveal {
 body.public-site.public-motion-ready main .public-item-reveal.is-visible {
     opacity: 1;
     transform: none;
+}
+/* Preserve homepage service hover easing alongside the scroll reveal. */
+body.public-site.public-motion-ready main .service-row.public-item-reveal {
+    transition:
+        opacity 560ms ease var(--public-item-delay, 0ms),
+        transform 560ms cubic-bezier(.2, .7, .2, 1) var(--public-item-delay, 0ms),
+        padding .2s ease,
+        background-color .2s ease;
 }
 body.public-site.public-motion-ready main h1.public-heading-reveal {
     opacity: 0;

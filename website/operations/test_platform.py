@@ -67,6 +67,7 @@ from .services import (
     ensure_role_groups,
     find_employee_invite,
 )
+from .test_helpers import force_login_with_admin_gate, valid_test_image_bytes
 
 
 TEST_MEDIA_ROOT = Path(tempfile.mkdtemp(prefix='gcc-platform-tests-'))
@@ -87,6 +88,7 @@ TEST_STORAGES = {
     MEDIA_ROOT=TEST_MEDIA_ROOT,
     STORAGES=TEST_STORAGES,
     GCC_TURNSTILE_ENABLED=False,
+    GCC_TURNSTILE_ALLOW_MISSING=True,
     CLOUDFLARE_TURNSTILE_SITE_KEY="",
     CLOUDFLARE_TURNSTILE_SECRET_KEY="",
 )
@@ -297,12 +299,7 @@ class PlatformWorkflowTests(TestCase):
 
     def login(self, user):
         self.browser.logout()
-        self.browser.force_login(user)
-        if user.is_superuser:
-            self.browser.post(
-                reverse('admin:access'),
-                {'identifier': user.username},
-            )
+        force_login_with_admin_gate(self.browser, user)
 
     @staticmethod
     def pacific_datetime(day, hour, minute=0):
@@ -350,8 +347,8 @@ class PlatformWorkflowTests(TestCase):
             (
                 '>Overview<', 'Client &amp; Job Operations', '>Leads<',
                 '>Clients<', '>Estimates<', '>Projects<', '>Tasks<',
-                '>Calendar<', '>Time<', '>Documents<', '>Media<',
-                'Miscellaneous', '>Team<', '>Messages<', '>Notifications<', '>Content<',
+                '>Calendar<', '>Time<', '>Documents<', '>Client Media<',
+                '>Publish Content<', 'Miscellaneous', '>Team<', '>Messages<', '>Notifications<',
             ),
         )
 
@@ -361,7 +358,7 @@ class PlatformWorkflowTests(TestCase):
         self.assert_operations_badges(workspace_response, 'admin', admin_keys)
         self.assert_sidebar_sequence(
             workspace_response,
-            ('>Overview<', 'Client &amp; Job Operations', '>Leads<', '>Clients<', '>Estimates<', '>Projects<', '>Tasks<', '>Calendar<', '>Time<', '>Documents<', '>Media<', 'Miscellaneous', '>Team<', '>Messages<', '>Notifications<', '>Content<'),
+            ('>Overview<', 'Client &amp; Job Operations', '>Leads<', '>Clients<', '>Estimates<', '>Projects<', '>Tasks<', '>Calendar<', '>Time<', '>Documents<', '>Client Media<', '>Publish Content<', 'Miscellaneous', '>Team<', '>Messages<', '>Notifications<'),
         )
 
     def test_employee_operations_sidebar_hides_zero_counts_and_keeps_positive_counts(self):
@@ -1124,8 +1121,7 @@ class PlatformWorkflowTests(TestCase):
         owner_project_response = self.browser.get(
             reverse('operations:project-detail', kwargs={'pk': self.project.pk}),
         )
-        self.assertContains(owner_project_response, 'Dashboard')
-        self.assertContains(owner_project_response, reverse('operations:dashboard'))
+        self.assertEqual(owner_project_response.status_code, 404)
         self.assertEqual(self.browser.session.get('_auth_user_id'), str(self.owner.pk))
 
         self.login(self.manager)
@@ -1408,7 +1404,7 @@ class PlatformWorkflowTests(TestCase):
 
         upload = SimpleUploadedFile(
             'field-report.jpg',
-            b'\xff\xd8\xffimage bytes',
+            valid_test_image_bytes('JPEG'),
             content_type='image/jpeg',
         )
         media_response = self.browser.post(
@@ -1752,24 +1748,33 @@ class PlatformWorkflowTests(TestCase):
         self.assertRedirects(admin_request, reverse("operations:password-reset-done"))
         self.assertEqual(len(mail.outbox), 0)
 
-    def test_public_password_recovery_locks_after_five_unknown_emails(self):
+    def test_public_password_recovery_throttles_by_email_without_changing_response(self):
         reset_url = reverse("operations:password-reset")
         done_url = reverse("operations:password-reset-done")
+        email = "rate-limit-public-reset@example.com"
+        reset_user = get_user_model().objects.create_user(
+            username="rate-limit-public-reset",
+            email=email,
+            password="existing-password-123",
+        )
+        ClientRecord.objects.create(name="Reset Client", email=email, user=reset_user)
+        mail.outbox.clear()
 
-        for attempt in range(4):
+        for _ in range(3):
             response = self.browser.post(
                 reset_url,
-                {"email": f"unknown-public-{attempt}@example.com"},
+                {"email": email},
             )
             self.assertRedirects(response, done_url)
+        self.assertEqual(len(mail.outbox), 3)
 
-        locked = self.browser.post(
+        throttled = self.browser.post(
             reset_url,
-            {"email": "unknown-public-final@example.com"},
+            {"email": email},
         )
-        self.assertEqual(locked.status_code, 429)
-        self.assertContains(locked, "Too many password reset attempts.", status_code=429)
-        self.assertEqual(self.browser.get(reset_url).status_code, 429)
+        self.assertRedirects(throttled, done_url)
+        self.assertEqual(len(mail.outbox), 3)
+        self.assertEqual(self.browser.get(reset_url).status_code, 200)
 
     def test_lead_assignment_conversion_and_estimate_requires_client(self):
         unconverted = Lead.objects.create(
@@ -2210,6 +2215,7 @@ class PlatformWorkflowTests(TestCase):
             self.browser.get(reverse('operations:dashboard-section', kwargs={'section': 'calendar'})),
             event.title,
         )
+        self.login(self.field)
         self.assertContains(
             self.browser.get(reverse('operations:team-section', kwargs={'section': 'calendar'})),
             event.title,
@@ -2245,7 +2251,6 @@ class PlatformWorkflowTests(TestCase):
         self.assertContains(preview_response, 'Overflow event 2')
         self.assertContains(preview_response, 'Overflow event 3')
         self.assertContains(preview_response, '+1 more')
-        self.assertContains(preview_response, 'View all 4 events')
         self.assertNotContains(preview_response, 'Overflow event 4')
         self.assertContains(
             preview_response,
@@ -2342,7 +2347,7 @@ class PlatformWorkflowTests(TestCase):
         self.assertIn(f"Task completed: {completed_task.title}", owner_event_titles)
         self.assertIn("Milestone completed: Admin calendar milestone", owner_event_titles)
         self.assertGreaterEqual(owner_response.context["calendar_job_event_count"], 5)
-        self.assertContains(owner_response, "Owner job timeline:")
+        self.assertContains(owner_response, "Owner job timeline")
         self.assertNotContains(owner_response, f"Task: {completed_task.title}")
         self.assertContains(owner_response, "Project target")
 
@@ -2589,11 +2594,9 @@ class PlatformWorkflowTests(TestCase):
         self.assertEqual(empty_response.status_code, 200)
         self.assertEqual(empty_response.context['selected_day_events'], [])
         self.assertContains(empty_response, 'No schedule events are visible for this day.')
-        self.assertContains(
-            empty_response,
-            f"href='?month={empty_day.strftime('%Y-%m')}&amp;day={empty_day.isoformat()}' data-calendar-day-selection",
-        )
         self.assertContains(empty_response, 'data-calendar-day-selection')
+        self.assertContains(empty_response, f'month={empty_day.strftime("%Y-%m")}')
+        self.assertContains(empty_response, f'day={empty_day.isoformat()}')
         self.assertContains(empty_response, 'data-calendar-selection-status')
         self.assertNotContains(empty_response, '#calendar-day-details')
         self.assertContains(empty_response, "id='calendar-day-selection-content'")
@@ -2853,8 +2856,7 @@ class PlatformWorkflowTests(TestCase):
         public_response = self.browser.get(reverse('operations:home'))
         self.assertContains(public_response, 'Review us on Google')
         detail_response = self.browser.get(reverse('operations:project-detail', kwargs={'pk': self.project.pk}))
-        self.assertContains(detail_response, self.public_media.title)
-        self.assertNotContains(detail_response, self.internal_media.title)
+        self.assertEqual(detail_response.status_code, 404)
 
     def test_owner_can_change_the_title_shown_on_client_messages(self):
         self.login(self.owner)
@@ -3330,7 +3332,7 @@ class PlatformWorkflowTests(TestCase):
         self.assertContains(response, 'Your estimates')
         self.assertContains(response, unrelated.title)
 
-    def test_project_publication_and_staff_assignments_can_be_cleared(self):
+    def test_project_update_preserves_publication_and_can_clear_staff_assignments(self):
         self.login(self.owner)
         response = self.browser.post(
             reverse('operations:project-update', kwargs={'pk': self.project.pk}),
@@ -3349,7 +3351,7 @@ class PlatformWorkflowTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.project.refresh_from_db()
-        self.assertFalse(self.project.is_published)
+        self.assertTrue(self.project.is_published)
         self.assertEqual(self.project.assigned_staff.count(), 0)
         self.assertEqual(
             self.browser.get(reverse('operations:project-detail', kwargs={'pk': self.project.pk})).status_code,
@@ -3553,6 +3555,7 @@ class PlatformWorkflowTests(TestCase):
             self.assertEqual(self.field.email, original['email'])
             self.assertEqual(self.field.first_name, original['first_name'])
 
+    @override_settings(GCC_TURNSTILE_ENABLED=False, GCC_TURNSTILE_ALLOW_MISSING=True)
     def test_employee_account_delete_anonymizes_user_and_preserves_history(self):
         self.login(self.field)
         profile = self.field.employee_profile

@@ -5,6 +5,7 @@ import shutil
 import tempfile
 from datetime import timedelta
 from decimal import Decimal
+from io import BytesIO
 from pathlib import Path
 
 from django.contrib.auth import get_user_model
@@ -15,6 +16,7 @@ from django.test import Client as DjangoClient
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 
 from .forms import ContactLeadForm, MediaUploadForm
 from .models import (
@@ -35,10 +37,13 @@ from .models import (
     SiteSettings,
 )
 from .services import create_client_invite
+from .test_helpers import force_login_with_admin_gate, valid_test_image_bytes
 
 
 TEST_MEDIA_ROOT = Path(tempfile.mkdtemp(prefix="gcc-operations-tests-"))
-VALID_PNG = b"\x89PNG\r\n\x1a\n" + (b"\x00" * 16)
+_valid_png = BytesIO()
+Image.new("RGB", (2, 2), (40, 90, 150)).save(_valid_png, format="PNG")
+VALID_PNG = _valid_png.getvalue()
 TEST_STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -56,6 +61,7 @@ TEST_STORAGES = {
     MEDIA_ROOT=TEST_MEDIA_ROOT,
     STORAGES=TEST_STORAGES,
     GCC_TURNSTILE_ENABLED=False,
+    GCC_TURNSTILE_ALLOW_MISSING=True,
     CLOUDFLARE_TURNSTILE_SITE_KEY="",
     CLOUDFLARE_TURNSTILE_SECRET_KEY="",
 )
@@ -199,11 +205,7 @@ class OperationsWorkflowTests(TestCase):
 
     def login_staff(self):
         self.browser.logout()
-        self.browser.force_login(self.staff)
-        self.browser.post(
-            reverse('admin:access'),
-            {'identifier': self.staff.username},
-        )
+        force_login_with_admin_gate(self.browser, self.staff)
 
     def login_client(self):
         self.browser.logout()
@@ -800,7 +802,7 @@ class OperationsWorkflowTests(TestCase):
 
     def test_valid_media_upload_is_persisted(self):
         self.login_staff()
-        upload = SimpleUploadedFile("progress.jpg", b"\xff\xd8\xffimage bytes", content_type="image/jpeg")
+        upload = SimpleUploadedFile("progress.jpg", valid_test_image_bytes("JPEG"), content_type="image/jpeg")
         response = self.browser.post(
             reverse("operations:media-upload"),
             {"project": str(self.project.pk), "files": [upload]},
@@ -847,7 +849,7 @@ class OperationsWorkflowTests(TestCase):
         self.assertFalse(invite_form["username"].value())
         self.assertEqual(
             invite_form["username"].field.widget.attrs["placeholder"],
-            "Create a unique username",
+            "Create a unique username or use your email address",
         )
         self.assertEqual(invite_form["password1"].label, "Password")
         self.assertEqual(invite_form["password2"].label, "Confirm Password")
@@ -867,6 +869,7 @@ class OperationsWorkflowTests(TestCase):
         self.assertEqual(invite_client.user.email, "invite@example.com")
         invite.refresh_from_db()
         self.assertIsNotNone(invite.accepted_at)
+        self.browser.logout()
         self.assertEqual(self.browser.get(reverse("operations:client-invite", kwargs={"token": raw_token})).status_code, 410)
 
         expired_raw = "expired-token"

@@ -6,9 +6,8 @@
     }
 
     var activeAdminToast = null;
-    var contentPageHashHandlerBound = false;
-    var contentPageScrollHandlerBound = false;
-    var contentPageScrollFrame = 0;
+    var contentPageLocationHandlerBound = false;
+    var activeContentPageTransition = null;
     var taskFilterGlobalHandlersBound = false;
     var calendarPopstateBound = false;
     var activeCalendarPopstate = null;
@@ -110,19 +109,25 @@
         }
     }
 
-    function selectContentPage(nav, hash) {
-        if (!nav) return;
-        var links = Array.prototype.slice.call(nav.querySelectorAll("[data-content-page-link]"));
-        var matchingHash = links.some(function (link) { return link.getAttribute("href") === hash; })
-            ? hash
-            : "";
-        if (!matchingHash && hash) {
-            var target = document.getElementById(hash.slice(1));
-            var panel = target && target.closest(".content-page-panel");
-            if (panel) matchingHash = "#" + panel.id;
-        }
-        links.forEach(function (link) {
-            if (link.getAttribute("href") === matchingHash) {
+    function contentPagePanels(stage) {
+        return Array.prototype.slice.call(stage.querySelectorAll(".content-page-panel[id^='publish-page-']"));
+    }
+
+    function contentPageForHash(stage, hash) {
+        if (!stage || !hash || hash.charAt(0) !== "#") return null;
+        var id = hash.slice(1);
+        try { id = decodeURIComponent(id); } catch (error) { /* Keep the literal fragment. */ }
+        var target = document.getElementById(id);
+        var panel = target && (target.matches(".content-page-panel[id^='publish-page-']")
+            ? target
+            : target.closest(".content-page-panel[id^='publish-page-']"));
+        return panel && stage.contains(panel) ? panel : null;
+    }
+
+    function setContentPageNavigationState(nav, panel) {
+        if (!nav || !panel) return;
+        nav.querySelectorAll("[data-content-page-link]").forEach(function (link) {
+            if (link.getAttribute("href") === "#" + panel.id) {
                 link.setAttribute("aria-current", "location");
             } else {
                 link.removeAttribute("aria-current");
@@ -130,68 +135,213 @@
         });
     }
 
-    function selectContentPageAtScrollPosition() {
-        var nav = document.querySelector(".admin-view.is-active .content-page-nav");
-        if (!nav) return;
-        var panels = Array.prototype.slice.call(
-            document.querySelectorAll(".admin-view.is-active .content-page-panel[id^='publish-page-']")
-        );
-        if (!panels.length) return;
-
-        var focusLine = nav.getBoundingClientRect().bottom + 16;
-        var activePanel = panels[0];
-        panels.forEach(function (panel) {
-            if (panel.getBoundingClientRect().top <= focusLine) activePanel = panel;
+    function setContentPageVisibility(stage, activePanel) {
+        contentPagePanels(stage).forEach(function (panel) {
+            var active = panel === activePanel;
+            panel.hidden = !active;
+            panel.setAttribute("aria-hidden", String(!active));
+            panel.inert = !active;
         });
-        var atPageBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
-        if (atPageBottom) activePanel = panels[panels.length - 1];
-        selectContentPage(nav, "#" + activePanel.id);
+        stage._activeContentPagePanel = activePanel;
     }
 
-    function scheduleContentPageScrollSelection() {
-        if (contentPageScrollFrame) return;
-        contentPageScrollFrame = window.requestAnimationFrame(function () {
-            contentPageScrollFrame = 0;
-            selectContentPageAtScrollPosition();
+    function finishContentPageTransition(transition) {
+        transition = transition || activeContentPageTransition;
+        if (!transition || transition !== activeContentPageTransition) return;
+        window.clearTimeout(transition.timeout);
+        transition.fromPanel.hidden = true;
+        transition.fromPanel.setAttribute("aria-hidden", "true");
+        transition.fromPanel.inert = true;
+        transition.fromPanel.classList.remove("is-transition-outgoing");
+        transition.targetPanel.hidden = false;
+        transition.targetPanel.setAttribute("aria-hidden", "false");
+        transition.targetPanel.inert = false;
+        transition.targetPanel.classList.remove("is-transition-incoming");
+        transition.stage._activeContentPagePanel = transition.targetPanel;
+        transition.stage.classList.remove("is-transitioning");
+        transition.stage.style.height = "";
+        transition.animations.forEach(function (animation) {
+            animation.onfinish = null;
+            animation.cancel();
         });
+        activeContentPageTransition = null;
+    }
+
+    function alignContentPageStage(nav, stage) {
+        var navRect = nav.getBoundingClientRect();
+        var stageRect = stage.getBoundingClientRect();
+        var stickyTop = parseFloat(window.getComputedStyle(nav).top);
+        if (!Number.isFinite(stickyTop)) stickyTop = navRect.top;
+        var gap = 16;
+        var targetY = Math.max(0, window.scrollY + stageRect.top - stickyTop - navRect.height - gap);
+        if (Math.abs(targetY - window.scrollY) < 2) return;
+
+        var root = document.documentElement;
+        var previousScrollBehavior = root.style.scrollBehavior;
+        root.style.scrollBehavior = "auto";
+        window.scrollTo(window.scrollX, targetY);
+        root.style.scrollBehavior = previousScrollBehavior;
+    }
+
+    function showContentPage(nav, stage, targetPanel, options) {
+        options = options || {};
+        var panels = contentPagePanels(stage);
+        if (!targetPanel || panels.indexOf(targetPanel) === -1) return;
+        if (activeContentPageTransition) finishContentPageTransition(activeContentPageTransition);
+
+        var fromPanel = stage._activeContentPagePanel || panels.find(function (panel) { return !panel.hidden; }) || panels[0];
+        var fromIndex = panels.indexOf(fromPanel);
+        var targetIndex = panels.indexOf(targetPanel);
+        setContentPageNavigationState(nav, targetPanel);
+        if (options.align !== false) alignContentPageStage(nav, stage);
+
+        if (!fromPanel || fromPanel === targetPanel || options.animate === false) {
+            setContentPageVisibility(stage, targetPanel);
+            stage.classList.remove("is-transitioning");
+            stage.style.height = "";
+            return;
+        }
+
+        var reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (reducedMotion || typeof fromPanel.animate !== "function" || typeof targetPanel.animate !== "function") {
+            setContentPageVisibility(stage, targetPanel);
+            return;
+        }
+
+        var startHeight = stage.getBoundingClientRect().height;
+        panels.forEach(function (panel) {
+            var isTransitioning = panel === fromPanel || panel === targetPanel;
+            panel.hidden = !isTransitioning;
+            panel.setAttribute("aria-hidden", String(panel !== targetPanel));
+            panel.inert = panel !== targetPanel;
+            panel.classList.toggle("is-transition-outgoing", panel === fromPanel);
+            panel.classList.toggle("is-transition-incoming", panel === targetPanel);
+        });
+        stage._activeContentPagePanel = targetPanel;
+        stage.style.height = startHeight + "px";
+        stage.classList.add("is-transitioning");
+        void stage.offsetHeight;
+
+        var endHeight = targetPanel.getBoundingClientRect().height;
+        var direction = targetIndex > fromIndex ? 1 : -1;
+        var distance = 34 * direction;
+        var duration = 320;
+        var timing = {duration: duration, easing: "cubic-bezier(.22,.68,0,1)", fill: "both"};
+        var transition = {
+            stage: stage,
+            fromPanel: fromPanel,
+            targetPanel: targetPanel,
+            animations: [],
+            timeout: 0
+        };
+        activeContentPageTransition = transition;
+        try {
+            transition.animations = [
+                fromPanel.animate([
+                    {transform: "translateX(0)"},
+                    {transform: "translateX(" + (-distance) + "px)"}
+                ], timing),
+                targetPanel.animate([
+                    {transform: "translateX(" + distance + "px)"},
+                    {transform: "translateX(0)"}
+                ], timing),
+                stage.animate([
+                    {height: startHeight + "px"},
+                    {height: endHeight + "px"}
+                ], timing)
+            ];
+            var remaining = transition.animations.length;
+            transition.animations.forEach(function (animation) {
+                animation.onfinish = function () {
+                    remaining -= 1;
+                    if (remaining === 0) finishContentPageTransition(transition);
+                };
+            });
+            transition.timeout = window.setTimeout(function () {
+                finishContentPageTransition(transition);
+            }, duration + 100);
+        } catch (error) {
+            finishContentPageTransition(transition);
+        }
+    }
+
+    function navigateActiveContentPageFromLocation() {
+        var nav = document.querySelector(".admin-view.is-active .content-page-nav");
+        var stage = nav && nav.parentElement.querySelector("[data-content-page-stage]");
+        if (!nav || !stage) return;
+
+        var panels = contentPagePanels(stage);
+        var url = new URL(window.location.href);
+        var queryPage = url.searchParams.get("content_page_focus");
+        var queryTarget = queryPage && document.getElementById("publish-page-" + queryPage);
+        var target = contentPageForHash(stage, url.hash)
+            || (queryTarget && stage.contains(queryTarget) ? queryTarget : null)
+            || stage._activeContentPagePanel
+            || panels[0];
+        showContentPage(nav, stage, target, {animate: true, align: true});
     }
 
     function initContentPageNavigation(options) {
         options = options || {};
-        var nav = document.querySelector(".admin-view.is-active .content-page-nav");
-        if (!nav) return;
+        var view = document.querySelector(".admin-view.is-active .content-page-nav");
+        if (!view) return;
+        var nav = view;
+        var stage = view.parentElement.querySelector("[data-content-page-stage]");
+        if (!stage) return;
+        if (activeContentPageTransition) finishContentPageTransition(activeContentPageTransition);
+
         var links = Array.prototype.slice.call(nav.querySelectorAll("[data-content-page-link]"));
+        var panels = contentPagePanels(stage);
+        if (!panels.length) return;
+        stage.classList.add("is-page-mode");
 
-        links.forEach(function (link) {
-            link.addEventListener("click", function () {
-                selectContentPage(nav, link.getAttribute("href"));
-            });
-        });
-        if (!contentPageHashHandlerBound) {
-            contentPageHashHandlerBound = true;
-            window.addEventListener("hashchange", function () {
-                selectContentPage(document.querySelector(".admin-view.is-active .content-page-nav"), window.location.hash);
-            });
-        }
-        if (!contentPageScrollHandlerBound) {
-            contentPageScrollHandlerBound = true;
-            window.addEventListener("scroll", scheduleContentPageScrollSelection, {passive: true});
-            window.addEventListener("resize", scheduleContentPageScrollSelection);
-        }
-        var pageFromQuery = new URL(window.location.href).searchParams.get("content_page_focus");
-        var queryHash = pageFromQuery ? "#publish-page-" + pageFromQuery : "";
-        selectContentPage(nav, window.location.hash || queryHash || (links[0] && links[0].getAttribute("href")));
+        function initialTargetForView() {
+            var pageView = nav.closest(".admin-view");
+            var url = new URL(window.location.href);
+            var hashTarget = contentPageForHash(stage, url.hash);
+            var errorPage = pageView && pageView.dataset.contentPageError;
+            var errorTarget = errorPage && document.getElementById("publish-page-" + errorPage);
+            if (errorTarget && stage.contains(errorTarget)) return errorTarget;
+            if (hashTarget) return hashTarget;
 
-        var view = nav.closest(".admin-view");
-        var focusPage = view && (view.dataset.contentPageError || view.dataset.contentPageFocus);
-        if (!options.skipAutoFocus && focusPage && links.some(function (link) { return link.getAttribute("href") === "#publish-page-" + focusPage; })) {
-            var target = document.getElementById("publish-page-" + focusPage);
-            if (target) {
-                selectContentPage(nav, "#publish-page-" + focusPage);
-                window.requestAnimationFrame(function () {
-                    target.scrollIntoView({ block: "start", behavior: "auto" });
+            var pageName = url.searchParams.get("content_page_focus")
+                || (pageView && pageView.dataset.contentPageFocus);
+            var target = pageName && document.getElementById("publish-page-" + pageName);
+            return (target && stage.contains(target) ? target : null)
+                || stage._activeContentPagePanel
+                || panels[0];
+        }
+
+        if (nav.dataset.contentPageNavigationBound !== "true") {
+            nav.dataset.contentPageNavigationBound = "true";
+            links.forEach(function (link) {
+                link.addEventListener("click", function (event) {
+                    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                    var targetPanel = contentPageForHash(stage, link.getAttribute("href"));
+                    if (!targetPanel) return;
+                    event.preventDefault();
+                    var nextUrl = new URL(window.location.href);
+                    nextUrl.searchParams.delete("content_page_focus");
+                    nextUrl.hash = targetPanel.id;
+                    if (nextUrl.href !== window.location.href) {
+                        window.history.pushState(window.history.state, "", nextUrl.pathname + nextUrl.search + nextUrl.hash);
+                    }
+                    showContentPage(nav, stage, targetPanel, {animate: true, align: true});
                 });
-            }
+            });
+        }
+
+        if (!contentPageLocationHandlerBound) {
+            contentPageLocationHandlerBound = true;
+            window.addEventListener("popstate", navigateActiveContentPageFromLocation);
+            window.addEventListener("hashchange", navigateActiveContentPageFromLocation);
+        }
+
+        var initialPanel = initialTargetForView();
+        setContentPageVisibility(stage, initialPanel);
+        setContentPageNavigationState(nav, initialPanel);
+        if (!options.skipAutoFocus && (window.location.hash || new URL(window.location.href).searchParams.has("content_page_focus"))) {
+            alignContentPageStage(nav, stage);
         }
     }
 

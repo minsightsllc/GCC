@@ -9,7 +9,6 @@ from decimal import Decimal
 from pathlib import Path
 
 from django.contrib.auth import get_user_model
-from django.test import Client as DjangoClient
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -30,6 +29,7 @@ from .models import (
     Task,
 )
 from .services import ensure_role_groups
+from .test_helpers import GatedTestClient, force_login_with_admin_gate, valid_test_image_bytes
 from .views import _notify_task_participants
 from django.core.files.uploadedfile import SimpleUploadedFile
 from .construction_services import record_external_estimate_status
@@ -129,14 +129,12 @@ class WorkflowContractTests(TestCase):
         shutil.rmtree(TEST_MEDIA_ROOT, ignore_errors=True)
 
     def setUp(self):
-        self.http = DjangoClient()
+        self.http = GatedTestClient()
         self.next_number = 12000
 
     def login_as(self, user):
         self.http.logout()
-        self.http.force_login(user)
-        if user.is_superuser:
-            self.http.post(reverse("admin:access"), {"identifier": user.username})
+        force_login_with_admin_gate(self.http, user)
 
     def make_estimate(self, *, status=Estimate.Status.SENT):
         self.next_number += 1
@@ -269,12 +267,12 @@ class WorkflowContractTests(TestCase):
             ">Calendar<",
             ">Time<",
             ">Documents<",
-            ">Media<",
+            ">Client Media<",
+            ">Publish Content<",
             "Miscellaneous",
             ">Team<",
             ">Messages<",
             ">Notifications<",
-            ">Content<",
         )
         self.assertEqual([owner_sidebar.index(token) for token in owner_tokens], sorted(owner_sidebar.index(token) for token in owner_tokens))
 
@@ -416,8 +414,9 @@ class WorkflowContractTests(TestCase):
             data=self.project_payload(project, status=Project.Status.CONSTRUCTION, staff=[]),
             instance=project,
         )
-        self.assertFalse(invalid_execution_form.is_valid())
-        self.assertIn("execution", invalid_execution_form.errors["assigned_staff"][0])
+        self.assertNotIn("status", invalid_execution_form.fields)
+        self.assertTrue(invalid_execution_form.is_valid())
+        self.assertEqual(project.status, Project.Status.PLANNING)
 
         response = self.http.post(
             reverse("operations:project-update", kwargs={"pk": project.pk}),
@@ -426,6 +425,7 @@ class WorkflowContractTests(TestCase):
         self.assertEqual(response.status_code, 302)
         project.refresh_from_db()
         self.assertFalse(project.needs_staff_assignment)
+        self.assertEqual(project.status, Project.Status.PLANNING)
         self.assertTrue(EmployeeNotification.objects.filter(kind="project-assignment", project=project, employee=self.manager).exists())
         self.assertTrue(ClientNotification.objects.filter(kind="project-staff-assigned", project=project).exists())
 
@@ -582,7 +582,7 @@ class WorkflowContractTests(TestCase):
         )
         self.assertTrue(ClientNotification.objects.filter(kind="update-published", project=project).exists())
 
-        media_file = SimpleUploadedFile("progress.jpg", b"not-empty", content_type="image/jpeg")
+        media_file = SimpleUploadedFile("progress.jpg", valid_test_image_bytes("JPEG"), content_type="image/jpeg")
         self.assertEqual(
             self.http.post(
                 reverse("operations:media-upload"),
@@ -774,6 +774,7 @@ class WorkflowContractTests(TestCase):
         self.assertFalse(ClientNotification.objects.filter(client=self.other_client_record, project=project).exists())
 
         self.login_as(self.owner)
+        original_project_status = project.status
         self.assertEqual(
             self.http.post(
                 reverse("operations:project-update", kwargs={"pk": project.pk}),
@@ -781,4 +782,6 @@ class WorkflowContractTests(TestCase):
             ).status_code,
             302,
         )
-        self.assertTrue(ClientNotification.objects.filter(kind="project-complete", project=project).exists())
+        project.refresh_from_db()
+        self.assertEqual(project.status, original_project_status)
+        self.assertFalse(ClientNotification.objects.filter(kind="project-complete", project=project).exists())

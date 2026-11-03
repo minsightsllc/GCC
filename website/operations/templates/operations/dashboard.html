@@ -68,11 +68,13 @@
                     <a href="#publish-page-process" data-content-page-link>Process</a>
                     <a href="#publish-page-contact" data-content-page-link>Contact</a>
                 </nav>
-                {% include 'operations/content_page_home.html' %}
-                {% include 'operations/content_page_services.html' %}
-                {% if active_section == 'content' %}{% include 'operations/content_website_publishing.html' %}{% endif %}
-                {% include 'operations/content_page_process.html' %}
-                {% include 'operations/content_page_contact.html' %}
+                <div class="content-page-stage" data-content-page-stage>
+                    {% include 'operations/content_page_home.html' %}
+                    {% include 'operations/content_page_services.html' %}
+                    {% if active_section == 'content' %}{% include 'operations/content_website_publishing.html' %}{% endif %}
+                    {% include 'operations/content_page_process.html' %}
+                    {% include 'operations/content_page_contact.html' %}
+                </div>
             </section>
         {% include 'operations/lead_assignment_panel.html' %}
         </main>
