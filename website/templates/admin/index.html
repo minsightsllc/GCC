@@ -52,7 +52,7 @@
                             {% elif meter.status == 'quota_custom' %}
                                 <p class='gcc-admin-storage-message'>This Supabase plan has a custom storage allowance. Check the organization's Usage page for its current limit.</p>
                             {% else %}
-                                <p class='gcc-admin-storage-message'>The Supabase plan allowance could not be loaded. Check the Management API token and server logs.</p>
+                                <p class='gcc-admin-storage-message'>{{ meter.diagnostic|default:'The Supabase plan allowance could not be loaded.' }}</p>
                             {% endif %}
                         {% elif meter.status == 'not_configured' %}
                             {% if meter.source == 'supabase' %}

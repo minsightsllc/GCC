@@ -40,7 +40,11 @@ def get_admin_storage_usage() -> dict:
         "meters": [_format_meter(supabase), _format_meter(render)],
         "checked_at": checked_at,
     }
-    cache.set(cache_key, result, _CACHE_TIMEOUT_SECONDS)
+    transient_failure = any(
+        meter.get("status") in {"unavailable", "quota_unavailable"}
+        for meter in (supabase, render)
+    )
+    cache.set(cache_key, result, 60 if transient_failure else _CACHE_TIMEOUT_SECONDS)
     return result
 
 
@@ -108,12 +112,13 @@ def _get_supabase_usage() -> dict:
         logger.warning("Supabase storage usage refresh failed (%s).", type(exc).__name__)
         return {"status": "unavailable", "source": "supabase"}
 
-    quota_gb, quota_status = _get_supabase_plan_quota()
+    quota_gb, quota_status, quota_diagnostic = _get_supabase_plan_quota()
     if quota_gb is None:
         return {
             "status": quota_status,
             "source": "supabase",
             "used_bytes": used_bytes,
+            "diagnostic": quota_diagnostic,
         }
     return {
         "status": "ready",
@@ -123,12 +128,12 @@ def _get_supabase_usage() -> dict:
     }
 
 
-def _get_supabase_plan_quota() -> tuple[float | None, str]:
+def _get_supabase_plan_quota() -> tuple[float | None, str, str]:
     """Fetch the organization plan and map its published included storage quota."""
     token = getattr(settings, "SUPABASE_MANAGEMENT_API_TOKEN", "")
     org_slug = getattr(settings, "SUPABASE_ORG_SLUG", "")
     if not token or not org_slug:
-        return None, "quota_not_configured"
+        return None, "quota_not_configured", "Management API token or organization slug is missing."
 
     request = Request(
         f"https://api.supabase.com/v1/organizations/{quote(org_slug, safe='')}",
@@ -139,19 +144,37 @@ def _get_supabase_plan_quota() -> tuple[float | None, str]:
             organization = json.loads(response.read().decode("utf-8"))
         plan = str(organization.get("plan", "")).strip().lower()
     except HTTPError as exc:
-        logger.warning("Supabase organization plan lookup returned HTTP %s.", exc.code)
-        return None, "quota_unavailable"
+        diagnostic = _supabase_http_diagnostic(exc.code)
+        logger.warning("Supabase organization plan lookup failed: %s", diagnostic)
+        return None, "quota_unavailable", diagnostic
     except Exception as exc:
-        logger.warning("Supabase organization plan lookup failed (%s).", type(exc).__name__)
-        return None, "quota_unavailable"
+        diagnostic = f"Management API request failed ({type(exc).__name__})."
+        logger.warning("Supabase organization plan lookup failed: %s", diagnostic)
+        return None, "quota_unavailable", diagnostic
 
     # Supabase publishes the included Storage Size allowance for these plans.
     # Enterprise is custom, so don't guess a limit for it.
     quotas = {"free": 1.0, "pro": 100.0, "team": 100.0}
     quota_gb = quotas.get(plan)
     if quota_gb is None:
-        return None, "quota_custom"
-    return quota_gb, "ready"
+        if plan == "enterprise":
+            return None, "quota_custom", "This Supabase plan has a custom storage allowance."
+        diagnostic = "Supabase returned an unrecognized organization plan."
+        logger.warning("Supabase organization plan lookup failed: %s", diagnostic)
+        return None, "quota_unavailable", diagnostic
+    return quota_gb, "ready", ""
+
+
+def _supabase_http_diagnostic(status_code: int) -> str:
+    if status_code == 401:
+        return "Supabase rejected the Management API token (HTTP 401). Check that it is active."
+    if status_code == 403:
+        return "Token needs Organization Settings read access for this organization (HTTP 403)."
+    if status_code == 404:
+        return "Organization was not found (HTTP 404). Check the slug after /org/ in the dashboard URL."
+    if status_code == 429:
+        return "Supabase rate-limited the Management API request (HTTP 429). It will retry shortly."
+    return f"Supabase Management API returned HTTP {status_code}."
 
 
 def _get_render_postgres_usage() -> dict:
