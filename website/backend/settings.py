@@ -431,6 +431,9 @@ LOGOUT_REDIRECT_URL = 'operations:home'
 
 ADMIN_URL_PREFIX = '/gccad/'
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
+# Send Django's production request error reports to the configured server address.
+SERVER_EMAIL = os.getenv('SERVER_EMAIL', '').strip()
+ADMINS = [SERVER_EMAIL] if SERVER_EMAIL else []
 OTP_TOTP_ISSUER = 'Grand Coast Construction'
 OTP_ADMIN_HIDE_SENSITIVE_DATA = True
 ADMIN_TRUSTED_PROXY_IPS = tuple(
