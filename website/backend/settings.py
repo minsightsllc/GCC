@@ -72,10 +72,19 @@ LOGGING = {
             "class": "logging.StreamHandler",
             "level": "WARNING",
         },
+        "admin_usage_console": {
+            "class": "logging.StreamHandler",
+            "level": "WARNING",
+        },
     },
     "loggers": {
         "operations.google_reviews": {
             "handlers": ["google_reviews_console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "operations.admin_usage": {
+            "handlers": ["admin_usage_console"],
             "level": "WARNING",
             "propagate": False,
         },

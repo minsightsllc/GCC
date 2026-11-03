@@ -32,7 +32,7 @@
                 <p>Live estimates in decimal gigabytes. Refreshed every 15 minutes.</p>
             </div>
             <div class='gcc-admin-storage-grid'>
-                {% for meter in storage_usage.values %}
+                {% for meter in storage_usage.meters %}
                     <article class='gcc-admin-storage-card{% if meter.status == "unavailable" %} is-unavailable{% endif %}'>
                         <div class='gcc-admin-storage-card-heading'>
                             <h3>{% if meter.source == "supabase" %}Supabase Storage{% else %}Render PostgreSQL{% endif %}</h3>

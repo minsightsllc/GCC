@@ -37,8 +37,7 @@ def get_admin_storage_usage() -> dict:
         render = render_future.result()
 
     result = {
-        "supabase": _format_meter(supabase),
-        "render": _format_meter(render),
+        "meters": [_format_meter(supabase), _format_meter(render)],
         "checked_at": checked_at,
     }
     cache.set(cache_key, result, _CACHE_TIMEOUT_SECONDS)
@@ -58,7 +57,7 @@ def _cache_key() -> str:
         "render_resource": getattr(settings, "RENDER_POSTGRES_ID", ""),
     }
     digest = hashlib.sha256(json.dumps(stable_config, sort_keys=True).encode()).hexdigest()[:16]
-    return f"gcc_admin_storage_usage_v1_{digest}"
+    return f"gcc_admin_storage_usage_v2_{digest}"
 
 
 def _get_supabase_usage() -> dict:
