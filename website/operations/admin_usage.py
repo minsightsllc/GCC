@@ -108,17 +108,15 @@ def _get_supabase_usage() -> dict:
                     for item in page.get("Contents", [])
                     if item.get("Size") is not None
                 )
-    except Exception as exc:  # Provider exceptions vary across boto3 versions.
-        logger.warning("Supabase storage usage refresh failed (%s).", type(exc).__name__)
+    except Exception:  # Provider exceptions vary across boto3 versions.
         return {"status": "unavailable", "source": "supabase"}
 
-    quota_gb, quota_status, quota_diagnostic = _get_supabase_plan_quota()
+    quota_gb, quota_status = _get_supabase_plan_quota()
     if quota_gb is None:
         return {
             "status": quota_status,
             "source": "supabase",
             "used_bytes": used_bytes,
-            "diagnostic": quota_diagnostic,
         }
     return {
         "status": "ready",
@@ -128,12 +126,12 @@ def _get_supabase_usage() -> dict:
     }
 
 
-def _get_supabase_plan_quota() -> tuple[float | None, str, str]:
-    """Fetch the organization plan and map its published included storage quota."""
+def _get_supabase_plan_quota() -> tuple[float | None, str]:
+    """Fetch the organization plan and map its included storage quota."""
     token = getattr(settings, "SUPABASE_MANAGEMENT_API_TOKEN", "")
     org_slug = getattr(settings, "SUPABASE_ORG_SLUG", "")
     if not token or not org_slug:
-        return None, "quota_not_configured", "Management API token or organization slug is missing."
+        return None, "quota_not_configured"
 
     request = Request(
         f"https://api.supabase.com/v1/organizations/{quote(org_slug, safe='')}",
@@ -143,22 +141,8 @@ def _get_supabase_plan_quota() -> tuple[float | None, str, str]:
         with urlopen(request, timeout=8) as response:
             organization = json.loads(response.read().decode("utf-8"))
         plan = str(organization.get("plan", "")).strip().lower()
-    except HTTPError as exc:
-        try:
-            response_body = exc.read(4096)
-        except Exception:
-            response_body = b""
-        diagnostic = _supabase_http_diagnostic(exc.code, response_body)
-        if exc.code == 403 and diagnostic.startswith(
-            "Supabase denied access to this organization"
-        ):
-            diagnostic = _supabase_org_scope_diagnostic(token, org_slug, diagnostic)
-        logger.warning("Supabase organization plan lookup failed: %s", diagnostic)
-        return None, "quota_unavailable", diagnostic
-    except Exception as exc:
-        diagnostic = f"Management API request failed ({type(exc).__name__})."
-        logger.warning("Supabase organization plan lookup failed: %s", diagnostic)
-        return None, "quota_unavailable", diagnostic
+    except Exception:
+        return None, "quota_unavailable"
 
     # Supabase publishes the included Storage Size allowance for these plans.
     # Enterprise is custom, so don't guess a limit for it.
@@ -166,90 +150,9 @@ def _get_supabase_plan_quota() -> tuple[float | None, str, str]:
     quota_gb = quotas.get(plan)
     if quota_gb is None:
         if plan == "enterprise":
-            return None, "quota_custom", "This Supabase plan has a custom storage allowance."
-        diagnostic = "Supabase returned an unrecognized organization plan."
-        logger.warning("Supabase organization plan lookup failed: %s", diagnostic)
-        return None, "quota_unavailable", diagnostic
-    return quota_gb, "ready", ""
-
-
-def _supabase_org_scope_diagnostic(token: str, org_slug: str, fallback: str) -> str:
-    """Use Organizations: Read to distinguish an out-of-scope org from a role issue."""
-    request = Request(
-        "https://api.supabase.com/v1/organizations",
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-    )
-    try:
-        with urlopen(request, timeout=4) as response:
-            organizations = json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        if exc.code == 401:
-            return (
-                "Render's Supabase Management API token was rejected while checking "
-                "organization access (HTTP 401). Confirm the current token is saved "
-                "on this Render service."
-            )
-        if exc.code == 403:
-            return (
-                "Render's Supabase token cannot list organizations (HTTP 403). "
-                "Confirm the deployed token has Organizations: Read access and "
-                "includes the intended organization."
-            )
-        return fallback
-    except Exception:
-        return fallback
-
-    if not isinstance(organizations, list):
-        return fallback
-    target_is_visible = any(
-        isinstance(organization, dict)
-        and str(organization.get("slug", "")).strip() == org_slug
-        for organization in organizations
-    )
-    if not target_is_visible:
-        return (
-            "Render's Supabase token can list organizations, but the configured "
-            "organization is not visible to it. Check SUPABASE_ORG_SLUG and create "
-            "a replacement token scoped to that organization."
-        )
-    return (
-        "Render's Supabase token can see the configured organization but cannot read "
-        "its settings. Confirm Organization Settings: Read is enabled for that "
-        "organization and that your Supabase account role allows it; save a new "
-        "token in Render if its scope or permissions were changed."
-    )
-
-
-def _supabase_http_diagnostic(status_code: int, response_body: bytes = b"") -> str:
-    if status_code == 401:
-        return "Supabase rejected the Management API token (HTTP 401). Check that it is active."
-    if status_code == 403:
-        try:
-            error_payload = json.loads(response_body.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            error_payload = {}
-        missing_permissions = error_payload.get("missing_permissions", [])
-        if isinstance(missing_permissions, list):
-            permissions = [
-                permission.strip()[:80]
-                for permission in missing_permissions
-                if isinstance(permission, str) and permission.strip()
-            ]
-            if permissions:
-                return (
-                    "Supabase reports missing token permission(s): "
-                    f"{', '.join(permissions)[:240]} (HTTP 403)."
-                )
-        return (
-            "Supabase denied access to this organization (HTTP 403). "
-            "Verify the token's organization scope, the organization slug, "
-            "and your account role."
-        )
-    if status_code == 404:
-        return "Organization was not found (HTTP 404). Check the slug after /org/ in the dashboard URL."
-    if status_code == 429:
-        return "Supabase rate-limited the Management API request (HTTP 429). It will retry shortly."
-    return f"Supabase Management API returned HTTP {status_code}."
+            return None, "quota_custom"
+        return None, "quota_unavailable"
+    return quota_gb, "ready"
 
 
 def _get_render_postgres_usage() -> dict:

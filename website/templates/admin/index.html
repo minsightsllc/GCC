@@ -45,21 +45,13 @@
                             </div>
                             <div class='gcc-admin-storage-details'><span>{{ meter.remaining_gb|floatformat:2 }} GB left</span><span>{{ meter.percent|floatformat:1 }}% used</span></div>
                             {% if meter.source == 'supabase' %}<p class='gcc-admin-storage-note'>Counts buckets in this project. Supabase's allowance is shared across the organization.</p>{% endif %}
-                        {% elif meter.status == 'quota_not_configured' or meter.status == 'quota_custom' or meter.status == 'quota_unavailable' %}
-                            <p class='gcc-admin-storage-reading'><strong>{{ meter.used_gb|floatformat:2 }} GB</strong><span> currently in use</span></p>
-                            {% if meter.status == 'quota_not_configured' %}
-                                <p class='gcc-admin-storage-message'>Add <code>SUPABASE_MANAGEMENT_API_TOKEN</code> and <code>SUPABASE_ORG_SLUG</code> to load your plan allowance automatically.</p>
-                            {% elif meter.status == 'quota_custom' %}
-                                <p class='gcc-admin-storage-message'>This Supabase plan has a custom storage allowance. Check the organization's Usage page for its current limit.</p>
-                            {% else %}
-                                <p class='gcc-admin-storage-message'>{{ meter.diagnostic|default:'The Supabase plan allowance could not be loaded.' }}</p>
+                        {% elif meter.source == 'supabase' %}
+                            {% if meter.status == 'quota_not_configured' or meter.status == 'quota_custom' or meter.status == 'quota_unavailable' %}
+                                <p class='gcc-admin-storage-reading'><strong>{{ meter.used_gb|floatformat:2 }} GB</strong><span> currently in use</span></p>
                             {% endif %}
+                            <p class='gcc-admin-storage-message'>Static file storage is unavailable.</p>
                         {% elif meter.status == 'not_configured' %}
-                            {% if meter.source == 'supabase' %}
-                                <p class='gcc-admin-storage-message'>Configure the Supabase S3 storage credentials to show usage.</p>
-                            {% else %}
-                                <p class='gcc-admin-storage-message'>Set <code>RENDER_API_KEY</code> and <code>RENDER_POSTGRES_ID</code> to show usage.</p>
-                            {% endif %}
+                            <p class='gcc-admin-storage-message'>Set <code>RENDER_API_KEY</code> and <code>RENDER_POSTGRES_ID</code> to show usage.</p>
                         {% else %}
                             <p class='gcc-admin-storage-message'>Usage is temporarily unavailable. Check the service configuration and server logs.</p>
                         {% endif %}
