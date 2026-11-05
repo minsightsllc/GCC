@@ -14023,6 +14023,10 @@ body.public-site.public-motion-ready main h1.public-heading-reveal.is-visible {
         line-height: 1.35;
         overflow-wrap: anywhere;
     }
+
+    .process-kiosk .process-rail-group .process-step {
+        flex-basis: min(88vw, 280px);
+    }
 }
 
 @media (hover: none),

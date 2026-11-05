@@ -3674,7 +3674,7 @@
         let hoverPaused = false;
         let touchPaused = false;
         let manuallyPaused = false;
-        let motionEnabled = !(reduceQuery && reduceQuery.matches) && !(touchQuery && touchQuery.matches);
+        let motionEnabled = !(reduceQuery && reduceQuery.matches);
 
         const syncPauseState = function () {
             kiosk.classList.toggle("is-paused", hoverPaused || touchPaused || manuallyPaused || document.hidden);
@@ -3750,7 +3750,7 @@
         };
 
         const applyMotionPreference = function () {
-            motionEnabled = !(reduceQuery && reduceQuery.matches) && !(touchQuery && touchQuery.matches);
+            motionEnabled = !(reduceQuery && reduceQuery.matches);
             if (motionEnabled) createTrack();
             else {
                 removeTrack();
@@ -3791,7 +3791,9 @@
         document.addEventListener("visibilitychange", syncPauseState);
         if (reduceQuery && reduceQuery.addEventListener) reduceQuery.addEventListener("change", applyMotionPreference);
         if (touchQuery && touchQuery.addEventListener) {
-            touchQuery.addEventListener("change", applyMotionPreference);
+            touchQuery.addEventListener("change", function () {
+                if (toggle) toggle.hidden = !motionEnabled || !touchQuery.matches;
+            });
         }
         applyMotionPreference();
     }
