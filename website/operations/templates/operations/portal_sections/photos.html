@@ -1,23 +1,24 @@
+{% load i18n %}
 {% if not portal_project %}
     <section class="portal-empty">
         <span class="gold-rule"></span>
-        <span class="section-kicker">Photos &amp; videos</span>
-        <h1>Your project story will appear here.</h1>
-        <p>Shared progress photos and videos will become available after a project is connected to your account.</p>
+        <span class="section-kicker">{% translate 'Photos & videos' %}</span>
+        <h1>{% translate 'Your project story will appear here.' %}</h1>
+        <p>{% translate 'Shared progress photos and videos will become available after a project is connected to your account.' %}</p>
     </section>
 {% else %}
     {% include 'operations/portal_sections/project_selector.html' %}
-    <div class="portal-page-heading"><span class="section-kicker">Project story</span><h1>Photos &amp; videos from the job.</h1><p>Shared by Grand Coast as work moves forward.</p></div>
+    <div class="portal-page-heading"><span class="section-kicker">{% translate 'Project story' %}</span><h1>{% translate 'Photos & videos from the job.' %}</h1><p>{% translate 'Shared by Grand Coast as work moves forward.' %}</p></div>
     <section class="portal-media-panel" aria-label="Project photos and videos">
         <div class="portal-media-grid">
             {% for media in portal_media %}
                 {% if media.media_type == 'video' and media.file %}
-                    <a class="portal-media-tile" href="{{ media.display_url }}" target="_blank" rel="noreferrer"><video src="{{ media.display_url }}" preload="metadata"></video><span class="media-tile-label">{{ media.title }} &middot; Video{% if media.caption %}<small class="portal-media-note">{{ media.caption }}</small>{% endif %}</span></a>
+                    <a class="portal-media-tile" href="{{ media.display_url }}" target="_blank" rel="noreferrer"><video src="{{ media.display_url }}" preload="metadata"></video><span class="media-tile-label">{{ media.title }} {% translate '· Video' %}{% if media.caption %}<small class="portal-media-note">{{ media.caption }}</small>{% endif %}</span></a>
                 {% else %}
                     <button class="portal-media-tile js-lightbox" type="button" data-lightbox-src="{{ media.display_url }}" data-lightbox-alt="{{ media.caption|default:media.title }}"><img src="{{ media.display_url }}" alt="{{ media.caption|default:media.title }}"><span class="media-tile-label">{{ media.title }}{% if media.caption %}<small class="portal-media-note">{{ media.caption }}</small>{% endif %}</span></button>
                 {% endif %}
             {% empty %}
-                <p class="detail-value">Photos and videos will be shared here as the project moves forward.</p>
+                <p class="detail-value">{% translate 'Photos and videos will be shared here as the project moves forward.' %}</p>
             {% endfor %}
         </div>
     </section>

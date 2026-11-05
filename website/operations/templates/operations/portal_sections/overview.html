@@ -1,42 +1,43 @@
+{% load i18n %}
 {% if not portal_project and not portal_estimates %}
     <section class="portal-empty">
         <span class="gold-rule"></span>
-        <span class="section-kicker">Welcome, {{ portal_client.name }}</span>
-        <h1>We&rsquo;re preparing your project workspace.</h1>
-        <p>Your account is active. The Grand Coast team will add project details and next steps here.</p>
-        <a class="button button-outline" href="{{ portal_nav.3.url }}">Message the team</a>
+        <span class="section-kicker">{% translate 'Welcome,' %} {{ portal_client.name }}</span>
+        <h1>{% translate 'We’re preparing your project workspace.' %}</h1>
+        <p>{% translate 'Your account is active. The Grand Coast team will add project details and next steps here.' %}</p>
+        <a class="button button-outline" href="{{ portal_nav.3.url }}">{% translate 'Message the team' %}</a>
     </section>
 {% elif not portal_project and portal_estimates %}
     <section class="portal-empty">
         <span class="gold-rule"></span>
-        <span class="section-kicker">Welcome, {{ portal_client.name }}</span>
-        <h1>Your scope is ready to review.</h1>
-        <p>Open the estimate and files page to access the estimate link shared by Grand Coast. Questions can be sent from Messages.</p>
+        <span class="section-kicker">{% translate 'Welcome,' %} {{ portal_client.name }}</span>
+        <h1>{% translate 'Your scope is ready to review.' %}</h1>
+        <p>{% translate 'Open the estimate and files page to access the estimate link shared by Grand Coast. Questions can be sent from Messages.' %}</p>
         <div class="portal-heading-actions">
-            <a class="button button-primary" href="{{ portal_nav.4.url }}">Open estimate &amp; files</a>
-            <a class="button button-outline" href="{{ portal_nav.3.url }}">Message the team</a>
+            <a class="button button-primary" href="{{ portal_nav.4.url }}">{% translate 'Open estimate & files' %}</a>
+            <a class="button button-outline" href="{{ portal_nav.3.url }}">{% translate 'Message the team' %}</a>
         </div>
     </section>
 {% else %}
     {% include 'operations/portal_sections/project_selector.html' %}
     <div class="portal-heading">
         <div>
-            <span class="section-kicker">Your project</span>
-            <h1>{{ portal_client.name|truncatewords:1 }}, here&rsquo;s your project.</h1>
+            <span class="section-kicker">{% translate 'Your project' %}</span>
+            <h1>{{ portal_client.name|truncatewords:1 }}{% translate ', here’s your project.' %}</h1>
             <div class="portal-project-meta">
                 <strong>{{ portal_project.title }}</strong>
                 <span>{{ portal_project.location|default:'Southern California' }}</span>
-                <span class="status-dot"><i></i><b>{% if portal_project.needs_staff_assignment %}Setup in progress{% else %}{{ portal_project.get_status_display }}{% endif %}</b></span>
+                <span class="status-dot"><i></i><b>{% if portal_project.needs_staff_assignment %}{% translate 'Setup in progress' %}{% else %}{{ portal_project.get_status_display }}{% endif %}</b></span>
             </div>
-            {% if portal_project.needs_staff_assignment %}<div class="portal-accepted-note">Grand Coast is assigning an employee to your project. Project work has not started yet; we’ll update this space when your team is assigned.</div>{% endif %}
+            {% if portal_project.needs_staff_assignment %}<div class="portal-accepted-note">{% translate 'Grand Coast is assigning an employee to your project. Project work has not started yet; we’ll update this space when your team is assigned.' %}</div>{% endif %}
         </div>
         <div class="portal-heading-actions">
-            {% if portal_estimate %}<a class="button button-primary" href="{{ portal_nav.4.url }}">Review estimate</a>{% endif %}
-            <a class="button button-outline" href="{{ portal_nav.3.url }}">Message the team</a>
+            {% if portal_estimate %}<a class="button button-primary" href="{{ portal_nav.4.url }}">{% translate 'Review estimate' %}</a>{% endif %}
+            <a class="button button-outline" href="{{ portal_nav.3.url }}">{% translate 'Message the team' %}</a>
         </div>
     </div>
 
-    <div class="portal-progress-summary"><span>Project progress</span><strong>{{ portal_project.progress_percent }}% complete</strong></div>
+    <div class="portal-progress-summary"><span>{% translate 'Project progress' %}</span><strong>{{ portal_project.progress_percent }}{% translate '% complete' %}</strong></div>
     <section class="portal-progress" aria-label="Project progress">
         <div class="portal-progress-line"></div>
         {% for milestone in portal_project.milestones.all %}
@@ -45,46 +46,46 @@
                 <strong>{{ milestone.title }}</strong>
             </div>
         {% empty %}
-            <p class="detail-value">The project sequence will appear here soon.</p>
+            <p class="detail-value">{% translate 'The project sequence will appear here soon.' %}</p>
         {% endfor %}
     </section>
 
     {% if portal_agreement or portal_selections or portal_change_orders or portal_payment_schedules %}
         <section class="portal-construction-strip" aria-labelledby="project-controls-title">
             <div class="portal-panel-heading">
-                <div><span class="section-kicker">Project decisions</span><h2 id="project-controls-title">Keep the next step moving.</h2></div>
-                <span class="detail-value">Updated from your project workspace</span>
+                <div><span class="section-kicker">{% translate 'Project decisions' %}</span><h2 id="project-controls-title">{% translate 'Keep the next step moving.' %}</h2></div>
+                <span class="detail-value">{% translate 'Updated from your project workspace' %}</span>
             </div>
             <div class="portal-construction-grid">
                 {% if portal_agreement %}
                     <article class="portal-construction-card">
-                        <span class="section-kicker">Agreement</span>
+                        <span class="section-kicker">{% translate 'Agreement' %}</span>
                         <h3>{{ portal_agreement.project.title }}</h3>
                         <div class="portal-control-row">
-                            <span>Estimate</span>
+                            <span>{% translate 'Estimate' %}</span>
                             {% if portal_agreement.estimate and portal_agreement.estimate.external_url and portal_agreement.estimate.external_client_visible %}
-                                <a class="text-link-button" href="{% url 'operations:external-estimate-link' pk=portal_agreement.estimate.pk %}" aria-label="Open the actual estimate for {{ portal_agreement.project.title }}">Open actual estimate &rarr;</a>
+                                <a class="text-link-button" href="{% url 'operations:external-estimate-link' pk=portal_agreement.estimate.pk %}" aria-label="Open the actual estimate for {{ portal_agreement.project.title }}">{% translate 'Open actual estimate →' %}</a>
                             {% else %}
-                                <strong class="detail-value">Not shared in the portal yet</strong>
+                                <strong class="detail-value">{% translate 'Not shared in the portal yet' %}</strong>
                             {% endif %}
                         </div>
-                        <div class="portal-control-row"><span>Status</span><strong>{{ portal_agreement.get_status_display }}</strong></div>
-                        {% if portal_agreement.signed_pdf %}<a class="text-link-button" href="{% url 'operations:agreement-file' pk=portal_agreement.pk %}">View signed agreement &rarr;</a>{% endif %}
+                        <div class="portal-control-row"><span>{% translate 'Status' %}</span><strong>{{ portal_agreement.get_status_display }}</strong></div>
+                        {% if portal_agreement.signed_pdf %}<a class="text-link-button" href="{% url 'operations:agreement-file' pk=portal_agreement.pk %}">{% translate 'View signed agreement →' %}</a>{% endif %}
                         {% if portal_agreement.status == 'issued' and not request.user.is_staff %}
                             <form method="post" action="{% url 'operations:portal-accept-agreement' pk=portal_agreement.pk %}">
                                 {% csrf_token %}
-                                <button class="button button-primary full-width" type="submit">Accept agreement <span aria-hidden="true">&rarr;</span></button>
+                                <button class="button button-primary full-width" type="submit">{% translate 'Accept agreement' %} <span aria-hidden="true">&rarr;</span></button>
                             </form>
-                            <small class="secure-note">Acceptance is recorded with a timestamp and security audit entry.</small>
+                            <small class="secure-note">{% translate 'Acceptance is recorded with a timestamp and security audit entry.' %}</small>
                         {% elif portal_agreement.status == 'accepted' %}
-                            <p class="portal-accepted-note">Accepted{% if portal_agreement.accepted_at %} on {{ portal_agreement.accepted_at|date:'M d, Y' }}{% endif %}</p>
+                            <p class="portal-accepted-note">{% translate 'Accepted' %}{% if portal_agreement.accepted_at %} {% translate 'on' %} {{ portal_agreement.accepted_at|date:'M d, Y' }}{% endif %}</p>
                         {% endif %}
                     </article>
                 {% endif %}
                 {% if portal_selections %}
                     <article class="portal-construction-card">
-                        <span class="section-kicker">Selections</span>
-                        <h3>Product decisions</h3>
+                        <span class="section-kicker">{% translate 'Selections' %}</span>
+                        <h3>{% translate 'Product decisions' %}</h3>
                         {% for selection in portal_selections %}
                             <div class="portal-control-item">
                                 <div><strong>{{ selection.item_name }}</strong><span>{{ selection.category }} &middot; {{ selection.get_status_display }}</span></div>
@@ -92,7 +93,7 @@
                                     <form class="portal-inline-form" method="post" action="{% url 'operations:portal-selection-advance' pk=selection.pk %}">
                                         {% csrf_token %}
                                         <input type="text" name="client_choice" maxlength="20000" placeholder="Your choice" aria-label="Choice for {{ selection.item_name }}" required>
-                                        <button class="button button-outline button-small" type="submit">Submit choice</button>
+                                        <button class="button button-outline button-small" type="submit">{% translate 'Submit choice' %}</button>
                                     </form>
                                 {% elif selection.client_choice %}
                                     <span class="detail-value">{{ selection.client_choice }}</span>
@@ -103,15 +104,15 @@
                 {% endif %}
                 {% if portal_change_orders %}
                     <article class="portal-construction-card">
-                        <span class="section-kicker">Change orders</span>
-                        <h3>Scope updates</h3>
+                        <span class="section-kicker">{% translate 'Change orders' %}</span>
+                        <h3>{% translate 'Scope updates' %}</h3>
                         {% for change_order in portal_change_orders %}
                             <div class="portal-control-item">
-                                <div><strong>CO-{{ change_order.number }} &middot; {{ change_order.title }}</strong><span>{{ change_order.get_status_display }} &middot; {% if change_order.price_impact < 0 %}Credit{% else %}+{% endif %}&#36;{{ change_order.price_impact|floatformat:2 }}</span></div>
+                                <div><strong>{% translate 'CO-' %}{{ change_order.number }} &middot; {{ change_order.title }}</strong><span>{{ change_order.get_status_display }} &middot; {% if change_order.price_impact < 0 %}{% translate 'Credit' %}{% else %}{% translate '+' %}{% endif %}{% translate '$' %}{{ change_order.price_impact|floatformat:2 }}</span></div>
                                 {% if change_order.status == 'sent' and not request.user.is_staff %}
                                     <form method="post" action="{% url 'operations:portal-approve-change-order' pk=change_order.pk %}">
                                         {% csrf_token %}
-                                        <button class="button button-outline button-small" type="submit">Approve change order</button>
+                                        <button class="button button-outline button-small" type="submit">{% translate 'Approve change order' %}</button>
                                     </form>
                                 {% endif %}
                             </div>
@@ -120,13 +121,13 @@
                 {% endif %}
                 {% if portal_payment_schedules %}
                     <article class="portal-construction-card">
-                        <span class="section-kicker">Payment schedule</span>
-                        <h3>Project milestones</h3>
+                        <span class="section-kicker">{% translate 'Payment schedule' %}</span>
+                        <h3>{% translate 'Project milestones' %}</h3>
                         {% for schedule in portal_payment_schedules %}
-                            <div class="portal-control-row"><span>{{ schedule.description }} &middot; {{ schedule.get_status_display }}{% if external_estimate_portal_enabled and schedule.external_invoice_status != 'not_started' %} &middot; Invoice {{ schedule.get_external_invoice_status_display }}{% endif %}</span><strong>&#36;{{ schedule.remaining_amount|floatformat:2 }}</strong></div>
-                            {% if external_estimate_portal_enabled and schedule.external_client_visible and schedule.external_invoice_url %}<a class="text-link-button" href="{% url 'operations:external-invoice-link' pk=schedule.pk %}">Open invoice &rarr;</a>{% endif %}
+                            <div class="portal-control-row"><span>{{ schedule.description }} &middot; {{ schedule.get_status_display }}{% if external_estimate_portal_enabled and schedule.external_invoice_status != 'not_started' %} {% translate '· Invoice' %} {{ schedule.get_external_invoice_status_display }}{% endif %}</span><strong>{% translate '$' %}{{ schedule.remaining_amount|floatformat:2 }}</strong></div>
+                            {% if external_estimate_portal_enabled and schedule.external_client_visible and schedule.external_invoice_url %}<a class="text-link-button" href="{% url 'operations:external-invoice-link' pk=schedule.pk %}">{% translate 'Open invoice →' %}</a>{% endif %}
                         {% endfor %}
-                        <small class="secure-note">Payments are recorded by Grand Coast. No card or bank details are stored in this portal.</small>
+                        <small class="secure-note">{% translate 'Payments are recorded by Grand Coast. No card or bank details are stored in this portal.' %}</small>
                     </article>
                 {% endif %}
             </div>
@@ -134,13 +135,13 @@
     {% endif %}
 
     <section class="portal-category-links" aria-labelledby="portal-sections-title">
-        <div class="portal-panel-heading"><div><span class="section-kicker">Your workspace</span><h2 id="portal-sections-title">Choose what you need next.</h2></div></div>
+        <div class="portal-panel-heading"><div><span class="section-kicker">{% translate 'Your workspace' %}</span><h2 id="portal-sections-title">{% translate 'Choose what you need next.' %}</h2></div></div>
         <div class="portal-category-grid">
             {% for item in portal_nav %}
                 {% if item.key != 'overview' %}
                     <a class="portal-category-link" href="{{ item.url }}">
                         <span class="section-kicker">{{ item.label }}</span>
-                        {% if item.key == 'updates' %}<strong>See the latest project progress.</strong>{% elif item.key == 'photos' %}<strong>View shared photos and videos.</strong>{% elif item.key == 'messages' %}<strong>Ask a question or send an update.</strong>{% elif item.key == 'estimate-files' %}<strong>Open estimates and client-ready files.</strong>{% elif item.key == 'notifications' %}<strong>Review project alerts and decisions.</strong>{% endif %}
+                        {% if item.key == 'updates' %}<strong>{% translate 'See the latest project progress.' %}</strong>{% elif item.key == 'photos' %}<strong>{% translate 'View shared photos and videos.' %}</strong>{% elif item.key == 'messages' %}<strong>{% translate 'Ask a question or send an update.' %}</strong>{% elif item.key == 'estimate-files' %}<strong>{% translate 'Open estimates and client-ready files.' %}</strong>{% elif item.key == 'notifications' %}<strong>{% translate 'Review project alerts and decisions.' %}</strong>{% endif %}
                         <span aria-hidden="true">&rarr;</span>
                     </a>
                 {% endif %}

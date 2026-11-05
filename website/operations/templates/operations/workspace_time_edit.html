@@ -1,6 +1,7 @@
+{% load i18n %}
 {% if active_section == 'time' and time_edit_form and selected_time_entry %}
 <section class='record-detail workspace-form time-edit-panel'>
-    <div class='admin-section-heading compact'><div><span class='section-kicker'>Manager correction</span><h3>{{ selected_time_entry.employee.get_full_name|default:selected_time_entry.employee.username }}</h3></div><span class='time-zone-label'>America/Los_Angeles</span></div>
-    <form method='post' action='{% if team_mode %}/team/time/{{ selected_time_entry.pk }}/update/{% else %}/dashboard/time/{{ selected_time_entry.pk }}/update/{% endif %}'>{% csrf_token %}<div class='workspace-form-grid'>{% for field in time_edit_form %}<label class='form-field'>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}</div><button class='button button-primary' type='submit'>Save correction</button></form>
+    <div class='admin-section-heading compact'><div><span class='section-kicker'>{% translate 'Manager correction' %}</span><h3>{{ selected_time_entry.employee.get_full_name|default:selected_time_entry.employee.username }}</h3></div><span class='time-zone-label'>{% translate 'Pacific Time' %}</span></div>
+    <form method='post' action='{% if team_mode %}/team/time/{{ selected_time_entry.pk }}/update/{% else %}/dashboard/time/{{ selected_time_entry.pk }}/update/{% endif %}'>{% csrf_token %}<div class='workspace-form-grid'>{% for field in time_edit_form %}<label class='form-field'>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}</div><button class='button button-primary' type='submit'>{% translate 'Save correction' %}</button></form>
 </section>
 {% endif %}

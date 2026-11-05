@@ -7,6 +7,15 @@
         <label for="{{ service_form.description.id_for_label }}">{{ service_form.description.label }}</label>
         {{ service_form.description }}{{ service_form.description.errors }}
     </div>
+    <h4 class="service-editor-language-heading">Spanish copy</h4>
+    <div class="form-field service-title-field">
+        <label for="{{ service_form.title_es.id_for_label }}">{{ service_form.title_es.label }}</label>
+        {{ service_form.title_es }}{{ service_form.title_es.errors }}
+    </div>
+    <div class="form-field service-description-field">
+        <label for="{{ service_form.description_es.id_for_label }}">{{ service_form.description_es.label }}</label>
+        {{ service_form.description_es }}{{ service_form.description_es.errors }}
+    </div>
     <section class="service-image-editor" aria-label="Service image">
         <div class="service-image-preview">
             {% if service and service.image %}

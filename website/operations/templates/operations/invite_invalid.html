@@ -1,9 +1,10 @@
 {% extends "operations/base.html" %}
+{% load i18n %}
 {% load static %}
 
-{% block title %}Invite unavailable | Grand Coast Construction Inc.{% endblock %}
+{% block title %}{% translate 'Invite unavailable | Grand Coast Construction Inc.' %}{% endblock %}
 {% block body_class %}auth-site{% endblock %}
 
 {% block body %}
-<main class="auth-shell"><div class="auth-card"><a class="auth-brand" href="{% url 'operations:home' %}"><img src="{% static 'operations/images/gcc-logo.png' %}" alt="Grand Coast Construction Inc. logo"><span><strong>Grand Coast</strong><small>Client portal</small></span></a><span class="section-kicker">Access unavailable</span><h1>This invite has expired.</h1><p>Ask the Grand Coast team to create a new client portal invitation.</p><a class="button button-primary full-width" href="{% url 'operations:home' %}">Return to website →</a></div></main>
+<main class="auth-shell"><div class="auth-card"><a class="auth-brand" href="{% url 'operations:home' %}"><img src="{% static 'operations/images/gcc-logo.png' %}" alt="Grand Coast Construction Inc. logo"><span><strong>{% translate 'Grand Coast' %}</strong><small>{% translate 'Client portal' %}</small></span></a><span class="section-kicker">{% translate 'Access unavailable' %}</span><h1>{% translate 'This invite has expired.' %}</h1><p>{% translate 'Ask the Grand Coast team to create a new client portal invitation.' %}</p><a class="button button-primary full-width" href="{% url 'operations:home' %}">{% translate 'Return to website →' %}</a></div></main>
 {% endblock %}

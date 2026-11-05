@@ -1,6 +1,6 @@
-{% load static %}
+{% load static i18n %}
 <!doctype html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,7 +10,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="description" content="Grand Coast Construction Inc. — thoughtful construction and clear communication across Southern California.">
     <title>{% block title %}Grand Coast Construction Inc.{% endblock %}</title>
-    <link rel="stylesheet" href="{% static 'operations/css/site.css' %}?v=20261103-lead-trash-permanent-delete-1">
+    <link rel="stylesheet" href="{% static 'operations/css/site.css' %}?v=20261104-language-switch-1">
     <link rel="icon" type="image/png" href="{% static 'operations/images/gcc-logo.png' %}">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="{% static 'operations/images/gcc-logo.png' %}">
@@ -24,7 +24,7 @@
     <div class="toast-region" aria-live="polite" aria-atomic="true">
         {% for message in messages %}
             <div class="toast {% if message.tags %}toast-{{ message.tags }}{% endif %}"{% if operations_nav_role == "admin" %} data-persistent="true"{% endif %}>
-                <span class="toast-content">{{ message }}</span>
+                <span class="toast-content">{% translate message.message %}</span>
                 <button class="toast-dismiss" type="button" data-toast-dismiss aria-label="Dismiss notification" title="Dismiss">×</button>
             </div>
         {% endfor %}

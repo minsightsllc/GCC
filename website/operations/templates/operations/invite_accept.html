@@ -1,9 +1,10 @@
 {% extends "operations/base.html" %}
+{% load i18n %}
 {% load static %}
 
-{% block title %}Create portal access | Grand Coast Construction Inc.{% endblock %}
+{% block title %}{% translate 'Create portal access | Grand Coast Construction Inc.' %}{% endblock %}
 {% block body_class %}auth-site{% endblock %}
 
 {% block body %}
-<main class="auth-shell"><div class="auth-card"><a class="auth-brand" href="{% url 'operations:home' %}"><img src="{% static 'operations/images/gcc-logo.png' %}" alt="Grand Coast Construction Inc. logo"><span><strong>Grand Coast</strong><small>Client portal</small></span></a><span class="section-kicker">Client access</span><h1>Set up your portal.</h1><p>This secure invitation is for {{ invite.client.name }}. Create your sign-in details to view project updates, media, and estimates.</p><form method="post" class="auth-form">{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}<label>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}<button class="button button-primary full-width" type="submit">Create portal access →</button></form><p class="auth-footnote">Invite links expire after seven days and can only be used once.</p></div></main>
+<main class="auth-shell"><div class="auth-card"><a class="auth-brand" href="{% url 'operations:home' %}"><img src="{% static 'operations/images/gcc-logo.png' %}" alt="Grand Coast Construction Inc. logo"><span><strong>{% translate 'Grand Coast' %}</strong><small>{% translate 'Client portal' %}</small></span></a><span class="section-kicker">{% translate 'Client access' %}</span><h1>{% translate 'Set up your portal.' %}</h1><p>{% translate 'This secure invitation is for' %} {{ invite.client.name }}{% translate '. Create your sign-in details to view project updates, media, and estimates.' %}</p><form method="post" class="auth-form">{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}<label>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}<button class="button button-primary full-width" type="submit">{% translate 'Create portal access →' %}</button></form><p class="auth-footnote">{% translate 'Invite links expire after seven days and can only be used once.' %}</p></div></main>
 {% endblock %}

@@ -1,180 +1,181 @@
+{% load i18n %}
 {% if execution_loop_enabled %}
 <section class="construction-panel execution-loop-panel" id="execution-loop">
     <div class="construction-panel-heading">
         <div>
-            <span class="section-kicker">Pilot execution loop</span>
-            <h3>Run the project from here</h3>
-            <p class="construction-pulse-note">These actions write to the same protected project records used by the Command Center, field workspace, and client portal.</p>
+            <span class="section-kicker">{% translate 'Pilot execution loop' %}</span>
+            <h3>{% translate 'Run the project from here' %}</h3>
+            <p class="construction-pulse-note">{% translate 'These actions write to the same protected project records used by the Command Center, field workspace, and client portal.' %}</p>
         </div>
-        <span class="status-badge green">Enabled for this project</span>
+        <span class="status-badge green">{% translate 'Enabled for this project' %}</span>
     </div>
 
     {% if can_edit_operations or execution_site_visit_rows %}
     <details class="execution-loop-section" id="site-visits" open>
-        <summary><span>Site visits</span><small>Capture scope, conditions, measurements, and next steps</small></summary>
+        <summary><span>{% translate 'Site visits' %}</span><small>{% translate 'Capture scope, conditions, measurements, and next steps' %}</small></summary>
         <div class="execution-loop-body">
             {% if can_edit_operations %}<form class="construction-form-grid" method="post" action="{% url 'operations:project-site-visit-create' pk=operations_project.pk %}">
                 {% csrf_token %}
                 {{ site_visit_form.as_p }}
-                <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">Add site visit</button></div>
+                <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">{% translate 'Add site visit' %}</button></div>
             </form>{% endif %}
             {% for row in execution_site_visit_rows %}
             <form class="execution-record-card" method="post" action="{% url 'operations:project-site-visit-update' pk=row.visit.pk %}">
                 {% csrf_token %}
-                <strong>{{ row.visit.get_status_display }} · {{ row.visit.address|default:"Project walkthrough" }}</strong>
+                <strong>{{ row.visit.get_status_display }} &middot; {{ row.visit.address|default:"Project walkthrough" }}</strong>
                 {{ row.form.as_p }}
                 <div class="construction-form-actions">
-                    <button class="button button-quiet button-small" type="submit">Save visit</button>
-                    {% if row.visit.status != 'completed' %}<button class="button button-outline button-small" type="submit" name="complete" value="1">Complete visit</button>{% endif %}
+                    <button class="button button-quiet button-small" type="submit">{% translate 'Save visit' %}</button>
+                    {% if row.visit.status != 'completed' %}<button class="button button-outline button-small" type="submit" name="complete" value="1">{% translate 'Complete visit' %}</button>{% endif %}
                 </div>
             </form>
-            {% empty %}<p class="construction-empty">No site visits are linked to this project yet.</p>{% endfor %}
+            {% empty %}<p class="construction-empty">{% translate 'No site visits are linked to this project yet.' %}</p>{% endfor %}
         </div>
     </details>
     {% endif %}
 
     {% if can_edit_operations %}
     <details class="execution-loop-section" id="selections">
-        <summary><span>Client decisions and procurement</span><small>Move approved selections through ordering, receiving, and installation</small></summary>
+        <summary><span>{% translate 'Client decisions and procurement' %}</span><small>{% translate 'Move approved selections through ordering, receiving, and installation' %}</small></summary>
         <div class="execution-loop-body">
             <form class="construction-form-grid" method="post" action="{% url 'operations:project-selection-create' pk=operations_project.pk %}">
                 {% csrf_token %}{{ selection_form.as_p }}
-                <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">Add selection</button></div>
+                <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">{% translate 'Add selection' %}</button></div>
             </form>
             {% for row in execution_selection_rows %}
             <form class="execution-record-card" method="post" action="{% url 'operations:project-selection-advance' pk=row.selection.pk %}">
-                {% csrf_token %}<strong>{{ row.selection.category }} · {{ row.selection.item_name }}</strong>{{ row.form.as_p }}
-                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">Advance selection</button></div>
+                {% csrf_token %}<strong>{{ row.selection.category }} &middot; {{ row.selection.item_name }}</strong>{{ row.form.as_p }}
+                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">{% translate 'Advance selection' %}</button></div>
             </form>
-            {% empty %}<p class="construction-empty">No selections tracked yet.</p>{% endfor %}
+            {% empty %}<p class="construction-empty">{% translate 'No selections tracked yet.' %}</p>{% endfor %}
         </div>
     </details>
 
     <details class="execution-loop-section" id="subcontractors">
-        <summary><span>Subcontractor assignments</span><small>Assign scoped work and keep its status current</small></summary>
+        <summary><span>{% translate 'Subcontractor assignments' %}</span><small>{% translate 'Assign scoped work and keep its status current' %}</small></summary>
         <div class="execution-loop-body">
             <form class="construction-form-grid" method="post" action="{% url 'operations:project-assignment-create' pk=operations_project.pk %}">
                 {% csrf_token %}{{ assignment_form.as_p }}
-                <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">Assign work package</button></div>
+                <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">{% translate 'Assign work package' %}</button></div>
             </form>
             {% for row in execution_assignment_rows %}
             <form class="execution-record-card" method="post" action="{% url 'operations:project-assignment-status' pk=row.assignment.pk %}">
-                {% csrf_token %}<strong>{{ row.assignment.work_package }} · {{ row.assignment.subcontractor.company }}</strong>{{ row.form.as_p }}
-                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">Update assignment</button></div>
+                {% csrf_token %}<strong>{{ row.assignment.work_package }} &middot; {{ row.assignment.subcontractor.company }}</strong>{{ row.form.as_p }}
+                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">{% translate 'Update assignment' %}</button></div>
             </form>
-            {% empty %}<p class="construction-empty">No subcontractor assignments yet.</p>{% endfor %}
+            {% empty %}<p class="construction-empty">{% translate 'No subcontractor assignments yet.' %}</p>{% endfor %}
         </div>
     </details>
     {% endif %}
 
     {% if daily_report_form or material_request_form or problem_report_form %}
     <details class="execution-loop-section" id="field-requests" open>
-        <summary><span>Daily reports, materials, and problems</span><small>Send jobsite facts to the project record</small></summary>
+        <summary><span>{% translate 'Daily reports, materials, and problems' %}</span><small>{% translate 'Send jobsite facts to the project record' %}</small></summary>
         <div class="execution-loop-body execution-loop-three-column">
-            {% if daily_report_form %}<form class="execution-record-card" method="post" action="{% url 'operations:project-daily-report' pk=operations_project.pk %}">{% csrf_token %}<strong>Daily report</strong>{{ daily_report_form.as_p }}<button class="button button-primary button-small" type="submit">Submit report</button></form>{% endif %}
-            {% if material_request_form %}<form class="execution-record-card" method="post" action="{% url 'operations:project-material-request' pk=operations_project.pk %}">{% csrf_token %}<strong>Material request</strong>{{ material_request_form.as_p }}<button class="button button-primary button-small" type="submit">Request materials</button></form>{% endif %}
-            {% if problem_report_form %}<form class="execution-record-card" method="post" action="{% url 'operations:project-problem-report' pk=operations_project.pk %}">{% csrf_token %}<strong>Problem report</strong>{{ problem_report_form.as_p }}<button class="button button-primary button-small" type="submit">Report problem</button></form>{% endif %}
+            {% if daily_report_form %}<form class="execution-record-card" method="post" action="{% url 'operations:project-daily-report' pk=operations_project.pk %}">{% csrf_token %}<strong>{% translate 'Daily report' %}</strong>{{ daily_report_form.as_p }}<button class="button button-primary button-small" type="submit">{% translate 'Submit report' %}</button></form>{% endif %}
+            {% if material_request_form %}<form class="execution-record-card" method="post" action="{% url 'operations:project-material-request' pk=operations_project.pk %}">{% csrf_token %}<strong>{% translate 'Material request' %}</strong>{{ material_request_form.as_p }}<button class="button button-primary button-small" type="submit">{% translate 'Request materials' %}</button></form>{% endif %}
+            {% if problem_report_form %}<form class="execution-record-card" method="post" action="{% url 'operations:project-problem-report' pk=operations_project.pk %}">{% csrf_token %}<strong>{% translate 'Problem report' %}</strong>{{ problem_report_form.as_p }}<button class="button button-primary button-small" type="submit">{% translate 'Report problem' %}</button></form>{% endif %}
         </div>
-        {% if execution_material_rows %}<div class="construction-list">{% for row in execution_material_rows %}<div class="construction-list-row"><span class="status-badge gold">Material</span><span><strong>{{ row.request.description }}</strong><small>{{ row.request.get_status_display }}{% if row.request.needed_by %} - Needed {{ row.request.needed_by }}{% endif %}</small>{% if can_edit_operations %}<form method="post" action="{% url 'operations:project-material-request-status' pk=row.request.pk %}">{% csrf_token %}{{ row.form.status }}<button class="button button-quiet button-small" type="submit">Update</button></form>{% endif %}</span></div>{% endfor %}</div>{% endif %}
+        {% if execution_material_rows %}<div class="construction-list">{% for row in execution_material_rows %}<div class="construction-list-row"><span class="status-badge gold">{% translate 'Material' %}</span><span><strong>{{ row.request.description }}</strong><small>{{ row.request.get_status_display }}{% if row.request.needed_by %} {% translate '- Needed' %} {{ row.request.needed_by }}{% endif %}</small>{% if can_edit_operations %}<form method="post" action="{% url 'operations:project-material-request-status' pk=row.request.pk %}">{% csrf_token %}{{ row.form.status }}<button class="button button-quiet button-small" type="submit">{% translate 'Update' %}</button></form>{% endif %}</span></div>{% endfor %}</div>{% endif %}
     </details>
     {% endif %}
 
     {% if can_view_project_financials %}
     <details class="execution-loop-section" id="financials">
-        <summary><span>Financial ledger</span><small>Record receipts and costs; margins remain permission controlled</small></summary>
+        <summary><span>{% translate 'Financial ledger' %}</span><small>{% translate 'Record receipts and costs; margins remain permission controlled' %}</small></summary>
         <div class="execution-loop-body execution-loop-two-column">
-            <form class="execution-record-card" method="post" action="{% url 'operations:project-payment-record' pk=operations_project.pk %}">{% csrf_token %}<strong>Record payment received</strong>{{ payment_form.as_p }}<button class="button button-primary button-small" type="submit">Record payment</button></form>
-            <form class="execution-record-card" method="post" action="{% url 'operations:project-cost-record' pk=operations_project.pk %}">{% csrf_token %}<strong>Record project cost</strong>{{ cost_form.as_p }}<button class="button button-primary button-small" type="submit">Record cost</button></form>
-            <form class="execution-record-card" method="post" action="{% url 'operations:project-commitment-create' pk=operations_project.pk %}">{% csrf_token %}<strong>Record commitment</strong>{{ commitment_form.as_p }}<button class="button button-primary button-small" type="submit">Add commitment</button></form>
+            <form class="execution-record-card" method="post" action="{% url 'operations:project-payment-record' pk=operations_project.pk %}">{% csrf_token %}<strong>{% translate 'Record payment received' %}</strong>{{ payment_form.as_p }}<button class="button button-primary button-small" type="submit">{% translate 'Record payment' %}</button></form>
+            <form class="execution-record-card" method="post" action="{% url 'operations:project-cost-record' pk=operations_project.pk %}">{% csrf_token %}<strong>{% translate 'Record project cost' %}</strong>{{ cost_form.as_p }}<button class="button button-primary button-small" type="submit">{% translate 'Record cost' %}</button></form>
+            <form class="execution-record-card" method="post" action="{% url 'operations:project-commitment-create' pk=operations_project.pk %}">{% csrf_token %}<strong>{% translate 'Record commitment' %}</strong>{{ commitment_form.as_p }}<button class="button button-primary button-small" type="submit">{% translate 'Add commitment' %}</button></form>
         </div>
         <div class="construction-list">
-            {% for schedule in payment_schedules %}<div class="construction-list-row"><span class="status-badge {% if schedule.status == 'paid' %}green{% elif schedule.status == 'ready' or schedule.status == 'overdue' %}gold{% endif %}">{{ schedule.get_status_display }}</span><span><strong>{{ schedule.description }}</strong><small>&#36;{{ schedule.amount|floatformat:2 }}{% if schedule.due_date %} · Due {{ schedule.due_date }}{% endif %}</small></span></div>{% empty %}<p class="construction-empty">No payment schedule exists yet.</p>{% endfor %}
+            {% for schedule in payment_schedules %}<div class="construction-list-row"><span class="status-badge {% if schedule.status == 'paid' %}green{% elif schedule.status == 'ready' or schedule.status == 'overdue' %}gold{% endif %}">{{ schedule.get_status_display }}</span><span><strong>{{ schedule.description }}</strong><small>{% translate '$' %}{{ schedule.amount|floatformat:2 }}{% if schedule.due_date %} {% translate '· Due' %} {{ schedule.due_date }}{% endif %}</small></span></div>{% empty %}<p class="construction-empty">{% translate 'No payment schedule exists yet.' %}</p>{% endfor %}
         </div>
         <div class="construction-list">
-            {% for row in execution_commitment_rows %}<form class="execution-record-card" method="post" action="{% url 'operations:project-commitment-status' pk=row.commitment.pk %}">{% csrf_token %}<strong>{{ row.commitment.description }}</strong><small>&#36;{{ row.commitment.amount|floatformat:2 }}{% if row.commitment.subcontractor %} · {{ row.commitment.subcontractor.company }}{% endif %}</small>{{ row.form.as_p }}<button class="button button-quiet button-small" type="submit">Update commitment</button></form>{% empty %}<p class="construction-empty">No commitments recorded yet.</p>{% endfor %}
+            {% for row in execution_commitment_rows %}<form class="execution-record-card" method="post" action="{% url 'operations:project-commitment-status' pk=row.commitment.pk %}">{% csrf_token %}<strong>{{ row.commitment.description }}</strong><small>{% translate '$' %}{{ row.commitment.amount|floatformat:2 }}{% if row.commitment.subcontractor %} &middot; {{ row.commitment.subcontractor.company }}{% endif %}</small>{{ row.form.as_p }}<button class="button button-quiet button-small" type="submit">{% translate 'Update commitment' %}</button></form>{% empty %}<p class="construction-empty">{% translate 'No commitments recorded yet.' %}</p>{% endfor %}
         </div>
     </details>
     {% endif %}
 
     {% if can_edit_operations %}
     <details class="execution-loop-section" id="closeout">
-        <summary><span>Closeout and warranty</span><small>Finish required items, then keep warranty work visible</small></summary>
+        <summary><span>{% translate 'Closeout and warranty' %}</span><small>{% translate 'Finish required items, then keep warranty work visible' %}</small></summary>
         <div class="execution-loop-body">
             {% for row in execution_closeout_rows %}
             <form class="execution-record-card" method="post" action="{% url 'operations:project-closeout-action' pk=row.item.pk %}">
-                {% csrf_token %}<strong>{{ row.item.label }} · {{ row.item.get_status_display }}</strong>{{ row.form.as_p }}
-                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">Update closeout</button></div>
+                {% csrf_token %}<strong>{{ row.item.label }} &middot; {{ row.item.get_status_display }}</strong>{{ row.form.as_p }}
+                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">{% translate 'Update closeout' %}</button></div>
             </form>
-            {% empty %}<p class="construction-empty">No closeout checklist items are available.</p>{% endfor %}
+            {% empty %}<p class="construction-empty">{% translate 'No closeout checklist items are available.' %}</p>{% endfor %}
             {% for row in execution_warranty_rows %}
             <form class="execution-record-card" method="post" action="{% url 'operations:project-warranty-resolution' pk=row.item.pk %}">
-                {% csrf_token %}<strong>{{ row.item.title }} · {{ row.item.get_status_display }}</strong>{{ row.form.as_p }}
-                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">Save warranty resolution</button></div>
+                {% csrf_token %}<strong>{{ row.item.title }} &middot; {{ row.item.get_status_display }}</strong>{{ row.form.as_p }}
+                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">{% translate 'Save warranty resolution' %}</button></div>
             </form>
-            {% empty %}<p class="construction-empty">No warranty items are open.</p>{% endfor %}
+            {% empty %}<p class="construction-empty">{% translate 'No warranty items are open.' %}</p>{% endfor %}
         </div>
     </details>
     {% endif %}
     {% if can_edit_operations %}
     <details class="execution-loop-section" id="permits">
-        <summary><span>Permits and inspections</span><small>Schedule inspections, record results, and keep corrections visible</small></summary>
+        <summary><span>{% translate 'Permits and inspections' %}</span><small>{% translate 'Schedule inspections, record results, and keep corrections visible' %}</small></summary>
         <div class="execution-loop-body">
-            <h4>Add a permit</h4>
+            <h4>{% translate 'Add a permit' %}</h4>
             <form class="construction-form-grid" method="post" action="{% url 'operations:project-permit-create' pk=operations_project.pk %}">
                 {% csrf_token %}{{ permit_form.as_p }}
-                <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">Add permit</button></div>
+                <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">{% translate 'Add permit' %}</button></div>
             </form>
             {% for row in execution_permit_rows %}
             <form class="execution-record-card" method="post" action="{% url 'operations:project-permit-status' pk=row.permit.pk %}">
-                {% csrf_token %}<strong>{{ row.permit.permit_type }} · {{ row.permit.get_status_display }}</strong>{{ row.form.as_p }}
-                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">Update permit</button></div>
+                {% csrf_token %}<strong>{{ row.permit.permit_type }} &middot; {{ row.permit.get_status_display }}</strong>{{ row.form.as_p }}
+                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">{% translate 'Update permit' %}</button></div>
             </form>
-            {% empty %}<p class="construction-empty">No permits tracked yet.</p>{% endfor %}
-            <h4>Schedule an inspection</h4>
+            {% empty %}<p class="construction-empty">{% translate 'No permits tracked yet.' %}</p>{% endfor %}
+            <h4>{% translate 'Schedule an inspection' %}</h4>
             <form class="construction-form-grid" method="post" action="{% url 'operations:project-inspection-create' pk=operations_project.pk %}">
                 {% csrf_token %}{{ inspection_form.as_p }}
-                <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">Schedule inspection</button></div>
+                <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">{% translate 'Schedule inspection' %}</button></div>
             </form>
             {% for row in execution_inspection_rows %}
             <form class="execution-record-card" method="post" action="{% url 'operations:project-inspection-result' pk=row.inspection.pk %}">
-                {% csrf_token %}<strong>{{ row.inspection.inspection_type }} · {{ row.inspection.get_status_display }}</strong>{{ row.form.as_p }}
-                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">Record result</button></div>
+                {% csrf_token %}<strong>{{ row.inspection.inspection_type }} &middot; {{ row.inspection.get_status_display }}</strong>{{ row.form.as_p }}
+                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">{% translate 'Record result' %}</button></div>
             </form>
-            {% empty %}<p class="construction-empty">No inspections tracked yet.</p>{% endfor %}
+            {% empty %}<p class="construction-empty">{% translate 'No inspections tracked yet.' %}</p>{% endfor %}
         </div>
     </details>
     {% endif %}
 
     {% if can_edit_operations or execution_task_rows %}
     <details class="execution-loop-section" id="task-actions">
-        <summary><span>Schedule and tasks</span><small>Create and update project work without leaving the project</small></summary>
+        <summary><span>{% translate 'Schedule and tasks' %}</span><small>{% translate 'Create and update project work without leaving the project' %}</small></summary>
         <div class="execution-loop-body">
             <div class="construction-list">
-                {% for milestone in operations_project.milestones.all %}<form class="execution-record-card" method="post" action="{% url 'operations:project-milestone-status' pk=milestone.pk %}">{% csrf_token %}<strong>{{ milestone.title }}</strong><small>{% if milestone.is_complete %}Complete{% else %}Open{% endif %}</small><input type="hidden" name="is_complete" value="{% if milestone.is_complete %}0{% else %}1{% endif %}"><button class="button button-quiet button-small" type="submit">{% if milestone.is_complete %}Reopen milestone{% else %}Complete milestone{% endif %}</button></form>{% empty %}<p class="construction-empty">No milestones are defined yet.</p>{% endfor %}
+                {% for milestone in operations_project.milestones.all %}<form class="execution-record-card" method="post" action="{% url 'operations:project-milestone-status' pk=milestone.pk %}">{% csrf_token %}<strong>{{ milestone.title }}</strong><small>{% if milestone.is_complete %}{% translate 'Complete' %}{% else %}{% translate 'Open' %}{% endif %}</small><input type="hidden" name="is_complete" value="{% if milestone.is_complete %}0{% else %}1{% endif %}"><button class="button button-quiet button-small" type="submit">{% if milestone.is_complete %}{% translate 'Reopen milestone' %}{% else %}{% translate 'Complete milestone' %}{% endif %}</button></form>{% empty %}<p class="construction-empty">{% translate 'No milestones are defined yet.' %}</p>{% endfor %}
             </div>
             {% if can_edit_operations %}<form class="construction-form-grid" method="post" action="{% url 'operations:project-task-create' pk=operations_project.pk %}">
                 {% csrf_token %}
                 {{ task_form.as_p }}
-                <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">Add project task</button></div>
+                <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">{% translate 'Add project task' %}</button></div>
             </form>{% endif %}
             {% for row in execution_task_rows %}
             {% if row.can_update %}<form class="execution-record-card" method="post" action="{% url 'operations:project-task-status' pk=row.task.pk %}">
                 {% csrf_token %}
-                <strong>{{ row.task.title }}</strong><small>{% for person in row.task.assigned_to.all %}{% if not forloop.first %}, {% endif %}{{ person.get_full_name|default:person.username }}{% empty %}Unassigned{% endfor %}{% if row.task.due_date %} · Due {{ row.task.due_date }}{% endif %}</small>
+                <strong>{{ row.task.title }}</strong><small>{% for person in row.task.assigned_to.all %}{% if not forloop.first %}{% translate ',' %} {% endif %}{{ person.get_full_name|default:person.username }}{% empty %}{% translate 'Unassigned' %}{% endfor %}{% if row.task.due_date %} {% translate '· Due' %} {{ row.task.due_date }}{% endif %}</small>
                 {{ row.form.as_p }}
-                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">Save task status</button></div>
-            </form>{% else %}<div class="execution-record-card"><strong>{{ row.task.title }}</strong><small>Assigned work · status {{ row.task.get_status_display }}</small></div>{% endif %}
-            {% empty %}<p class="construction-empty">No project tasks are assigned yet.</p>{% endfor %}
+                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">{% translate 'Save task status' %}</button></div>
+            </form>{% else %}<div class="execution-record-card"><strong>{{ row.task.title }}</strong><small>{% translate 'Assigned work · status' %} {{ row.task.get_status_display }}</small></div>{% endif %}
+            {% empty %}<p class="construction-empty">{% translate 'No project tasks are assigned yet.' %}</p>{% endfor %}
         </div>
     </details>
 
     <details class="execution-loop-section" id="document-actions">
-        <summary><span>Documents and activity</span><small>Upload a protected project record into the single source of truth</small></summary>
+        <summary><span>{% translate 'Documents and activity' %}</span><small>{% translate 'Upload a protected project record into the single source of truth' %}</small></summary>
         <div class="execution-loop-body">
             <form class="construction-form-grid" method="post" action="{% url 'operations:project-document-upload' pk=operations_project.pk %}" enctype="multipart/form-data">
                 {% csrf_token %}
                 {{ document_form.as_p }}
-                <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">Upload project document</button></div>
+                <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">{% translate 'Upload project document' %}</button></div>
             </form>
         </div>
     </details>

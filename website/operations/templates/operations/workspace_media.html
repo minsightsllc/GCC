@@ -1,13 +1,14 @@
+{% load i18n %}
 {% if active_section == 'media' %}
 <section class="admin-view is-active">
     <div class="admin-heading-row">
-        <div><span class="section-kicker">Project workspace</span><h2>Media reports</h2><p class="admin-intro">Upload project photos and videos for the team. These originals remain private until an Owner prepares a separate client share or website publication.</p></div>
+        <div><span class="section-kicker">{% translate 'Project workspace' %}</span><h2>{% translate 'Media reports' %}</h2><p class="admin-intro">{% translate 'Upload project photos and videos for the team. These originals remain private until an Owner prepares a separate client share or website publication.' %}</p></div>
     </div>
     {% if team_mode %}
     <form class="media-upload-panel workspace-form" method="post" action="{% url 'operations:team-media-upload' %}" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="workspace-form-grid">{% for field in media_upload_form %}<label class="form-field">{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}</div>
-        <button class="button button-primary" type="submit">Upload project media</button>
+        <button class="button button-primary" type="submit">{% translate 'Upload project media' %}</button>
     </form>
     {% endif %}
     <div class="media-grid">
@@ -15,17 +16,17 @@
         <article class="media-item">
             <div class="media-preview">{% if media.media_type == 'video' and media.file %}<video src="{{ media.display_url }}" controls preload="metadata"></video>{% else %}<img src="{{ media.display_url }}" alt="{{ media.caption|default:media.title }}">{% endif %}<a class="media-preview-open" href="{{ media.display_url }}" target="_blank" rel="noreferrer" aria-label="Open {{ media.title }}">&rarr;</a></div>
             <div class="media-item-body">
-                <strong>{{ media.title }}</strong><small>{% if media.project %}{{ media.project.title }}{% else %}Unassigned{% endif %} · Project workspace file</small>
+                <strong>{{ media.title }}</strong><small>{% if media.project %}{{ media.project.title }}{% else %}{% translate 'Unassigned' %}{% endif %} {% translate '· Project workspace file' %}</small>
                 {% if team_mode and media.uploaded_by_id == request.user.id %}
                 <form class="media-controls" method="post" action="{% url 'operations:team-media-update' pk=media.pk %}">
                     {% csrf_token %}
-                    <label class="form-field">Project note<textarea name="caption" rows="2">{{ media.caption }}</textarea></label>
-                    <button class="button button-quiet" type="submit">Save note</button>
+                    <label class="form-field">{% translate 'Project note' %}<textarea name="caption" rows="2">{{ media.caption }}</textarea></label>
+                    <button class="button button-quiet" type="submit">{% translate 'Save note' %}</button>
                 </form>
                 {% endif %}
             </div>
         </article>
-        {% empty %}<div class="empty-detail">No project media is available to this role yet.</div>{% endfor %}
+        {% empty %}<div class="empty-detail">{% translate 'No project media is available to this role yet.' %}</div>{% endfor %}
     </div>
 </section>
 {% endif %}

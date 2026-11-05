@@ -1,7 +1,8 @@
 {% extends "operations/base.html" %}
+{% load i18n %}
 {% load static %}
 
-{% block title %}Today's work | Grand Coast Construction Inc.{% endblock %}
+{% block title %}{% translate "Today's work | Grand Coast Construction Inc." %}{% endblock %}
 {% block body_class %}admin-site{% endblock %}
 
 {% block body %}
@@ -10,29 +11,29 @@
         <div class="admin-brand">
             <a href="{% url 'operations:home' %}" aria-label="Return to public site">
                 <span class="admin-logo-frame"><img src="{% static 'operations/images/gcc-logo.png' %}" alt="Grand Coast Construction Inc. logo"></span>
-                <span><strong>Grand Coast</strong><small>Construction Inc.</small></span>
+                <span><strong>{% translate 'Grand Coast' %}</strong><small>{% translate 'Construction Inc.' %}</small></span>
             </a>
         </div>
         {% include "operations/sidebar_nav.html" %}
         <div class="sidebar-footer">
             <div class="sidebar-user">
                 <span class="avatar">{{ request.user.first_name|slice:':1'|default:request.user.username|slice:':1'|upper }}</span>
-                <span><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Field workspace</small></span>
+                <span><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>{% translate 'Field workspace' %}</small></span>
             </div>
-            <a class="sidebar-back" href="{% url 'operations:team' %}">Overview</a>
-            <form method="post" action="{% url 'operations:logout' %}">{% csrf_token %}<button class="sidebar-reset" type="submit">Sign out</button></form>
+            <a class="sidebar-back" href="{% url 'operations:team' %}">{% translate 'Overview' %}</a>
+            <form method="post" action="{% url 'operations:logout' %}">{% csrf_token %}<button class="sidebar-reset" type="submit">{% translate 'Sign out' %}</button></form>
         </div>
     </aside>
 
     <div class="admin-main">
         <header class="admin-topbar">
-            <button class="admin-menu-toggle" type="button" data-admin-menu-toggle aria-expanded="false" aria-label="Open Team navigation">Menu</button>
-            <div><span class="admin-breadcrumb">Grand Coast / Field</span><h1>Today's work</h1></div>
-            <div class="admin-top-actions"><a class="topbar-link" href="{% url 'operations:team' %}">Employee overview</a></div>
+            <button class="admin-menu-toggle" type="button" data-admin-menu-toggle aria-expanded="false" aria-label="Open Team navigation">{% translate 'Menu' %}</button>
+            <div><span class="admin-breadcrumb">{% translate 'Grand Coast / Field' %}</span><h1>{% translate "Today's work" %}</h1></div>
+            <div class="admin-top-actions"><a class="topbar-link" href="{% url 'operations:team' %}">{% translate 'Employee overview' %}</a></div>
         </header>
         <div class="admin-workspace-notice">
-            <span class="staging-label">FIELD WORKSPACE</span>
-            <span>{{ field_today|date:'l, F j' }} · Keep the work moving</span>
+            <span class="staging-label">{% translate 'FIELD WORKSPACE' %}</span>
+            <span>{{ field_today|date:'l, F j' }} {% translate '· Keep the work moving' %}</span>
             <span class="staging-spacer"></span>
             <span class="admin-workspace-user">{{ request.user.get_full_name|default:request.user.username }}</span>
         </div>
@@ -40,9 +41,9 @@
         <main class="admin-content construction-content field-content">
             <section class="construction-hero">
                 <div>
-                    <span class="section-kicker">Simple on the surface</span>
-                    <h2>Where am I going? What am I doing? What do I need?</h2>
-                    <p>Open the project, see the assigned work, then send the office a clear update from the jobsite.</p>
+                    <span class="section-kicker">{% translate 'Simple on the surface' %}</span>
+                    <h2>{% translate 'Where am I going? What am I doing? What do I need?' %}</h2>
+                    <p>{% translate 'Open the project, see the assigned work, then send the office a clear update from the jobsite.' %}</p>
                 </div>
             </section>
 
@@ -53,70 +54,70 @@
                         <div>
                             <span class="section-kicker">{{ project.get_operational_phase_display }}</span>
                             <h3>{{ project.title }}</h3>
-                            <p class="field-project-address">{{ project.location|default:'Address not set' }}{% if project.client %} · {{ project.client.name }}{% endif %}</p>
+                            <p class="field-project-address">{{ project.location|default:'Address not set' }}{% if project.client %} &middot; {{ project.client.name }}{% endif %}</p>
                         </div>
                         <span class="status-badge {% if project.health_status == 'at_risk' %}red{% elif project.health_status == 'watch' %}gold{% else %}green{% endif %}">{{ project.get_health_status_display }}</span>
                     </div>
 
                     <div class="field-project-questions">
                         <div>
-                            <span>Today's assigned work</span>
-                            {% for task in project.today_tasks %}<strong>· {{ task.title }}</strong>{% empty %}<strong class="field-muted">No open tasks assigned.</strong>{% endfor %}
+                            <span>{% translate "Today's assigned work" %}</span>
+                            {% for task in project.today_tasks %}<strong>&middot; {{ task.title }}</strong>{% empty %}<strong class="field-muted">{% translate 'No open tasks assigned.' %}</strong>{% endfor %}
                         </div>
                         <div>
-                            <span>Schedule</span>
-                            {% for event in project.today_events %}<strong>{{ event.start_at|date:'g:i A' }} · {{ event.title }}</strong>{% empty %}<strong class="field-muted">No scheduled event today.</strong>{% endfor %}
+                            <span>{% translate 'Schedule' %}</span>
+                            {% for event in project.today_events %}<strong>{{ event.start_at|date:'g:i A' }} &middot; {{ event.title }}</strong>{% empty %}<strong class="field-muted">{% translate 'No scheduled event today.' %}</strong>{% endfor %}
                         </div>
                         <div>
-                            <span>Needs attention</span>
-                            <strong>{% if project.material_count %}{{ project.material_count }} material request{% if project.material_count != 1 %}s{% endif %} pending{% else %}Nothing flagged yet{% endif %}</strong>
+                            <span>{% translate 'Needs attention' %}</span>
+                            <strong>{% if project.material_count %}{{ project.material_count }} {% if project.material_count == 1 %}{% translate 'material request' %}{% else %}{% translate 'material requests' %}{% endif %} {% translate 'pending' %}{% else %}{% translate 'Nothing flagged yet' %}{% endif %}</strong>
                         </div>
                     </div>
 
                     <div class="field-action-row">
-                        <a class="button button-outline button-small" href="{% url 'operations:project-operations' pk=project.pk %}">Project details</a>
-                        <a class="button button-primary button-small" href="{% url 'operations:team-project-add-update' pk=project.pk %}">Send progress update</a>
+                        <a class="button button-outline button-small" href="{% url 'operations:project-operations' pk=project.pk %}">{% translate 'Project details' %}</a>
+                        <a class="button button-primary button-small" href="{% url 'operations:team-project-add-update' pk=project.pk %}">{% translate 'Send progress update' %}</a>
                     </div>
 
                     <div class="field-native-media construction-panel" data-native-media-control>
-                        <strong>Capture jobsite media</strong>
-                        <span data-native-media-status aria-live="polite">Camera and file uploads are available in the mobile workspace.</span>
+                        <strong>{% translate 'Capture jobsite media' %}</strong>
+                        <span data-native-media-status aria-live="polite">{% translate 'Camera and file uploads are available in the mobile workspace.' %}</span>
                         <div class="field-action-row">
-                            <button class="button button-quiet button-small" type="button" data-native-media-action="capture-media" data-native-media-target="project_media" data-native-media-project="{{ project.pk }}" data-native-media-context="progress" data-native-media-multiple="false">Use camera</button>
-                            <button class="button button-quiet button-small" type="button" data-native-media-action="pick-media" data-native-media-target="project_media" data-native-media-project="{{ project.pk }}" data-native-media-context="progress">Choose photos or video</button>
+                            <button class="button button-quiet button-small" type="button" data-native-media-action="capture-media" data-native-media-target="project_media" data-native-media-project="{{ project.pk }}" data-native-media-context="progress" data-native-media-multiple="false">{% translate 'Use camera' %}</button>
+                            <button class="button button-quiet button-small" type="button" data-native-media-action="pick-media" data-native-media-target="project_media" data-native-media-project="{{ project.pk }}" data-native-media-context="progress">{% translate 'Choose photos or video' %}</button>
                         </div>
                     </div>
 
                     <div class="field-capture-grid">
                         <form method="post" action="{% url 'operations:field-daily-report' pk=project.pk %}">
                             {% csrf_token %}<input type="hidden" name="idempotency_key" value="">
-                            <strong>Daily report</strong>
-                            <label class="form-field">Summary{{ daily_report_form.summary }}</label>
-                            <label class="form-field">Work completed{{ daily_report_form.work_completed }}</label>
-                            <button class="button button-quiet button-small" type="submit">Submit report</button>
+                            <strong>{% translate 'Daily report' %}</strong>
+                            <label class="form-field">{% translate 'Summary' %}{{ daily_report_form.summary }}</label>
+                            <label class="form-field">{% translate 'Work completed' %}{{ daily_report_form.work_completed }}</label>
+                            <button class="button button-quiet button-small" type="submit">{% translate 'Submit report' %}</button>
                         </form>
                         <form method="post" action="{% url 'operations:field-material-request' pk=project.pk %}">
                             {% csrf_token %}<input type="hidden" name="idempotency_key" value="">
-                            <strong>Request materials</strong>
-                            <label class="form-field">What do you need?{{ material_request_form.description }}</label>
-                            <label class="form-field">Quantity{{ material_request_form.quantity }}</label>
-                            <label class="form-field">Needed by{{ material_request_form.needed_by }}</label>
-                            <button class="button button-quiet button-small" type="submit">Send request</button>
+                            <strong>{% translate 'Request materials' %}</strong>
+                            <label class="form-field">{% translate 'What do you need?' %}{{ material_request_form.description }}</label>
+                            <label class="form-field">{% translate 'Quantity' %}{{ material_request_form.quantity }}</label>
+                            <label class="form-field">{% translate 'Needed by' %}{{ material_request_form.needed_by }}</label>
+                            <button class="button button-quiet button-small" type="submit">{% translate 'Send request' %}</button>
                         </form>
                         <form method="post" action="{% url 'operations:field-problem-report' pk=project.pk %}">
                             {% csrf_token %}<input type="hidden" name="idempotency_key" value="">
-                            <strong>Report a problem</strong>
-                            <label class="form-field">What is wrong?{{ problem_report_form.title }}</label>
-                            <label class="form-field">Details{{ problem_report_form.description }}</label>
-                            <label class="form-field">Severity{{ problem_report_form.severity }}</label>
-                            <button class="button button-quiet button-small" type="submit">Send problem report</button>
+                            <strong>{% translate 'Report a problem' %}</strong>
+                            <label class="form-field">{% translate 'What is wrong?' %}{{ problem_report_form.title }}</label>
+                            <label class="form-field">{% translate 'Details' %}{{ problem_report_form.description }}</label>
+                            <label class="form-field">{% translate 'Severity' %}{{ problem_report_form.severity }}</label>
+                            <button class="button button-quiet button-small" type="submit">{% translate 'Send problem report' %}</button>
                         </form>
                     </div>
                 </article>
                 {% empty %}
                 <div class="construction-panel construction-empty">
-                    <strong>No assigned work today.</strong>
-                    <span>When a project is assigned, its address, work, schedule, and capture tools will appear here.</span>
+                    <strong>{% translate 'No assigned work today.' %}</strong>
+                    <span>{% translate 'When a project is assigned, its address, work, schedule, and capture tools will appear here.' %}</span>
                 </div>
                 {% endfor %}
             </div>

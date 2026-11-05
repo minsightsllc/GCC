@@ -1,32 +1,33 @@
+{% load i18n %}
 <section class="estimate-card" id="documents">
     {% if portal_estimate %}
-        <div class="estimate-card-top"><span class="section-kicker">Estimate</span><span class="estimate-number">{% if portal_estimate.external_url %}External estimate{% else %}Estimate history{% endif %}</span></div>
+        <div class="estimate-card-top"><span class="section-kicker">{% translate 'Estimate' %}</span><span class="estimate-number">{% if portal_estimate.external_url %}{% translate 'External estimate' %}{% else %}{% translate 'Estimate history' %}{% endif %}</span></div>
         <h2>{{ portal_estimate.title }}</h2>
         {% if portal_estimate.portal_project %}<p class="detail-value">{{ portal_estimate.portal_project.title }}</p>{% endif %}
-        <div class="estimate-status"><span class="status-check">{% if portal_estimate.external_url and portal_estimate.external_status == 'approved' or not portal_estimate.external_url and portal_estimate.status == 'accepted' %}&#10003;{% else %}&bull;{% endif %}</span><span>{% if portal_estimate.external_url %}{{ portal_estimate.get_external_status_display }}{% else %}Historical status: {{ portal_estimate.get_status_display }}{% endif %}</span></div>
+        <div class="estimate-status"><span class="status-check">{% if portal_estimate.external_url and portal_estimate.external_status == 'approved' or not portal_estimate.external_url and portal_estimate.status == 'accepted' %}&#10003;{% else %}?{% endif %}</span><span>{% if portal_estimate.external_url %}{{ portal_estimate.get_external_status_display }}{% else %}{% translate 'Historical status:' %} {{ portal_estimate.get_status_display }}{% endif %}</span></div>
         {% if portal_estimate.external_client_visible and portal_estimate.external_url %}
-            <p class="detail-value">Your detailed estimate is hosted by the estimate service selected by Grand Coast. The service is authoritative for your response.</p>
-            <a class="button button-primary full-width" href="{% url 'operations:external-estimate-link' pk=portal_estimate.pk %}" aria-label="Open estimate for {{ portal_estimate.title }}">Open estimate link &rarr;</a>
-            {% if portal_estimate.external_status_by and portal_estimate.external_status_at %}<p class="detail-value">Grand Coast last confirmed this status on {{ portal_estimate.external_status_at|date:'M d, Y' }}.</p>{% endif %}
+            <p class="detail-value">{% translate 'Your detailed estimate is hosted by the estimate service selected by Grand Coast. The service is authoritative for your response.' %}</p>
+            <a class="button button-primary full-width" href="{% url 'operations:external-estimate-link' pk=portal_estimate.pk %}" aria-label="Open estimate for {{ portal_estimate.title }}">{% translate 'Open estimate link →' %}</a>
+            {% if portal_estimate.external_status_by and portal_estimate.external_status_at %}<p class="detail-value">{% translate 'Grand Coast last confirmed this status on' %} {{ portal_estimate.external_status_at|date:'M d, Y' }}{% translate '.' %}</p>{% endif %}
         {% else %}
             {% if portal_estimate.external_url %}
-                <p class="detail-value">Grand Coast has not published the estimate link to your portal yet. Contact the team if you expected to see it.</p>
+                <p class="detail-value">{% translate 'Grand Coast has not published the estimate link to your portal yet. Contact the team if you expected to see it.' %}</p>
             {% else %}
-                <p class="detail-value">This is an older estimate record kept for reference. Message Grand Coast for current scope, pricing, or a revised estimate.</p>
+                <p class="detail-value">{% translate 'This is an older estimate record kept for reference. Message Grand Coast for current scope, pricing, or a revised estimate.' %}</p>
             {% endif %}
         {% endif %}
         {% if portal_estimate.external_url and portal_estimate.external_status == 'approved' %}
-            <div class="portal-accepted-note">Grand Coast staff confirmed the approval in the external estimate service. The Owner will set up your project next.</div>
+            <div class="portal-accepted-note">{% translate 'Grand Coast staff confirmed the approval in the external estimate service. The Owner will set up your project next.' %}</div>
         {% elif portal_estimate.external_url and portal_estimate.external_status == 'rejected' %}
-            <div class="portal-accepted-note">Grand Coast staff confirmed that the estimate was declined in the external service. Contact Grand Coast if you would like to discuss a revision.</div>
+            <div class="portal-accepted-note">{% translate 'Grand Coast staff confirmed that the estimate was declined in the external service. Contact Grand Coast if you would like to discuss a revision.' %}</div>
         {% elif portal_estimate.external_url %}
-            <div class="portal-accepted-note">Review and respond in the external estimate service. Grand Coast will record the result here after checking it.</div>
+            <div class="portal-accepted-note">{% translate 'Review and respond in the external estimate service. Grand Coast will record the result here after checking it.' %}</div>
         {% else %}
-            <div class="portal-accepted-note">Historical estimate records are read-only in GCC. There are no Accept or Decline actions in this portal.</div>
+            <div class="portal-accepted-note">{% translate 'Historical estimate records are read-only in GCC. There are no Accept or Decline actions in this portal.' %}</div>
         {% endif %}
     {% else %}
-        <span class="section-kicker">Estimate</span>
-        <h2>Your scope is taking shape.</h2>
-        <p class="detail-value">An estimate will appear here when the team records its status.</p>
+        <span class="section-kicker">{% translate 'Estimate' %}</span>
+        <h2>{% translate 'Your scope is taking shape.' %}</h2>
+        <p class="detail-value">{% translate 'An estimate will appear here when the team records its status.' %}</p>
     {% endif %}
 </section>

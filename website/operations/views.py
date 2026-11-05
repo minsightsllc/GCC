@@ -38,6 +38,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.templatetags.static import static
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils import translation
 from django.utils.text import slugify
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
@@ -220,6 +222,16 @@ EMPLOYEE_GROUPS = {"Manager", "Office", "Field", "Sales"}
 LEADERSHIP_GROUPS = {"Owner", "Manager"}
 
 
+def _translated_notice(message, **values):
+    translated = translation.gettext(message)
+    return translated % values if values else translated
+
+
+def _translated_count_notice(singular, plural, count, **values):
+    translated = translation.ngettext(singular, plural, count)
+    return translated % {"count": count, **values}
+
+
 def _prepare_client_invite_delivery(request, *, client, invite, raw_token, actor):
     '''Queue and, when enabled, immediately deliver a client portal invite.'''
     invite_url = request.build_absolute_uri(
@@ -231,11 +243,10 @@ def _prepare_client_invite_delivery(request, *, client, invite, raw_token, actor
     request.session['last_invite_email_status'] = outbox.status if outbox else ''
     request.session['last_invite_recipient'] = client.email
     if outbox and outbox.status == EmailOutbox.Status.SENT:
-        messages.success(
-            request,
-            f'A one-time client portal invite was emailed to {client.email}. '
-            'The copy link remains available below.',
-        )
+        messages.success(request, _translated_notice(
+            'A one-time client portal invite was emailed to %(email)s. The copy link remains available below.',
+            email=client.email,
+        ))
     elif outbox and outbox.status == EmailOutbox.Status.FAILED:
         messages.warning(
             request,
@@ -559,18 +570,39 @@ def _project_image(project):
     return _asset(project.fallback_image) if project else ""
 
 
-def _public_context(*, include_project_galleries=False):
+def _localized_value(instance, field, language):
+    spanish_value = getattr(instance, f"{field}_es", "") or ""
+    if str(language).lower().startswith("es") and spanish_value.strip():
+        return spanish_value
+    return getattr(instance, field, "") or ""
+
+
+def _public_context(*, language="en", include_project_galleries=False):
     site_settings = _site_settings()
+    for content_field in (
+        "headline", "subheadline", "featured_title", "featured_body",
+        "services_title", "services_intro", "services_note",
+        "process_page_title", "process_page_intro", "contact_page_kicker",
+        "contact_page_title", "contact_page_intro", "contact_service_areas_heading",
+        "contact_service_areas", "contact_form_kicker", "contact_form_title",
+        "contact_form_intro", "contact_form_privacy_note", "contact_form_footer_note",
+        "contact_direct_heading", "contact_success_message", "contact_form_submit_label",
+    ):
+        setattr(site_settings, f"display_{content_field}", _localized_value(site_settings, content_field, language))
     google_reviews = list(GoogleReview.objects.all()[:5])
     services = list(Service.objects.filter(is_active=True))
     process_steps = list(ProcessStep.objects.filter(is_active=True))
     for service in services:
+        service.display_title = _localized_value(service, "title", language)
+        service.display_description = _localized_value(service, "description", language)
         service.display_image = reverse("operations:service-image", kwargs={"pk": service.pk}) if service.image else _asset(service.image_path)
     for step in process_steps:
+        step.display_title = _localized_value(step, "title", language)
+        step.display_description = _localized_value(step, "description", language)
         step.display_image = reverse("operations:process-step-image", kwargs={"pk": step.pk}) if step.image else ""
     contact_service_areas = [
         area.strip()
-        for area in site_settings.contact_service_areas.splitlines()
+        for area in site_settings.display_contact_service_areas.splitlines()
         if area.strip()
     ]
     phone_digits = "".join(
@@ -598,14 +630,20 @@ def _public_context(*, include_project_galleries=False):
         )
         projects = list(project_queryset)
         for project in projects:
+            project.display_public_title = _localized_value(project, "public_title", language) or ("Un proyecto de Grand Coast" if str(language).startswith("es") else "A Grand Coast project")
+            project.display_public_location = _localized_value(project, "public_location", language)
+            project.display_public_summary = _localized_value(project, "public_summary", language)
             project.public_posts = [
                 presentation
                 for post in project.website_gallery_posts.all()
-                if (presentation := website_post_presentation(post))["slides"]
+                if (presentation := website_post_presentation(post, language=language))["slides"]
             ]
             project.public_posts.sort(key=lambda item: item["sort_order"])
     featured_project = site_settings.featured_project
     public_featured_project = featured_project if featured_project and featured_project.is_published else None
+    if public_featured_project:
+        public_featured_project.display_public_title = _localized_value(public_featured_project, "public_title", language) or ("Un proyecto de Grand Coast" if str(language).startswith("es") else "A Grand Coast project")
+        public_featured_project.display_public_summary = _localized_value(public_featured_project, "public_summary", language)
     return {
         "site_settings": site_settings,
         "google_reviews": google_reviews,
@@ -633,10 +671,41 @@ def _public_dashboard_url(user):
     return ""
 
 
+@require_POST
+def set_language(request):
+    language = request.POST.get("language", "")
+    if language not in {"en", "es"}:
+        return HttpResponse(status=400)
+
+    if request.user.is_authenticated:
+        from .models import UserLanguagePreference
+
+        UserLanguagePreference.objects.update_or_create(user=request.user, defaults={"language": language})
+
+    translation.activate(language)
+    request.LANGUAGE_CODE = language
+    target = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("operations:home")
+    if not url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        target = reverse("operations:home")
+
+    response = redirect(target)
+    response.set_cookie(
+        settings.LANGUAGE_COOKIE_NAME,
+        language,
+        max_age=getattr(settings, "LANGUAGE_COOKIE_AGE", 60 * 60 * 24 * 365),
+        path=getattr(settings, "LANGUAGE_COOKIE_PATH", "/"),
+        domain=getattr(settings, "LANGUAGE_COOKIE_DOMAIN", None),
+        secure=getattr(settings, "LANGUAGE_COOKIE_SECURE", request.is_secure()),
+        httponly=getattr(settings, "LANGUAGE_COOKIE_HTTPONLY", False),
+        samesite=getattr(settings, "LANGUAGE_COOKIE_SAMESITE", "Lax"),
+    )
+    return response
+
+
 def public_page(request, page="home"):
     if page not in PUBLIC_PAGES:
         page = "home"
-    context = _public_context(include_project_galleries=page == "projects")
+    context = _public_context(language=getattr(request, "LANGUAGE_CODE", "en"), include_project_galleries=page == "projects")
     context["page"] = page
     context["public_dashboard_url"] = _public_dashboard_url(request.user)
     context["contact_form"] = ContactLeadForm(request=request)
@@ -665,7 +734,7 @@ def public_page(request, page="home"):
                     upload.name = original_name
                     LeadAttachment.objects.create(lead=lead, file=upload, original_name=original_name)
                 record_activity("New lead received", f"{lead.name} · Website form", lead=lead)
-            messages.success(request, context["site_settings"].contact_success_message)
+            messages.success(request, context["site_settings"].display_contact_success_message)
             return redirect("operations:contact")
     return render(request, "operations/public.html", context)
 
@@ -1052,6 +1121,14 @@ def _active_lead_or_404(pk):
     return get_object_or_404(Lead, pk=pk, deleted_at__isnull=True)
 
 
+CONTACT_CONTENT_FIELDS_ES = (
+    "contact_page_kicker_es", "contact_page_title_es", "contact_page_intro_es",
+    "contact_service_areas_heading_es", "contact_service_areas_es",
+    "contact_form_kicker_es", "contact_form_title_es", "contact_form_intro_es",
+    "contact_form_privacy_note_es", "contact_form_footer_note_es",
+    "contact_direct_heading_es", "contact_success_message_es", "contact_form_submit_label_es",
+)
+
 CONTACT_CONTENT_FIELDS = (
     "contact_page_kicker",
     "contact_page_title",
@@ -1073,15 +1150,15 @@ CONTACT_CONTENT_FIELDS = (
 
 CONTENT_FORM_FIELDS_BY_PAGE = {
     "home": (
-        "headline",
-        "subheadline",
-        "featured_title",
-        "featured_body",
+        "headline", "headline_es",
+        "subheadline", "subheadline_es",
+        "featured_title", "featured_title_es",
+        "featured_body", "featured_body_es",
         "google_review_url",
     ),
-    "services": ("services_title", "services_intro", "services_note"),
-    "process": ("process_page_title", "process_page_intro"),
-    "contact": CONTACT_CONTENT_FIELDS,
+    "services": ("services_title", "services_title_es", "services_intro", "services_intro_es", "services_note", "services_note_es"),
+    "process": ("process_page_title", "process_page_title_es", "process_page_intro", "process_page_intro_es"),
+    "contact": CONTACT_CONTENT_FIELDS + CONTACT_CONTENT_FIELDS_ES,
 }
 
 
@@ -1098,7 +1175,11 @@ def _content_form(instance, services, process_steps, data=None):
         "process_page_title": instance.process_page_title,
         "process_page_intro": instance.process_page_intro,
     }
-    initial.update({field: getattr(instance, field) for field in CONTACT_CONTENT_FIELDS})
+    initial.update({
+        field: getattr(instance, field)
+        for field in CONTENT_FORM_FIELDS_BY_PAGE["home"] + CONTENT_FORM_FIELDS_BY_PAGE["services"] + CONTENT_FORM_FIELDS_BY_PAGE["process"] + CONTENT_FORM_FIELDS_BY_PAGE["contact"]
+        if field != "google_review_url" and hasattr(instance, field)
+    })
     if data is not None:
         data = data.copy()
         for field, value in initial.items():
@@ -2472,7 +2553,10 @@ def client_create(request):
     if form.is_valid():
         client = form.save()
         record_activity("Client created", client.name, actor=request.user)
-        messages.success(request, f"{client.name} was added to Clients.")
+        messages.success(request, _translated_notice(
+            '%(client)s was added to Clients.',
+            client=client.name,
+        ))
         return _workspace_redirect(request, "clients", client=client.pk)
     messages.error(request, "Please correct the client details and try again.")
     return _render_workspace_form_error(request, "clients", {"client_form": form}, new="client")
@@ -2543,21 +2627,24 @@ def lead_convert_client(request, pk):
         )
         return _workspace_redirect(request, "leads", lead=lead.pk)
     if client.user_id:
-        confirmation = (
-            f"You have now converted {lead.name} to a client. Their dashboard access is already active; "
-            "they can sign in with their existing account. Contact them if they are having trouble."
+        confirmation = _translated_notice(
+            'You have now converted %(lead)s to a client. Their dashboard access is already active; '
+            'they can sign in with their existing account. Contact them if they are having trouble.',
+            lead=lead.name,
         )
     elif client.email:
-        confirmation = (
-            f"You have now converted {lead.name} to a client. Next, send a sign-in invitation link "
-            "to their email from the client record. They must use that link to access their dashboard. "
-            "Contact them if they are having trouble."
+        confirmation = _translated_notice(
+            'You have now converted %(lead)s to a client. Next, send a sign-in invitation link '
+            'to their email from the client record. They must use that link to access their dashboard. '
+            'Contact them if they are having trouble.',
+            lead=lead.name,
         )
     else:
-        confirmation = (
-            f"You have now converted {lead.name} to a client. Add their email address, then send a "
-            "sign-in invitation link so they can access their dashboard. Contact them if they are "
-            "having trouble."
+        confirmation = _translated_notice(
+            'You have now converted %(lead)s to a client. Add their email address, then send a '
+            'sign-in invitation link so they can access their dashboard. Contact them if they are '
+            'having trouble.',
+            lead=lead.name,
         )
     messages.success(request, confirmation)
     return _workspace_redirect(request, "clients", client=client.pk)
@@ -2590,7 +2677,10 @@ def task_create(request):
             body=f"{task.title} was added to your work queue.",
             created_by=request.user,
         )
-        messages.success(request, f"{task.title} was added to Tasks.")
+        messages.success(request, _translated_notice(
+            '%(title)s was added to Tasks.',
+            title=task.title,
+        ))
         return _workspace_redirect(request, "tasks", task=task.pk)
     messages.error(request, "Please correct the task details and try again.")
     return _render_workspace_form_error(request, "tasks", {"task_form": form}, new="task")
@@ -3042,9 +3132,15 @@ def calendar_day_update(request):
                     exclude_users=[request.user],
                 )
         if changed:
-            messages.success(request, f'{override_date.isoformat()} returned to a normal day.')
+            messages.success(request, _translated_notice(
+                '%(date)s returned to a normal day.',
+                date=override_date.isoformat(),
+            ))
         else:
-            messages.info(request, f'{override_date.isoformat()} was already a normal day.')
+            messages.info(request, _translated_notice(
+                '%(date)s was already a normal day.',
+                date=override_date.isoformat(),
+            ))
         return _workspace_redirect(
             request,
             'calendar',
@@ -3112,9 +3208,17 @@ def calendar_day_update(request):
 
     action = 'updated' if was_existing else 'added'
     if changed:
-        messages.success(request, f'{override_date.isoformat()} {override.get_status_display().lower()} setting {action}.')
+        messages.success(request, _translated_notice(
+            '%(date)s %(status)s setting %(action)s.',
+            date=override_date.isoformat(),
+            status=translation.gettext(override.get_status_display().lower()),
+            action=translation.gettext(action),
+        ))
     else:
-        messages.info(request, f'{override_date.isoformat()} already has that setting.')
+        messages.info(request, _translated_notice(
+            '%(date)s already has that setting.',
+            date=override_date.isoformat(),
+        ))
     return _workspace_redirect(
         request,
         'calendar',
@@ -3157,7 +3261,10 @@ def schedule_create(request):
                     project=event.project,
                     task=event.task,
                 )
-        messages.success(request, f"{event.title} was added to the calendar.")
+        messages.success(request, _translated_notice(
+            '%(title)s was added to the calendar.',
+            title=event.title,
+        ))
         return _workspace_redirect(request, "calendar", event=event.pk)
     messages.error(request, "Please correct the calendar event details.")
     return _render_workspace_form_error(request, "calendar", {"event_form": form}, new="event")
@@ -3264,7 +3371,10 @@ def schedule_delete(request, pk):
                 project=event.project,
                 task=event.task,
             )
-    messages.success(request, f"{event_title} was removed from the calendar.")
+    messages.success(request, _translated_notice(
+        '%(title)s was removed from the calendar.',
+        title=event_title,
+    ))
     return _workspace_redirect(request, "calendar")
 
 
@@ -3757,7 +3867,10 @@ def time_clock(request):
         messages.error(request, str(exc) or "This employee already has an active time entry.")
     else:
         record_activity(activity[0], activity[1], actor=request.user, project=activity[2])
-        messages.success(request, f"{employee.get_username()} {"clocked out." if activity[0] == "Clocked out" else "is clocked in."}")
+        messages.success(request, _translated_notice(
+            '%(employee)s clocked out.' if activity[0] == 'Clocked out' else '%(employee)s is clocked in.',
+            employee=employee.get_username(),
+        ))
     return _workspace_redirect(request, "time")
 
 
@@ -3947,7 +4060,10 @@ def employee_invite_create(request):
         if outbox and outbox.status == EmailOutbox.Status.SENT:
             messages.success(
                 request,
-                f'Employee invitation emailed to {invite.email}. Copy the one-time link below as a backup.',
+                _translated_notice(
+                    'Employee invitation emailed to %(email)s. Copy the one-time link below as a backup.',
+                    email=invite.email,
+                ),
             )
         elif outbox and outbox.status == EmailOutbox.Status.FAILED:
             messages.warning(
@@ -3990,7 +4106,10 @@ def employee_profile_update(request, pk):
     if form.is_valid():
         form.save()
         record_activity('Employee profile updated', str(profile), actor=request.user)
-        messages.success(request, f"{profile} profile updated.")
+        messages.success(request, _translated_notice(
+            '%(profile)s profile updated.',
+            profile=profile,
+        ))
     else:
         messages.error(request, "Please correct the employee profile.")
         return _render_workspace_form_error(request, "team", {"profile_form": form})
@@ -4075,7 +4194,10 @@ def lead_create(request):
         lead.created_by = request.user
         lead.save()
         record_activity("New lead added", f"{lead.name} · Lead pipeline", actor=request.user, lead=lead)
-        messages.success(request, f"{lead.name} was added to the lead pipeline.")
+        messages.success(request, _translated_notice(
+            '%(lead)s was added to the lead pipeline.',
+            lead=lead.name,
+        ))
         return _dashboard_redirect("leads", lead=lead.pk)
     messages.error(request, "Please correct the lead details and try again.")
     return _render_dashboard_form_error(request, "leads", {"lead_form": form}, new="lead")
@@ -4090,7 +4212,10 @@ def lead_delete(request, pk):
     lead.deleted_by = request.user
     lead.save(update_fields=["deleted_at", "deleted_by", "updated_at"])
     record_activity("Lead moved to trash", lead.name, actor=request.user, lead=lead)
-    messages.success(request, f"{lead.name} was moved to Trash. You can restore it from the lead pipeline.")
+    messages.success(request, _translated_notice(
+        '%(lead)s was moved to Trash. You can restore it from the lead pipeline.',
+        lead=lead.name,
+    ))
     return _dashboard_redirect("leads")
 
 
@@ -4109,10 +4234,11 @@ def lead_delete_all(request):
             f"{deleted_count} active lead(s)",
             actor=request.user,
         )
-        messages.success(
-            request,
-            f"{deleted_count} lead(s) moved to Trash. You can restore them from the lead pipeline.",
-        )
+        messages.success(request, _translated_count_notice(
+            '%(count)s lead moved to Trash. You can restore it from the lead pipeline.',
+            '%(count)s leads moved to Trash. You can restore them from the lead pipeline.',
+            deleted_count,
+        ))
     else:
         messages.info(request, "There are no active leads to move to Trash.")
     return _dashboard_redirect("leads")
@@ -4126,7 +4252,10 @@ def lead_restore(request, pk):
     lead.deleted_by = None
     lead.save(update_fields=["deleted_at", "deleted_by", "updated_at"])
     record_activity("Lead restored", lead.name, actor=request.user, lead=lead)
-    messages.success(request, f"{lead.name} was restored to the lead pipeline.")
+    messages.success(request, _translated_notice(
+        '%(lead)s was restored to the lead pipeline.',
+        lead=lead.name,
+    ))
     return _dashboard_redirect("leads", trash="1")
 
 
@@ -4184,7 +4313,11 @@ def lead_permanent_delete(request):
     if deleted_count == 1:
         messages.success(request, "Lead permanently deleted.")
     else:
-        messages.success(request, f"{deleted_count} leads permanently deleted.")
+        messages.success(request, _translated_count_notice(
+            '%(count)s lead permanently deleted.',
+            '%(count)s leads permanently deleted.',
+            deleted_count,
+        ))
     return _dashboard_redirect("leads", trash="1")
 
 
@@ -4332,7 +4465,10 @@ def estimate_create(request):
                 lead=estimate.lead,
                 estimate=estimate,
             )
-        messages.success(request, f"Estimate #{estimate.number} created.")
+        messages.success(request, _translated_notice(
+            'Estimate #%(number)s created.',
+            number=estimate.number,
+        ))
         return _dashboard_redirect("estimates", estimate=estimate.pk, delivery_prompt="1")
     messages.error(request, "Choose a client and provide a secure external estimate link.")
     return _render_dashboard_form_error(
@@ -4456,7 +4592,10 @@ def external_estimate_send(request, pk):
 
     if not send_email:
         if client.user_id:
-            messages.success(request, f"Estimate link published to {client.name}'s client portal.")
+            messages.success(request, _translated_notice(
+                "Estimate link published to %(client)s's client portal.",
+                client=client.name,
+            ))
         else:
             messages.success(
                 request,
@@ -4485,17 +4624,17 @@ def external_estimate_send(request, pk):
                     idempotency_key=f"{idempotency_key}:status",
                 )
     if outbox and outbox.status == EmailOutbox.Status.SENT:
-        messages.success(
-            request,
-            f"Estimate link emailed to {client.email}."
-            + (
-                " It is also published in the client portal."
-                if publish_to_portal and client.user_id
-                else " It is saved for the portal after the client accepts an invitation."
-                if publish_to_portal
-                else " It was not published to the client portal."
-            ),
+        suffix = (
+            ' It is also published in the client portal.'
+            if publish_to_portal and client.user_id
+            else ' It is saved for the portal after the client accepts an invitation.'
+            if publish_to_portal
+            else ' It was not published to the client portal.'
         )
+        messages.success(request, _translated_notice(
+            'Estimate link emailed to %(email)s.' + suffix,
+            email=client.email,
+        ))
     elif outbox and outbox.status == EmailOutbox.Status.FAILED:
         messages.warning(
             request,
@@ -4508,17 +4647,17 @@ def external_estimate_send(request, pk):
             ),
         )
     else:
-        messages.info(
-            request,
-            f"Estimate email queued for {client.email}."
-            + (
-                " The link is also published in the client portal."
-                if publish_to_portal and client.user_id
-                else " The link will be available in the portal after the client accepts an invitation."
-                if publish_to_portal
-                else " The link was not published to the client portal."
-            ),
+        suffix = (
+            ' The link is also published in the client portal.'
+            if publish_to_portal and client.user_id
+            else ' The link will be available in the portal after the client accepts an invitation.'
+            if publish_to_portal
+            else ' The link was not published to the client portal.'
         )
+        messages.info(request, _translated_notice(
+            'Estimate email queued for %(email)s.' + suffix,
+            email=client.email,
+        ))
     return _dashboard_redirect("estimates", **delivery_redirect)
 
 
@@ -4604,7 +4743,10 @@ def project_create(request):
             created_by=request.user,
             estimate=project.estimate,
         )
-        messages.success(request, f"{project.title} was created.")
+        messages.success(request, _translated_notice(
+            '%(title)s was created.',
+            title=project.title,
+        ))
         return _dashboard_redirect("projects", project=project.pk)
     messages.error(request, "Please correct the project details and try again.")
     return _render_dashboard_form_error(request, "projects", {"project_form": form}, new="project")
@@ -4636,7 +4778,10 @@ def estimate_create_project(request, pk):
         return _dashboard_redirect("estimates", estimate=estimate.pk)
     if not created:
         return _dashboard_redirect("projects", project=project.pk)
-    messages.success(request, f"{project.title} is now in Projects.")
+    messages.success(request, _translated_notice(
+        '%(title)s is now in Projects.',
+        title=project.title,
+    ))
     return _dashboard_redirect("projects", project=project.pk)
 
 
@@ -5049,7 +5194,7 @@ def _website_publishing_context(request, projects, *, form_overrides=None):
                     else static("operations/images/video-poster-placeholder.svg")
                 )
             _attach_existing_website_video_rows(post.form)
-            post.preview = website_post_presentation(post, preview=True)
+            post.preview = website_post_presentation(post, preview=True, language=getattr(request, "LANGUAGE_CODE", "en"))
             rows.append(post)
 
     page = Paginator(rows, 10).get_page(request.GET.get("website_page"))
@@ -5220,9 +5365,17 @@ def media_upload(request):
                 )
         record_activity("Project media uploaded", f"{len(created)} file(s) · {project.title}", actor=request.user, project=project)
         if team_mode:
-            messages.success(request, f"{len(created)} file(s) uploaded to the project workspace.")
+            messages.success(request, _translated_count_notice(
+                '%(count)s file uploaded to the project workspace.',
+                '%(count)s files uploaded to the project workspace.',
+                len(created),
+            ))
             return _workspace_redirect(request, "media", media_project=project.pk)
-        messages.success(request, f"{len(created)} file(s) uploaded as client media drafts.")
+        messages.success(request, _translated_count_notice(
+            '%(count)s file uploaded as a client media draft.',
+            '%(count)s files uploaded as client media drafts.',
+            len(created),
+        ))
         return _dashboard_redirect("media", media_project=project.pk)
     messages.error(request, "Please choose a project and valid media files.")
     if not team_mode:
@@ -5853,7 +6006,7 @@ def website_gallery_post_preview(request, pk):
     return render(
         request,
         "operations/website_post_preview.html",
-        {"post": website_post_presentation(post, preview=True), "project": post.project},
+        {"post": website_post_presentation(post, preview=True, language=getattr(request, "LANGUAGE_CODE", "en")), "project": post.project},
     )
 
 
@@ -5922,7 +6075,7 @@ def media_preview(request, pk):
         raise Http404
     publication = get_object_or_404(MediaPublication, asset=asset, destination=destination)
     context = {
-        "media": media_presentation(asset, destination, preview=True, publication=publication),
+        "media": media_presentation(asset, destination, preview=True, publication=publication, language=getattr(request, "LANGUAGE_CODE", "en")),
         "asset": asset, "destination": destination,
     }
     if destination == MediaPublication.Destination.WEBSITE and asset.project_id:
@@ -5945,7 +6098,7 @@ def media_preview(request, pk):
             else:
                 if not website_is_live(gallery_asset):
                     continue
-                item = media_presentation(gallery_asset, MediaPublication.Destination.WEBSITE)
+                item = media_presentation(gallery_asset, MediaPublication.Destination.WEBSITE, language=getattr(request, "LANGUAGE_CODE", "en"))
             ordered_preview_items.append((item["sort_order"], gallery_asset.created_at, item))
         if not selected_in_gallery:
             ordered_preview_items.append((context["media"]["sort_order"], asset.created_at, context["media"]))
@@ -6151,16 +6304,16 @@ def content_update(request):
 
     if form_is_valid:
         if content_page in {"home", "all"}:
-            for field in ("headline", "subheadline", "featured_title", "featured_body", "google_review_url"):
+            for field in ("headline", "headline_es", "subheadline", "subheadline_es", "featured_title", "featured_title_es", "featured_body", "featured_body_es", "google_review_url"):
                 setattr(instance, field, form.cleaned_data[field])
         if content_page in {"services", "all"}:
-            for field in ("services_title", "services_intro", "services_note"):
+            for field in ("services_title", "services_title_es", "services_intro", "services_intro_es", "services_note", "services_note_es"):
                 setattr(instance, field, form.cleaned_data[field])
         if content_page in {"process", "all"}:
-            for field in ("process_page_title", "process_page_intro"):
+            for field in ("process_page_title", "process_page_title_es", "process_page_intro", "process_page_intro_es"):
                 setattr(instance, field, form.cleaned_data[field])
         if content_page in {"contact", "all"}:
-            for field in CONTACT_CONTENT_FIELDS:
+            for field in CONTACT_CONTENT_FIELDS + CONTACT_CONTENT_FIELDS_ES:
                 setattr(instance, field, form.cleaned_data[field])
         if content_page in {"home", "services", "process", "contact", "all"}:
             instance.save()
@@ -6172,7 +6325,10 @@ def content_update(request):
             "all": "Website content",
         }[content_page]
         record_activity("Public content updated", page_label, actor=request.user)
-        messages.success(request, f"{page_label} content saved.")
+        messages.success(request, _translated_notice(
+            '%(page)s content saved.',
+            page=page_label,
+        ))
     else:
         messages.error(request, "Please correct the content fields and try again.")
         form.content_page = content_page
@@ -6192,10 +6348,12 @@ def google_reviews_sync(request):
         messages.error(request, str(exc))
     else:
         place_name = result["display_name"] or "the configured Google listing"
-        messages.success(
-            request,
-            f"Synced {result['review_count_cached']} reviews for {place_name}.",
-        )
+        messages.success(request, _translated_count_notice(
+            'Synced %(count)s review for %(place)s.',
+            'Synced %(count)s reviews for %(place)s.',
+            result['review_count_cached'],
+            place=place_name,
+        ))
     return _content_page_redirect("home")
 
 @require_GET

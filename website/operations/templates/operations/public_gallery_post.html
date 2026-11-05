@@ -1,9 +1,10 @@
+{% load i18n %}
 <article class="public-gallery-post post-layout-{{ post.layout }} post-accent-{{ post.accent }}" aria-label="{{ post.title }}">
     <div class="public-gallery-post-copy">
         {% if post.label %}<span class="publication-label">{{ post.label }}</span>{% endif %}
         <h3>{{ post.title }}</h3>
         {% if post.caption %}<p>{{ post.caption|linebreaksbr }}</p>{% endif %}
-        {% if post.client_name %}<p class="publication-meta">Client: {{ post.client_name }}</p>{% endif %}
+        {% if post.client_name %}<p class="publication-meta">{% translate 'Client:' %} {{ post.client_name }}</p>{% endif %}
     </div>
     <div class="public-post-carousel" data-gallery-carousel role="group" aria-roledescription="carousel" aria-label="Photos and videos for {{ post.title }}">
         <div class="public-post-slides">
@@ -19,7 +20,7 @@
         </div>
         {% if post.slides|length > 1 %}
         <button class="public-post-arrow public-post-arrow-prev" type="button" data-gallery-prev aria-label="Previous photo or video">&larr;</button>
-        <span class="public-post-counter" data-gallery-counter aria-live="polite">1 / {{ post.slides|length }}</span>
+        <span class="public-post-counter" data-gallery-counter aria-live="polite">{% translate '1 /' %} {{ post.slides|length }}</span>
         <button class="public-post-arrow public-post-arrow-next" type="button" data-gallery-next aria-label="Next photo or video">&rarr;</button>
         {% endif %}
     </div>

@@ -1,40 +1,41 @@
+{% load i18n %}
 {% if not portal_project %}
     <section class="portal-empty">
         <span class="gold-rule"></span>
-        <span class="section-kicker">Updates</span>
-        <h1>Project updates will appear here.</h1>
-        <p>Grand Coast will share client-ready progress updates once a project is connected to your account.</p>
+        <span class="section-kicker">{% translate 'Updates' %}</span>
+        <h1>{% translate 'Project updates will appear here.' %}</h1>
+        <p>{% translate 'Grand Coast will share client-ready progress updates once a project is connected to your account.' %}</p>
     </section>
 {% else %}
     {% include 'operations/portal_sections/project_selector.html' %}
-    <div class="portal-page-heading"><span class="section-kicker">Project updates</span><h1>What&rsquo;s happening on your project.</h1><p>Client-ready updates from the Grand Coast team.</p></div>
+    <div class="portal-page-heading"><span class="section-kicker">{% translate 'Project updates' %}</span><h1>{% translate 'What’s happening on your project.' %}</h1><p>{% translate 'Client-ready updates from the Grand Coast team.' %}</p></div>
     <section class="portal-update-panel" aria-label="Latest project update">
         <div class="update-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><rect x="10" y="7" width="28" height="34" rx="3"/><path d="M16 15h16M16 22h16M16 29l4 4 9-9"/></svg></div>
         <div class="update-copy">
-            <span class="section-kicker">Latest update</span>
+            <span class="section-kicker">{% translate 'Latest update' %}</span>
             {% if portal_latest_update %}
                 <h2>{{ portal_latest_update.title }}</h2>
                 <p>{{ portal_latest_update.body }}</p>
-                <span class="update-time">Updated {{ portal_latest_update.created_at|date:'M d, Y' }} &middot; {{ portal_latest_update.created_at|date:'g:i A' }}</span>
+                <span class="update-time">{% translate 'Updated' %} {{ portal_latest_update.created_at|date:'M d, Y' }} &middot; {{ portal_latest_update.created_at|date:'g:i A' }}</span>
             {% elif portal_project.needs_staff_assignment %}
-                <h2>Your project is being set up.</h2>
-                <p>Grand Coast is assigning an employee. Client-ready progress updates will appear here once your team is assigned.</p>
-                <span class="update-time">Updates will appear after setup is complete.</span>
+                <h2>{% translate 'Your project is being set up.' %}</h2>
+                <p>{% translate 'Grand Coast is assigning an employee. Client-ready progress updates will appear here once your team is assigned.' %}</p>
+                <span class="update-time">{% translate 'Updates will appear after setup is complete.' %}</span>
             {% else %}
-                <h2>Your project is underway.</h2>
-                <p>The Grand Coast team will post the next client-visible update here.</p>
-                <span class="update-time">Updates will appear as work progresses.</span>
+                <h2>{% translate 'Your project is underway.' %}</h2>
+                <p>{% translate 'The Grand Coast team will post the next client-visible update here.' %}</p>
+                <span class="update-time">{% translate 'Updates will appear as work progresses.' %}</span>
             {% endif %}
         </div>
     </section>
     <section class="portal-update-list" aria-label="Previous project updates">
-        <div class="portal-panel-heading"><div><span class="section-kicker">Project history</span><h2>Previous updates</h2></div></div>
+        <div class="portal-panel-heading"><div><span class="section-kicker">{% translate 'Project history' %}</span><h2>{% translate 'Previous updates' %}</h2></div></div>
         {% for update in portal_updates %}
             {% if not forloop.first %}
                 <article><div><span class="section-kicker">{{ update.created_at|date:'M d, Y' }} &middot; {{ update.created_at|date:'g:i A' }}</span><h3>{{ update.title }}</h3><p>{{ update.body }}</p></div></article>
             {% endif %}
         {% empty %}
-            <p class="detail-value">More updates will appear as work progresses.</p>
+            <p class="detail-value">{% translate 'More updates will appear as work progresses.' %}</p>
         {% endfor %}
     </section>
 {% endif %}

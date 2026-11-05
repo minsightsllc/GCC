@@ -1,7 +1,8 @@
 {% extends "operations/base.html" %}
+{% load i18n %}
 {% load static %}
 
-{% block title %}{{ operations_project.title }} | Grand Coast Construction Inc.{% endblock %}
+{% block title %}{{ operations_project.title }} {% translate '| Grand Coast Construction Inc.' %}{% endblock %}
 {% block body_class %}admin-site{% endblock %}
 
 {% block body %}
@@ -10,32 +11,32 @@
         <div class="admin-brand">
             <a href="{% url 'operations:home' %}" aria-label="Return to public site">
                 <span class="admin-logo-frame"><img src="{% static 'operations/images/gcc-logo.png' %}" alt="Grand Coast Construction Inc. logo"></span>
-                <span><strong>Grand Coast</strong><small>Construction Inc.</small></span>
+                <span><strong>{% translate 'Grand Coast' %}</strong><small>{% translate 'Construction Inc.' %}</small></span>
             </a>
         </div>
         {% include "operations/sidebar_nav.html" %}
         <div class="sidebar-footer">
             <div class="sidebar-user">
                 <span class="avatar">{{ request.user.first_name|slice:':1'|default:request.user.username|slice:':1'|upper }}</span>
-                <span><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Staff workspace</small></span>
+                <span><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>{% translate 'Staff workspace' %}</small></span>
             </div>
-            <a class="sidebar-back" href="{% if can_access_dashboard %}{% url 'operations:command-center' %}{% else %}{% url 'operations:team' %}{% endif %}">Overview</a>
-            <form method="post" action="{% url 'operations:logout' %}">{% csrf_token %}<button class="sidebar-reset" type="submit">Sign out</button></form>
+            <a class="sidebar-back" href="{% if can_access_dashboard %}{% url 'operations:command-center' %}{% else %}{% url 'operations:team' %}{% endif %}">{% translate 'Overview' %}</a>
+            <form method="post" action="{% url 'operations:logout' %}">{% csrf_token %}<button class="sidebar-reset" type="submit">{% translate 'Sign out' %}</button></form>
         </div>
     </aside>
 
     <div class="admin-main">
         <header class="admin-topbar">
-            <button class="admin-menu-toggle" type="button" data-admin-menu-toggle aria-expanded="false" aria-label="Open Operations navigation">Menu</button>
-            <div><span class="admin-breadcrumb">Grand Coast / Projects / Operations</span><h1>{{ operations_project.title }}</h1></div>
+            <button class="admin-menu-toggle" type="button" data-admin-menu-toggle aria-expanded="false" aria-label="Open Operations navigation">{% translate 'Menu' %}</button>
+            <div><span class="admin-breadcrumb">{% translate 'Grand Coast / Projects / Operations' %}</span><h1>{{ operations_project.title }}</h1></div>
             <div class="admin-top-actions">
-                <a class="topbar-link" href="{% if can_access_dashboard %}{% url 'operations:command-center' %}{% else %}{% url 'operations:team' %}{% endif %}">← Overview</a>
-                {% if can_access_dashboard %}<a class="button button-outline button-small" href="{% url 'operations:dashboard-section' section='projects' %}?project={{ operations_project.pk }}">Legacy project view</a>{% endif %}
+                <a class="topbar-link" href="{% if can_access_dashboard %}{% url 'operations:command-center' %}{% else %}{% url 'operations:team' %}{% endif %}">{% translate '← Overview' %}</a>
+                {% if can_access_dashboard %}<a class="button button-outline button-small" href="{% url 'operations:dashboard-section' section='projects' %}?project={{ operations_project.pk }}">{% translate 'Legacy project view' %}</a>{% endif %}
             </div>
         </header>
         <div class="admin-workspace-notice">
-            <span class="staging-label">PROJECT HEALTH</span>
-            <span>{{ operations_project.client.name|default:'Internal project' }} · {{ operations_project.location|default:'Address not set' }}</span>
+            <span class="staging-label">{% translate 'PROJECT HEALTH' %}</span>
+            <span>{{ operations_project.client.name|default:'Internal project' }} &middot; {{ operations_project.location|default:'Address not set' }}</span>
             <span class="staging-spacer"></span>
             <span class="admin-workspace-user">{{ operations_project.get_operational_phase_display }}</span>
         </div>
@@ -43,7 +44,7 @@
         <main class="admin-content construction-content">
             <section class="construction-project-hero">
                 <div>
-                    <span class="section-kicker">{{ operations_project.get_status_display }} · {{ operations_project.get_operational_phase_display }}</span>
+                    <span class="section-kicker">{{ operations_project.get_status_display }} &middot; {{ operations_project.get_operational_phase_display }}</span>
                     <h2>{{ operations_project.title }}</h2>
                     <p>{{ operations_project.summary|default:'Project details, decisions, and next actions in one place.' }}</p>
                 </div>
@@ -51,57 +52,57 @@
             </section>
 
             <section class="construction-question-grid" aria-label="Project questions">
-                <article><span>Where are we?</span><strong>{{ operations_project.get_operational_phase_display }}</strong><small>{{ operations_project.progress_percent }}% milestone progress</small></article>
-                <article><span>What is next?</span><strong>{{ operations_project.next_step|default:'Set the next action' }}</strong><small>Visible to the project team</small></article>
-                <article><span>What is holding us up?</span><strong>{% if blockers %}{{ blockers|length }} open blocker{% if blockers|length != 1 %}s{% endif %}{% else %}Nothing flagged{% endif %}</strong><small>Decisions and corrections stay visible</small></article>
-                <article><span>Who needs to act?</span><strong>{% if operations_project.project_manager %}{{ operations_project.project_manager.get_full_name|default:operations_project.project_manager.username }}{% else %}Assign a manager{% endif %}</strong><small>Project manager</small></article>
+                <article><span>{% translate 'Where are we?' %}</span><strong>{{ operations_project.get_operational_phase_display }}</strong><small>{{ operations_project.progress_percent }}{% translate '% milestone progress' %}</small></article>
+                <article><span>{% translate 'What is next?' %}</span><strong>{{ operations_project.next_step|default:'Set the next action' }}</strong><small>{% translate 'Visible to the project team' %}</small></article>
+                <article><span>{% translate 'What is holding us up?' %}</span><strong>{% if blockers %}{{ blockers|length }} {% translate 'open blocker' %}{% if blockers|length != 1 %}{% translate 's' %}{% endif %}{% else %}{% translate 'Nothing flagged' %}{% endif %}</strong><small>{% translate 'Decisions and corrections stay visible' %}</small></article>
+                <article><span>{% translate 'Who needs to act?' %}</span><strong>{% if operations_project.project_manager %}{{ operations_project.project_manager.get_full_name|default:operations_project.project_manager.username }}{% else %}{% translate 'Assign a manager' %}{% endif %}</strong><small>{% translate 'Project manager' %}</small></article>
                 <article>
-                    <span>When is the next payment?</span>
+                    <span>{% translate 'When is the next payment?' %}</span>
                     {% if can_view_project_financials %}
-                        <strong>{% if payment_schedules %}${{ payment_schedules.0.amount|floatformat:0 }}{% else %}Not scheduled{% endif %}</strong>
-                        <small>{% if payment_schedules.0.due_date %}Due {{ payment_schedules.0.due_date }}{% else %}Payment schedule{% endif %}</small>
+                        <strong>{% if payment_schedules %}{% translate '$' %}{{ payment_schedules.0.amount|floatformat:0 }}{% else %}{% translate 'Not scheduled' %}{% endif %}</strong>
+                        <small>{% if payment_schedules.0.due_date %}{% translate 'Due' %} {{ payment_schedules.0.due_date }}{% else %}{% translate 'Payment schedule' %}{% endif %}</small>
                     {% else %}
-                        <strong>Restricted</strong><small>Owner / assigned manager</small>
+                        <strong>{% translate 'Restricted' %}</strong><small>{% translate 'Owner / assigned manager' %}</small>
                     {% endif %}
                 </article>
             </section>
 
             {% if external_status_visible or external_payment_schedules %}
                 <section class="construction-panel construction-commercial-panel" id="commercial">
-                    <div class="construction-panel-heading"><div><span class="section-kicker">Estimate and payment status</span><h3>Customer links</h3></div><span class="status-badge">Manual confirmation</span></div>
-                    <p class="construction-pulse-note">Grand Coast stores the estimate or payment link and the status confirmed by staff. Detailed estimate, invoice, signature, and payment activity remain in the service your team uses.</p>
+                    <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Estimate and payment status' %}</span><h3>{% translate 'Customer links' %}</h3></div><span class="status-badge">{% translate 'Manual confirmation' %}</span></div>
+                    <p class="construction-pulse-note">{% translate 'Grand Coast stores the estimate or payment link and the status confirmed by staff. Detailed estimate, invoice, signature, and payment activity remain in the service your team uses.' %}</p>
                     {% if external_status_visible %}
                         <div class="construction-financial-grid">
-                            <div><span>Estimate status</span><strong>{{ external_estimate.get_external_status_display }}</strong></div>
-                            <div><span>Last confirmation</span><strong>{% if external_estimate.external_status_at %}{{ external_estimate.external_status_at|date:'M j, Y g:i A' }}{% else %}Not confirmed{% endif %}</strong></div>
+                            <div><span>{% translate 'Estimate status' %}</span><strong>{{ external_estimate.get_external_status_display }}</strong></div>
+                            <div><span>{% translate 'Last confirmation' %}</span><strong>{% if external_estimate.external_status_at %}{{ external_estimate.external_status_at|date:'M j, Y g:i A' }}{% else %}{% translate 'Not confirmed' %}{% endif %}</strong></div>
                         </div>
                         {% if can_manage_external_estimate and external_estimate_form %}
                             <details class="construction-subsection" open>
-                                <summary><span class="section-kicker">Owner / Manager / Office</span><small>Record the estimate status</small></summary>
+                                <summary><span class="section-kicker">{% translate 'Owner / Manager / Office' %}</span><small>{% translate 'Record the estimate status' %}</small></summary>
                                 <form class="execution-record-card" method="post" action="{% url 'operations:external-estimate-status' pk=external_estimate.pk %}">
                                     {% csrf_token %}
                                     <input type="hidden" name="expected_updated_at" value="{{ external_estimate.updated_at|date:'U' }}">
                                     <input type="hidden" name="idempotency_key" value="{{ external_status_idempotency_key }}">
                                     {{ external_estimate_form.as_p }}
-                                    <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">Save estimate status</button></div>
+                                    <div class="construction-form-actions"><button class="button button-primary button-small" type="submit">{% translate 'Save estimate status' %}</button></div>
                                 </form>
                             </details>
                         {% elif external_estimate.external_url and can_manage_external_estimate %}
-                            <a class="button button-outline button-small" href="{{ external_estimate.external_url }}" target="_blank" rel="noopener noreferrer">Open estimate</a>
+                            <a class="button button-outline button-small" href="{{ external_estimate.external_url }}" target="_blank" rel="noopener noreferrer">{% translate 'Open estimate' %}</a>
                         {% endif %}
                     {% endif %}
                     {% if external_payment_schedules %}
-                        <div class="admin-section-heading compact"><div><span class="section-kicker">Invoices</span><h4 style="margin:0;color:var(--brand-navy);">Manual invoice confirmations</h4></div></div>
+                        <div class="admin-section-heading compact"><div><span class="section-kicker">{% translate 'Invoices' %}</span><h4 style="margin:0;color:var(--brand-navy);">{% translate 'Manual invoice confirmations' %}</h4></div></div>
                         <div class="construction-list">
                             {% for row in external_payment_rows %}
                                 <div class="construction-list-row">
                                     <span class="status-badge {% if row.schedule.external_invoice_status == 'paid' %}green{% elif row.schedule.external_invoice_status == 'overdue' %}red{% elif row.schedule.external_invoice_status == 'sent' or row.schedule.external_invoice_status == 'pending' %}gold{% endif %}">{{ row.schedule.get_external_invoice_status_display }}</span>
-                                    <span><strong>{{ row.schedule.description }}</strong><small>{% if can_view_project_financials %}${{ row.schedule.amount|floatformat:2 }}{% endif %}{% if row.schedule.external_invoice_status_at %} · Confirmed {{ row.schedule.external_invoice_status_at|date:'M j, Y' }}{% endif %}</small></span>
-                                    {% if row.schedule.external_invoice_url and can_manage_external_estimate %}<a class="text-link-button" href="{{ row.schedule.external_invoice_url }}" target="_blank" rel="noopener noreferrer">Open invoice →</a>{% endif %}
+                                    <span><strong>{{ row.schedule.description }}</strong><small>{% if can_view_project_financials %}{% translate '$' %}{{ row.schedule.amount|floatformat:2 }}{% endif %}{% if row.schedule.external_invoice_status_at %} &middot; {% translate 'Confirmed' %} {{ row.schedule.external_invoice_status_at|date:'M j, Y' }}{% endif %}</small></span>
+                                    {% if row.schedule.external_invoice_url and can_manage_external_estimate %}<a class="text-link-button" href="{{ row.schedule.external_invoice_url }}" target="_blank" rel="noopener noreferrer">{% translate 'Open invoice →' %}</a>{% endif %}
                                 </div>
-                                {% if can_manage_external_estimate %}<details class="construction-subsection"><summary><span class="section-kicker">Update invoice status</span><small>{{ row.schedule.description }}</small></summary><form class="execution-record-card" method="post" action="{% url 'operations:external-invoice-status' pk=row.schedule.pk %}">{% csrf_token %}<input type="hidden" name="expected_updated_at" value="{{ row.schedule.updated_at|date:'U' }}"><input type="hidden" name="idempotency_key" value="{{ external_status_idempotency_key }}">{{ row.form.as_p }}<div class="construction-form-actions"><button class="button button-primary button-small" type="submit">Save invoice status</button></div></form></details>{% endif %}
+                                {% if can_manage_external_estimate %}<details class="construction-subsection"><summary><span class="section-kicker">{% translate 'Update invoice status' %}</span><small>{{ row.schedule.description }}</small></summary><form class="execution-record-card" method="post" action="{% url 'operations:external-invoice-status' pk=row.schedule.pk %}">{% csrf_token %}<input type="hidden" name="expected_updated_at" value="{{ row.schedule.updated_at|date:'U' }}"><input type="hidden" name="idempotency_key" value="{{ external_status_idempotency_key }}">{{ row.form.as_p }}<div class="construction-form-actions"><button class="button button-primary button-small" type="submit">{% translate 'Save invoice status' %}</button></div></form></details>{% endif %}
                             {% empty %}
-                                <div class="construction-empty"><span>No payment schedules have been created yet.</span></div>
+                                <div class="construction-empty"><span>{% translate 'No payment schedules have been created yet.' %}</span></div>
                             {% endfor %}
                         </div>
                     {% endif %}
@@ -110,21 +111,21 @@
 
             <div class="construction-dashboard-grid construction-dashboard-grid-wide">
                 <section class="construction-panel" id="readiness">
-                    <div class="construction-panel-heading"><div><span class="section-kicker">Preconstruction</span><h3>Ready for construction</h3></div><span class="construction-count">{{ readiness_items|length }}</span></div>
+                    <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Preconstruction' %}</span><h3>{% translate 'Ready for construction' %}</h3></div><span class="construction-count">{{ readiness_items|length }}</span></div>
                     <div class="construction-checklist">
                         {% for item in readiness_items %}
                         <div class="construction-check-row {% if item.status == 'complete' %}is-complete{% elif item.status == 'blocked' %}is-blocked{% endif %}">
-                            <span class="construction-check-mark">{% if item.status == 'complete' %}✓{% elif item.status == 'blocked' %}!{% else %}·{% endif %}</span>
-                            <span><strong>{{ item.label }}</strong><small>{{ item.get_category_display }}{% if item.due_date %} · Due {{ item.due_date }}{% endif %}</small></span>
-                            {% if item.status == 'complete' %}<span class="status-badge green">Complete</span>{% elif can_edit_operations %}<form method="post" action="{% url 'operations:readiness-complete' pk=item.pk %}">{% csrf_token %}<input type="hidden" name="idempotency_key" value="readiness-{{ item.pk }}-{{ item.updated_at|date:'U' }}"><button class="button button-quiet button-small" type="submit">Mark complete</button></form>{% else %}<span class="status-badge">{{ item.get_status_display }}</span>{% endif %}
+                            <span class="construction-check-mark">{% if item.status == 'complete' %}&#10003;{% elif item.status == 'blocked' %}{% translate '!' %}{% else %}&middot;{% endif %}</span>
+                            <span><strong>{{ item.label }}</strong><small>{{ item.get_category_display }}{% if item.due_date %} &middot; {% translate 'Due' %} {{ item.due_date }}{% endif %}</small></span>
+                            {% if item.status == 'complete' %}<span class="status-badge green">{% translate 'Complete' %}</span>{% elif can_edit_operations %}<form method="post" action="{% url 'operations:readiness-complete' pk=item.pk %}">{% csrf_token %}<input type="hidden" name="idempotency_key" value="readiness-{{ item.pk }}-{{ item.updated_at|date:'U' }}"><button class="button button-quiet button-small" type="submit">{% translate 'Mark complete' %}</button></form>{% else %}<span class="status-badge">{{ item.get_status_display }}</span>{% endif %}
                         </div>
                         {% empty %}
-                        <div class="construction-empty"><strong>Readiness has not been initialized.</strong><span>New projects created from accepted estimates receive the checklist automatically.</span></div>
+                        <div class="construction-empty"><strong>{% translate 'Readiness has not been initialized.' %}</strong><span>{% translate 'New projects created from accepted estimates receive the checklist automatically.' %}</span></div>
                         {% endfor %}
                     </div>
                     {% if execution_readiness_rows %}
                     <details class="construction-subsection" id="readiness-details">
-                        <summary><span class="section-kicker">Readiness details</span><small>Assign an owner, due date, and notes without leaving the project</small></summary>
+                        <summary><span class="section-kicker">{% translate 'Readiness details' %}</span><small>{% translate 'Assign an owner, due date, and notes without leaving the project' %}</small></summary>
                         <div class="execution-loop-body">
                             {% for row in execution_readiness_rows %}
                             <form class="execution-record-card" method="post" action="{% url 'operations:readiness-update' pk=row.item.pk %}">
@@ -132,7 +133,7 @@
                                 <input type="hidden" name="idempotency_key" value="readiness-update-{{ row.item.pk }}-{{ row.item.updated_at|date:'U' }}">
                                 <strong>{{ row.item.label }}</strong>
                                 {{ row.form.as_p }}
-                                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">Save readiness details</button></div>
+                                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">{% translate 'Save readiness details' %}</button></div>
                             </form>
                             {% endfor %}
                         </div>
@@ -141,12 +142,12 @@
                 </section>
 
                 <section class="construction-panel" id="risks">
-                    <div class="construction-panel-heading"><div><span class="section-kicker">Risks</span><h3>What is holding us up?</h3></div><span class="construction-count">{{ blockers|length }}</span></div>
+                    <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Risks' %}</span><h3>{% translate 'What is holding us up?' %}</h3></div><span class="construction-count">{{ blockers|length }}</span></div>
                     <div class="construction-list">
                         {% for blocker in blockers %}
-                        <div class="construction-list-row"><span class="status-badge {% if blocker.severity == 'critical' or blocker.severity == 'high' %}red{% else %}gold{% endif %}">{{ blocker.get_severity_display }}</span><span><strong>{{ blocker.title }}</strong><small>{{ blocker.description|default:blocker.get_category_display }}{% if blocker.assigned_to %} · {{ blocker.assigned_to.get_full_name|default:blocker.assigned_to.username }}{% endif %}</small></span></div>
+                        <div class="construction-list-row"><span class="status-badge {% if blocker.severity == 'critical' or blocker.severity == 'high' %}red{% else %}gold{% endif %}">{{ blocker.get_severity_display }}</span><span><strong>{{ blocker.title }}</strong><small>{{ blocker.description|default:blocker.get_category_display }}{% if blocker.assigned_to %} &middot; {{ blocker.assigned_to.get_full_name|default:blocker.assigned_to.username }}{% endif %}</small></span></div>
                         {% empty %}
-                        <div class="construction-empty"><strong>No open blockers.</strong><span>When something stops progress, flag it here.</span></div>
+                        <div class="construction-empty"><strong>{% translate 'No open blockers.' %}</strong><span>{% translate 'When something stops progress, flag it here.' %}</span></div>
                         {% endfor %}
                     </div>
                 </section>
@@ -154,116 +155,116 @@
 
             <div class="construction-triple-grid">
                 <section class="construction-panel">
-                    <div class="construction-panel-heading"><div><span class="section-kicker">Client decisions</span><h3>Selections</h3></div><span class="construction-count">{{ selections|length }}</span></div>
+                    <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Client decisions' %}</span><h3>{% translate 'Selections' %}</h3></div><span class="construction-count">{{ selections|length }}</span></div>
                     <div class="construction-list">
-                        {% for selection in selections %}<div class="construction-list-row"><span class="construction-stage-dot stage-{{ selection.status }}"></span><span><strong>{{ selection.item_name }}</strong><small>{{ selection.category }} · {{ selection.get_status_display }}{% if selection.client_choice %} · {{ selection.client_choice }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>No selections have been added.</span></div>{% endfor %}
+                        {% for selection in selections %}<div class="construction-list-row"><span class="construction-stage-dot stage-{{ selection.status }}"></span><span><strong>{{ selection.item_name }}</strong><small>{{ selection.category }} &middot; {{ selection.get_status_display }}{% if selection.client_choice %} &middot; {{ selection.client_choice }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>{% translate 'No selections have been added.' %}</span></div>{% endfor %}
                     </div>
                 </section>
                 <section class="construction-panel">
-                    <div class="construction-panel-heading"><div><span class="section-kicker">Inspections</span><h3>Permit path</h3></div><span class="construction-count">{{ inspections|length }}</span></div>
+                    <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Inspections' %}</span><h3>{% translate 'Permit path' %}</h3></div><span class="construction-count">{{ inspections|length }}</span></div>
                     <div class="construction-list">
-                        {% for inspection in inspections %}<div class="construction-list-row"><span class="status-badge {% if inspection.status == 'passed' %}green{% elif inspection.status == 'failed' %}red{% else %}gold{% endif %}">{{ inspection.get_status_display }}</span><span><strong>{{ inspection.inspection_type }}</strong><small>{% if inspection.scheduled_at %}{{ inspection.scheduled_at|date:'M d, Y g:i A' }}{% else %}Date not set{% endif %}{% if show_inspection_details and inspection.corrective_action %} · {{ inspection.corrective_action }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>No inspections are tracked yet.</span></div>{% endfor %}
+                        {% for inspection in inspections %}<div class="construction-list-row"><span class="status-badge {% if inspection.status == 'passed' %}green{% elif inspection.status == 'failed' %}red{% else %}gold{% endif %}">{{ inspection.get_status_display }}</span><span><strong>{{ inspection.inspection_type }}</strong><small>{% if inspection.scheduled_at %}{{ inspection.scheduled_at|date:'M d, Y g:i A' }}{% else %}{% translate 'Date not set' %}{% endif %}{% if show_inspection_details and inspection.corrective_action %} &middot; {{ inspection.corrective_action }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>{% translate 'No inspections are tracked yet.' %}</span></div>{% endfor %}
                     </div>
                 </section>
                 <section class="construction-panel" id="change-orders">
-                    <div class="construction-panel-heading"><div><span class="section-kicker">Contract changes</span><h3>Change orders</h3></div><span class="construction-count">{{ change_orders|length }}</span></div>
+                    <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Contract changes' %}</span><h3>{% translate 'Change orders' %}</h3></div><span class="construction-count">{{ change_orders|length }}</span></div>
                     <div class="construction-list">
-                        {% for change_order in change_orders %}<div class="construction-list-row"><span class="status-badge {% if change_order.status == 'approved' %}green{% elif change_order.status == 'sent' %}gold{% elif change_order.status == 'declined' %}red{% endif %}">CO-{{ change_order.number }}</span><span><strong>{{ change_order.title }}</strong><small>{{ change_order.get_status_display }}{% if can_view_project_financials %} · {% if change_order.price_impact >= 0 %}+{% endif %}${{ change_order.price_impact|floatformat:2 }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>No change orders yet.</span></div>{% endfor %}
+                        {% for change_order in change_orders %}<div class="construction-list-row"><span class="status-badge {% if change_order.status == 'approved' %}green{% elif change_order.status == 'sent' %}gold{% elif change_order.status == 'declined' %}red{% endif %}">{% translate 'CO-' %}{{ change_order.number }}</span><span><strong>{{ change_order.title }}</strong><small>{{ change_order.get_status_display }}{% if can_view_project_financials %} &middot; {% if change_order.price_impact >= 0 %}{% translate '+' %}{% endif %}{% translate '$' %}{{ change_order.price_impact|floatformat:2 }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>{% translate 'No change orders yet.' %}</span></div>{% endfor %}
                     </div>
                 </section>
             </div>
 
             <section class="construction-panel native-media-control" data-native-media-control>
-                <div class="construction-panel-heading"><div><span class="section-kicker">Change orders</span><h3>Attach supporting media</h3></div><span class="status-badge">Mobile capture</span></div>
+                <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Change orders' %}</span><h3>{% translate 'Attach supporting media' %}</h3></div><span class="status-badge">{% translate 'Mobile capture' %}</span></div>
                 <div class="construction-list">
-                    {% for change_order in change_orders %}<div class="construction-list-row"><span><strong>CO-{{ change_order.number }} {{ change_order.title }}</strong><small>{{ change_order.get_status_display }}</small></span><span class="native-media-actions"><button class="button button-quiet button-small" type="button" data-native-media-action="pick-media" data-native-media-target="change_order_media" data-native-media-project="{{ operations_project.pk }}" data-native-media-target-id="{{ change_order.pk }}" data-native-media-context="change_order">Attach media</button><span data-native-media-status aria-live="polite"></span></span></div>{% empty %}<div class="construction-empty"><span>No change orders require media.</span></div>{% endfor %}
+                    {% for change_order in change_orders %}<div class="construction-list-row"><span><strong>{% translate 'CO-' %}{{ change_order.number }} {{ change_order.title }}</strong><small>{{ change_order.get_status_display }}</small></span><span class="native-media-actions"><button class="button button-quiet button-small" type="button" data-native-media-action="pick-media" data-native-media-target="change_order_media" data-native-media-project="{{ operations_project.pk }}" data-native-media-target-id="{{ change_order.pk }}" data-native-media-context="change_order">{% translate 'Attach media' %}</button><span data-native-media-status aria-live="polite"></span></span></div>{% empty %}<div class="construction-empty"><span>{% translate 'No change orders require media.' %}</span></div>{% endfor %}
                 </div>
             </section>
 
             <div class="construction-dashboard-grid construction-dashboard-grid-wide">
                 <section class="construction-panel" id="schedule">
-                    <div class="construction-panel-heading"><div><span class="section-kicker">Schedule and field work</span><h3>Work moving through the jobsite</h3></div><span class="construction-count">{{ project_tasks|length }}</span></div>
-                    <div class="construction-subsection"><span class="section-kicker">Calendar events</span><span class="construction-inline-actions">{% if can_manage_schedule %}<a class="button button-quiet button-small" href="{{ project_calendar_url }}">Schedule event</a>{% endif %}</span>{% for event in project_schedule_events %}<div class="construction-list-row"><span class="status-badge">{{ event.start_at|date:'M d' }}</span><span><strong>{{ event.title }}</strong><small>{{ event.start_at|date:'M d, Y g:i A' }} - {{ event.end_at|date:'g:i A' }}{% if event.location %} - {{ event.location }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>No project-linked calendar events yet.{% if can_manage_schedule %} Schedule the next site activity here.{% endif %}</span></div>{% endfor %}</div>
+                    <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Schedule and field work' %}</span><h3>{% translate 'Work moving through the jobsite' %}</h3></div><span class="construction-count">{{ project_tasks|length }}</span></div>
+                    <div class="construction-subsection"><span class="section-kicker">{% translate 'Calendar events' %}</span><span class="construction-inline-actions">{% if can_manage_schedule %}<a class="button button-quiet button-small" href="{{ project_calendar_url }}">{% translate 'Schedule event' %}</a>{% endif %}</span>{% for event in project_schedule_events %}<div class="construction-list-row"><span class="status-badge">{{ event.start_at|date:'M d' }}</span><span><strong>{{ event.title }}</strong><small>{{ event.start_at|date:'M d, Y g:i A' }} {% translate '-' %} {{ event.end_at|date:'g:i A' }}{% if event.location %} {% translate '-' %} {{ event.location }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>{% translate 'No project-linked calendar events yet.' %}{% if can_manage_schedule %} {% translate 'Schedule the next site activity here.' %}{% endif %}</span></div>{% endfor %}</div>
                     <div class="construction-list">
-                        {% for task in project_tasks %}<div class="construction-list-row"><span class="status-badge {% if task.status == 'complete' %}green{% elif task.status == 'blocked' %}red{% else %}gold{% endif %}">{{ task.get_status_display }}</span><span><strong>{{ task.title }}</strong><small>{% if task.due_date %}Due {{ task.due_date }}{% endif %}{% for person in task.assigned_to.all %} · {{ person.get_full_name|default:person.username }}{% empty %} · Unassigned{% endfor %}</small></span></div>{% empty %}<div class="construction-empty"><span>No project tasks are assigned yet.</span></div>{% endfor %}
+                        {% for task in project_tasks %}<div class="construction-list-row"><span class="status-badge {% if task.status == 'complete' %}green{% elif task.status == 'blocked' %}red{% else %}gold{% endif %}">{{ task.get_status_display }}</span><span><strong>{{ task.title }}</strong><small>{% if task.due_date %}{% translate 'Due' %} {{ task.due_date }}{% endif %}{% for person in task.assigned_to.all %} &middot; {{ person.get_full_name|default:person.username }}{% empty %} &middot; {% translate 'Unassigned' %}{% endfor %}</small></span></div>{% empty %}<div class="construction-empty"><span>{% translate 'No project tasks are assigned yet.' %}</span></div>{% endfor %}
                     </div>
-                    <div class="construction-subsection"><span class="section-kicker">Site visits</span>{% for visit in project_site_visits|slice:':4' %}<div class="construction-list-row"><span class="status-badge">{{ visit.get_status_display }}</span><span><strong>{{ visit.address|default:'Project walkthrough' }}</strong><small>{% if visit.scheduled_at %}{{ visit.scheduled_at|date:'M d, Y g:i A' }}{% endif %}<span class="native-media-actions"><button class="button button-quiet button-small" type="button" data-native-media-action="pick-media" data-native-media-target="site_visit_media" data-native-media-project="{{ operations_project.pk }}" data-native-media-target-id="{{ visit.pk }}" data-native-media-context="site_visit" data-native-media-multiple="false">Attach visit media</button><button class="button button-quiet button-small" type="button" data-native-media-action="capture-media" data-native-media-target="existing_condition" data-native-media-project="{{ operations_project.pk }}" data-native-media-target-id="{{ visit.pk }}" data-native-media-context="existing_condition" data-native-media-multiple="false">Existing condition</button><span data-native-media-status aria-live="polite"></span></span></small></span></div>{% empty %}<div class="construction-empty"><span>No site visits are linked to this project.</span></div>{% endfor %}</div>
-                    <div class="construction-subsection"><span class="section-kicker">Recent field reports</span>{% for report in project_daily_reports|slice:':5' %}<div class="construction-list-row"><span class="status-badge">{{ report.report_date }}</span><span><strong>{{ report.summary|truncatechars:100 }}</strong><small>{{ report.submitted_by.get_full_name|default:report.submitted_by.username }} Â· {{ report.get_status_display }}<span class="native-media-actions"><button class="button button-quiet button-small" type="button" data-native-media-action="pick-media" data-native-media-target="daily_report_media" data-native-media-project="{{ operations_project.pk }}" data-native-media-target-id="{{ report.pk }}" data-native-media-context="daily_report">Attach report media</button><span data-native-media-status aria-live="polite"></span></span></small></span></div>{% empty %}<div class="construction-empty"><span>No daily reports submitted yet.</span></div>{% endfor %}</div>
+                    <div class="construction-subsection"><span class="section-kicker">{% translate 'Site visits' %}</span>{% for visit in project_site_visits|slice:':4' %}<div class="construction-list-row"><span class="status-badge">{{ visit.get_status_display }}</span><span><strong>{{ visit.address|default:'Project walkthrough' }}</strong><small>{% if visit.scheduled_at %}{{ visit.scheduled_at|date:'M d, Y g:i A' }}{% endif %}<span class="native-media-actions"><button class="button button-quiet button-small" type="button" data-native-media-action="pick-media" data-native-media-target="site_visit_media" data-native-media-project="{{ operations_project.pk }}" data-native-media-target-id="{{ visit.pk }}" data-native-media-context="site_visit" data-native-media-multiple="false">{% translate 'Attach visit media' %}</button><button class="button button-quiet button-small" type="button" data-native-media-action="capture-media" data-native-media-target="existing_condition" data-native-media-project="{{ operations_project.pk }}" data-native-media-target-id="{{ visit.pk }}" data-native-media-context="existing_condition" data-native-media-multiple="false">{% translate 'Existing condition' %}</button><span data-native-media-status aria-live="polite"></span></span></small></span></div>{% empty %}<div class="construction-empty"><span>{% translate 'No site visits are linked to this project.' %}</span></div>{% endfor %}</div>
+                    <div class="construction-subsection"><span class="section-kicker">{% translate 'Recent field reports' %}</span>{% for report in project_daily_reports|slice:':5' %}<div class="construction-list-row"><span class="status-badge">{{ report.report_date }}</span><span><strong>{{ report.summary|truncatechars:100 }}</strong><small>{{ report.submitted_by.get_full_name|default:report.submitted_by.username }} &middot; {{ report.get_status_display }}<span class="native-media-actions"><button class="button button-quiet button-small" type="button" data-native-media-action="pick-media" data-native-media-target="daily_report_media" data-native-media-project="{{ operations_project.pk }}" data-native-media-target-id="{{ report.pk }}" data-native-media-context="daily_report">{% translate 'Attach report media' %}</button><span data-native-media-status aria-live="polite"></span></span></small></span></div>{% empty %}<div class="construction-empty"><span>{% translate 'No daily reports submitted yet.' %}</span></div>{% endfor %}</div>
                 </section>
                 <section class="construction-panel">
-                    <div class="construction-panel-heading"><div><span class="section-kicker">Field requests</span><h3>Materials and problems</h3></div><span class="construction-count">{{ project_field_work_count }}</span></div>
+                    <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Field requests' %}</span><h3>{% translate 'Materials and problems' %}</h3></div><span class="construction-count">{{ project_field_work_count }}</span></div>
                     <div class="construction-list">
-                        {% for request in project_material_requests|slice:':6' %}<div class="construction-list-row"><span class="status-badge gold">Material</span><span><strong>{{ request.description }}</strong><small>{{ request.get_status_display }}{% if request.needed_by %} Â· Needed {{ request.needed_by }}{% endif %}</small></span></div>{% endfor %}
-                        {% for problem in project_problem_reports|slice:':6' %}<div class="construction-list-row"><span class="status-badge {% if problem.severity == 'critical' or problem.severity == 'high' %}red{% else %}gold{% endif %}">{{ problem.get_severity_display }}</span><span><strong>{{ problem.title }}</strong><small>{{ problem.get_status_display }} Â· {{ problem.reported_by.get_full_name|default:problem.reported_by.username }}<span class="native-media-actions"><button class="button button-quiet button-small" type="button" data-native-media-action="pick-media" data-native-media-target="problem_media" data-native-media-project="{{ operations_project.pk }}" data-native-media-target-id="{{ problem.pk }}" data-native-media-context="problem_report">Attach problem media</button><span data-native-media-status aria-live="polite"></span></span></small></span></div>{% endfor %}
-                        {% if not project_material_requests and not project_problem_reports %}<div class="construction-empty"><span>No open field requests or problems.</span></div>{% endif %}
+                        {% for request in project_material_requests|slice:':6' %}<div class="construction-list-row"><span class="status-badge gold">{% translate 'Material' %}</span><span><strong>{{ request.description }}</strong><small>{{ request.get_status_display }}{% if request.needed_by %} &middot; {% translate 'Needed by' %} {{ request.needed_by }}{% endif %}</small></span></div>{% endfor %}
+                        {% for problem in project_problem_reports|slice:':6' %}<div class="construction-list-row"><span class="status-badge {% if problem.severity == 'critical' or problem.severity == 'high' %}red{% else %}gold{% endif %}">{{ problem.get_severity_display }}</span><span><strong>{{ problem.title }}</strong><small>{{ problem.get_status_display }} &middot; {{ problem.reported_by.get_full_name|default:problem.reported_by.username }}<span class="native-media-actions"><button class="button button-quiet button-small" type="button" data-native-media-action="pick-media" data-native-media-target="problem_media" data-native-media-project="{{ operations_project.pk }}" data-native-media-target-id="{{ problem.pk }}" data-native-media-context="problem_report">{% translate 'Attach problem media' %}</button><span data-native-media-status aria-live="polite"></span></span></small></span></div>{% endfor %}
+                        {% if not project_material_requests and not project_problem_reports %}<div class="construction-empty"><span>{% translate 'No open field requests or problems.' %}</span></div>{% endif %}
                     </div>
                 </section>
             </div>
 
             <div class="construction-triple-grid">
                 <section class="construction-panel">
-                    <div class="construction-panel-heading"><div><span class="section-kicker">Documents and activity</span><h3>Project files</h3></div><span class="construction-count">{{ project_documents|length }}</span></div>
+                    <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Documents and activity' %}</span><h3>{% translate 'Project files' %}</h3></div><span class="construction-count">{{ project_documents|length }}</span></div>
                     <div class="construction-list">
-                        {% for document in project_documents|slice:':8' %}<a class="construction-list-row" href="{% url 'operations:document-file' pk=document.pk %}"><span class="status-badge">{{ document.category }}</span><span><strong>{{ document.title }}</strong><small>{{ document.created_at|date:'M d, Y' }} Â· {{ document.get_visibility_display }}</small></span></a>{% empty %}<div class="construction-empty"><span>No project documents are available to this role.</span></div>{% endfor %}
+                        {% for document in project_documents|slice:':8' %}<a class="construction-list-row" href="{% url 'operations:document-file' pk=document.pk %}"><span class="status-badge">{{ document.category }}</span><span><strong>{{ document.title }}</strong><small>{{ document.created_at|date:'M d, Y' }} &middot; {{ document.get_visibility_display }}</small></span></a>{% empty %}<div class="construction-empty"><span>{% translate 'No project documents are available to this role.' %}</span></div>{% endfor %}
                     </div>
-                    <div class="construction-subsection"><span class="section-kicker">Recent photos and video</span>{% for asset in project_media|slice:':6' %}<a class="construction-list-row" href="{% url 'operations:media-file' pk=asset.pk %}"><span class="status-badge">{{ asset.get_media_type_display }}</span><span><strong>{{ asset.title }}</strong><small>{{ asset.get_context_display }} Â· {{ asset.created_at|date:'M d, Y' }}</small></span></a>{% empty %}<div class="construction-empty"><span>No project media is available to this role.</span></div>{% endfor %}</div>
-                    <div class="construction-subsection"><span class="section-kicker">Updates</span>{% for update in project_updates|slice:':4' %}<div class="construction-list-row"><span class="status-badge">{{ update.created_at|date:'M d' }}</span><span><strong>{{ update.title }}</strong><small>{{ update.body|truncatechars:90 }}</small></span></div>{% empty %}<div class="construction-empty"><span>No updates have been posted.</span></div>{% endfor %}
-                    {% if project_update_form %}<form class="execution-record-card" method="post" action="{% url 'operations:project-add-update' pk=operations_project.pk %}">{% csrf_token %}<input type="hidden" name="idempotency_key" value="{{ project_update_idempotency_key }}"><strong>Publish a project update</strong>{{ project_update_form.as_p }}<button class="button button-primary button-small" type="submit">Publish update</button></form>{% endif %}</div>
-                    <div class="construction-subsection"><span class="section-kicker">Audit trail</span>{% for event in project_activity|slice:':6' %}<div class="construction-list-row"><span class="status-badge">{{ event.created_at|date:'M d' }}</span><span><strong>{{ event.message }}</strong><small>{{ event.detail }}{% if event.actor %} - {{ event.actor.get_full_name|default:event.actor.username }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>No activity has been recorded yet.</span></div>{% endfor %}{% for event in project_workflow_events|slice:':6' %}<div class="construction-list-row"><span class="status-badge">Event</span><span><strong>{{ event.display_event_type }}</strong><small>{{ event.created_at|date:'M d, Y g:i A' }}{% if event.actor %} - {{ event.actor.get_full_name|default:event.actor.username }}{% endif %}</small></span></div>{% endfor %}</div>
+                    <div class="construction-subsection"><span class="section-kicker">{% translate 'Recent photos and video' %}</span>{% for asset in project_media|slice:':6' %}<a class="construction-list-row" href="{% url 'operations:media-file' pk=asset.pk %}"><span class="status-badge">{{ asset.get_media_type_display }}</span><span><strong>{{ asset.title }}</strong><small>{{ asset.get_context_display }} &middot; {{ asset.created_at|date:'M d, Y' }}</small></span></a>{% empty %}<div class="construction-empty"><span>{% translate 'No project media is available to this role.' %}</span></div>{% endfor %}</div>
+                    <div class="construction-subsection"><span class="section-kicker">{% translate 'Updates' %}</span>{% for update in project_updates|slice:':4' %}<div class="construction-list-row"><span class="status-badge">{{ update.created_at|date:'M d' }}</span><span><strong>{{ update.title }}</strong><small>{{ update.body|truncatechars:90 }}</small></span></div>{% empty %}<div class="construction-empty"><span>{% translate 'No updates have been posted.' %}</span></div>{% endfor %}
+                    {% if project_update_form %}<form class="execution-record-card" method="post" action="{% url 'operations:project-add-update' pk=operations_project.pk %}">{% csrf_token %}<input type="hidden" name="idempotency_key" value="{{ project_update_idempotency_key }}"><strong>{% translate 'Publish a project update' %}</strong>{{ project_update_form.as_p }}<button class="button button-primary button-small" type="submit">{% translate 'Publish update' %}</button></form>{% endif %}</div>
+                    <div class="construction-subsection"><span class="section-kicker">{% translate 'Audit trail' %}</span>{% for event in project_activity|slice:':6' %}<div class="construction-list-row"><span class="status-badge">{{ event.created_at|date:'M d' }}</span><span><strong>{{ event.message }}</strong><small>{{ event.detail }}{% if event.actor %} {% translate '-' %} {{ event.actor.get_full_name|default:event.actor.username }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>{% translate 'No activity has been recorded yet.' %}</span></div>{% endfor %}{% for event in project_workflow_events|slice:':6' %}<div class="construction-list-row"><span class="status-badge">{% translate 'Event' %}</span><span><strong>{{ event.display_event_type }}</strong><small>{{ event.created_at|date:'M d, Y g:i A' }}{% if event.actor %} {% translate '-' %} {{ event.actor.get_full_name|default:event.actor.username }}{% endif %}</small></span></div>{% endfor %}</div>
                 </section>
                 <section class="construction-panel">
-                    <div class="construction-panel-heading"><div><span class="section-kicker">Subcontractors</span><h3>Assigned work packages</h3></div><span class="construction-count">{{ project_assignments|length }}</span></div>
+                    <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Subcontractors' %}</span><h3>{% translate 'Assigned work packages' %}</h3></div><span class="construction-count">{{ project_assignments|length }}</span></div>
                     <div class="construction-list">
-                        {% for assignment in project_assignments %}<div class="construction-list-row"><span class="status-badge {% if assignment.status == 'complete' %}green{% elif assignment.status == 'in_progress' %}gold{% else %}red{% endif %}">{{ assignment.get_status_display }}</span><span><strong>{{ assignment.work_package }}</strong><small>{{ assignment.subcontractor.company }}{% if assignment.start_date %} Â· {{ assignment.start_date }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>No subcontractor assignments are visible.</span></div>{% endfor %}
+                        {% for assignment in project_assignments %}<div class="construction-list-row"><span class="status-badge {% if assignment.status == 'complete' %}green{% elif assignment.status == 'in_progress' %}gold{% else %}red{% endif %}">{{ assignment.get_status_display }}</span><span><strong>{{ assignment.work_package }}</strong><small>{{ assignment.subcontractor.company }}{% if assignment.start_date %} &middot; {{ assignment.start_date }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>{% translate 'No subcontractor assignments are visible.' %}</span></div>{% endfor %}
                     </div>
                 </section>
                 <section class="construction-panel">
-                    <div class="construction-panel-heading"><div><span class="section-kicker">Closeout and warranty</span><h3>Finish the project well</h3></div><span class="construction-count">{{ project_closeout|length }}</span></div>
+                    <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Closeout and warranty' %}</span><h3>{% translate 'Finish the project well' %}</h3></div><span class="construction-count">{{ project_closeout|length }}</span></div>
                     <div class="construction-list">
-                        {% for item in project_closeout|slice:':6' %}<div class="construction-list-row"><span class="status-badge {% if item.status == 'complete' %}green{% elif item.status == 'blocked' %}red{% else %}gold{% endif %}">{{ item.get_status_display }}</span><span><strong>{{ item.label }}</strong><small>{{ item.get_category_display }}{% if item.due_date %} Â· Due {{ item.due_date }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>Closeout checklist has not been initialized.</span></div>{% endfor %}
-                        {% for item in project_warranty|slice:':4' %}<div class="construction-list-row"><span class="status-badge {% if item.status == 'resolved' or item.status == 'closed' %}green{% else %}gold{% endif %}">Warranty</span><span><strong>{{ item.title }}</strong><small>{{ item.get_status_display }}{% if item.due_date %} Â· Due {{ item.due_date }}{% endif %}</small></span></div>{% endfor %}
+                        {% for item in project_closeout|slice:':6' %}<div class="construction-list-row"><span class="status-badge {% if item.status == 'complete' %}green{% elif item.status == 'blocked' %}red{% else %}gold{% endif %}">{{ item.get_status_display }}</span><span><strong>{{ item.label }}</strong><small>{{ item.get_category_display }}{% if item.due_date %} &middot; {% translate 'Due' %} {{ item.due_date }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>{% translate 'Closeout checklist has not been initialized.' %}</span></div>{% endfor %}
+                        {% for item in project_warranty|slice:':4' %}<div class="construction-list-row"><span class="status-badge {% if item.status == 'resolved' or item.status == 'closed' %}green{% else %}gold{% endif %}">{% translate 'Warranty' %}</span><span><strong>{{ item.title }}</strong><small>{{ item.get_status_display }}{% if item.due_date %} &middot; {% translate 'Due' %} {{ item.due_date }}{% endif %}</small></span></div>{% endfor %}
                     </div>
                 </section>
             </div>
 
             {% if project_financials %}
             <section class="construction-panel construction-financial-panel">
-                <div class="construction-panel-heading"><div><span class="section-kicker">Project financials</span><h3>Project performance</h3></div><span class="status-badge">Permission controlled</span></div>
+                <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Project financials' %}</span><h3>{% translate 'Project performance' %}</h3></div><span class="status-badge">{% translate 'Permission controlled' %}</span></div>
                 <div class="construction-financial-grid">
-                    <div><span>Current contract</span><strong>${{ project_financials.current_contract|floatformat:0 }}</strong></div>
-                    <div><span>Actual costs</span><strong>${{ project_financials.actual_costs|floatformat:0 }}</strong></div>
-                    <div><span>Remaining budget</span><strong>${{ project_financials.budget_remaining|floatformat:0 }}</strong></div>
-                    <div><span>Outstanding balance</span><strong>${{ project_financials.outstanding_balance|floatformat:0 }}</strong></div>
-                    <div><span>Gross margin</span><strong>{{ project_financials.gross_margin|floatformat:1 }}%</strong></div>
-                    <div><span>Next draw</span><strong>${{ project_financials.next_draw|floatformat:0 }}</strong></div>
+                    <div><span>{% translate 'Current contract' %}</span><strong>{% translate '$' %}{{ project_financials.current_contract|floatformat:0 }}</strong></div>
+                    <div><span>{% translate 'Actual costs' %}</span><strong>{% translate '$' %}{{ project_financials.actual_costs|floatformat:0 }}</strong></div>
+                    <div><span>{% translate 'Remaining budget' %}</span><strong>{% translate '$' %}{{ project_financials.budget_remaining|floatformat:0 }}</strong></div>
+                    <div><span>{% translate 'Outstanding balance' %}</span><strong>{% translate '$' %}{{ project_financials.outstanding_balance|floatformat:0 }}</strong></div>
+                    <div><span>{% translate 'Gross margin' %}</span><strong>{{ project_financials.gross_margin|floatformat:1 }}{% translate '%' %}</strong></div>
+                    <div><span>{% translate 'Next draw' %}</span><strong>{% translate '$' %}{{ project_financials.next_draw|floatformat:0 }}</strong></div>
                 </div>
-                <p class="construction-pulse-note">Manual ledger only. Approved change orders and recorded payments are reflected transactionally.</p>
+                <p class="construction-pulse-note">{% translate 'Manual ledger only. Approved change orders and recorded payments are reflected transactionally.' %}</p>
             </section>
             {% endif %}
 
             {% include "operations/construction_project_execution.html" %}
 
             <section class="construction-panel field-native-media" data-native-media-control>
-                <div class="construction-panel-heading"><div><span class="section-kicker">Jobsite files</span><h3>Capture or attach files</h3></div><span class="status-badge">Protected upload</span></div>
-                <p class="construction-pulse-note">Files are attached to this project after the server verifies your role and the file signature.</p>
-                <span data-native-media-status aria-live="polite">Camera, photo library, and document picker are available in the mobile workspace.</span>
+                <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Jobsite files' %}</span><h3>{% translate 'Capture or attach files' %}</h3></div><span class="status-badge">{% translate 'Protected upload' %}</span></div>
+                <p class="construction-pulse-note">{% translate 'Files are attached to this project after the server verifies your role and the file signature.' %}</p>
+                <span data-native-media-status aria-live="polite">{% translate 'Camera, photo library, and document picker are available in the mobile workspace.' %}</span>
                 <div class="field-action-row">
-                    <button class="button button-quiet button-small" type="button" data-native-media-action="capture-media" data-native-media-target="project_media" data-native-media-project="{{ operations_project.pk }}" data-native-media-context="progress" data-native-media-multiple="false">Use camera</button>
-                    <button class="button button-quiet button-small" type="button" data-native-media-action="pick-media" data-native-media-target="project_media" data-native-media-project="{{ operations_project.pk }}" data-native-media-context="progress">Choose photos or video</button>
-                    <button class="button button-outline button-small" type="button" data-native-media-action="pick-document" data-native-media-target="project_document" data-native-media-project="{{ operations_project.pk }}" data-native-media-mime-types="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain">Choose document</button>
+                    <button class="button button-quiet button-small" type="button" data-native-media-action="capture-media" data-native-media-target="project_media" data-native-media-project="{{ operations_project.pk }}" data-native-media-context="progress" data-native-media-multiple="false">{% translate 'Use camera' %}</button>
+                    <button class="button button-quiet button-small" type="button" data-native-media-action="pick-media" data-native-media-target="project_media" data-native-media-project="{{ operations_project.pk }}" data-native-media-context="progress">{% translate 'Choose photos or video' %}</button>
+                    <button class="button button-outline button-small" type="button" data-native-media-action="pick-document" data-native-media-target="project_document" data-native-media-project="{{ operations_project.pk }}" data-native-media-mime-types="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain">{% translate 'Choose document' %}</button>
                 </div>
             </section>
 
             {% if can_edit_operations %}
             <section class="construction-panel construction-action-panel">
-                <div class="construction-panel-heading"><div><span class="section-kicker">Keep scope current</span><h3>Create a change order</h3></div><span class="status-badge">Human approval required</span></div>
+                <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Keep scope current' %}</span><h3>{% translate 'Create a change order' %}</h3></div><span class="status-badge">{% translate 'Human approval required' %}</span></div>
                 <form class="construction-form-grid" method="post" action="{% url 'operations:project-change-order' pk=operations_project.pk %}">
                     {% csrf_token %}
-                    <label class="form-field">Title{{ change_order_form.title }}</label>
-                    <label class="form-field">Price impact{{ change_order_form.price_impact }}</label>
-                    <label class="form-field">Schedule impact (days){{ change_order_form.schedule_impact_days }}</label>
-                    <label class="form-field construction-form-wide">Description{{ change_order_form.description }}</label>
-                    <div class="construction-form-actions"><label class="check-control"><input type="checkbox" name="send" value="1"> Send to client for approval</label><button class="button button-primary button-small" type="submit">Save change order</button></div>
+                    <label class="form-field">{% translate 'Title' %}{{ change_order_form.title }}</label>
+                    <label class="form-field">{% translate 'Price impact' %}{{ change_order_form.price_impact }}</label>
+                    <label class="form-field">{% translate 'Schedule impact (days)' %}{{ change_order_form.schedule_impact_days }}</label>
+                    <label class="form-field construction-form-wide">{% translate 'Description' %}{{ change_order_form.description }}</label>
+                    <div class="construction-form-actions"><label class="check-control"><input type="checkbox" name="send" value="1"> {% translate 'Send to client for approval' %}</label><button class="button button-primary button-small" type="submit">{% translate 'Save change order' %}</button></div>
                 </form>
             </section>
             {% endif %}

@@ -14076,3 +14076,10 @@ body.public-site.public-motion-ready main h1.public-heading-reveal.is-visible {
         bottom: auto;
     }
 }
+.language-switch { display:inline-flex; align-items:center; gap:2px; padding:3px; border:1px solid rgba(49,81,140,.24); border-radius:999px; background:rgba(255,255,255,.88); flex:0 0 auto; }
+.language-switch button { min-width:34px; min-height:30px; padding:4px 8px; border:0; border-radius:999px; background:transparent; color:var(--navy,#1e3051); font:inherit; font-size:.75rem; font-weight:800; letter-spacing:.04em; cursor:pointer; }
+.language-switch button[aria-pressed="true"] { background:var(--blue,#31518c); color:#fff; }
+.language-switch button:focus-visible { outline:2px solid var(--gold,#d39b20); outline-offset:2px; }
+.admin-nav > .language-switch { margin:18px 14px 12px; align-self:flex-start; }
+.portal-header .language-switch { margin-left:auto; }
+@media (max-width:760px) { .site-nav .language-switch { align-self:flex-start; margin:10px 0; } .portal-header .language-switch { margin:0; } }

@@ -1,47 +1,48 @@
 {% extends "operations/base.html" %}
+{% load i18n %}
 {% load static %}
 
-{% block title %}Weekly action list | Grand Coast Construction Inc.{% endblock %}
+{% block title %}{% translate 'Weekly action list | Grand Coast Construction Inc.' %}{% endblock %}
 {% block body_class %}admin-site{% endblock %}
 
 {% block body %}
 <div class="admin-app construction-app" data-admin-root>
     <aside class="admin-sidebar" data-admin-sidebar>
-        <div class="admin-brand"><a href="{% url 'operations:home' %}" aria-label="Return to public site"><span class="admin-logo-frame"><img src="{% static 'operations/images/gcc-logo.png' %}" alt="Grand Coast Construction Inc. logo"></span><span><strong>Grand Coast</strong><small>Construction Inc.</small></span></a></div>
+        <div class="admin-brand"><a href="{% url 'operations:home' %}" aria-label="Return to public site"><span class="admin-logo-frame"><img src="{% static 'operations/images/gcc-logo.png' %}" alt="Grand Coast Construction Inc. logo"></span><span><strong>{% translate 'Grand Coast' %}</strong><small>{% translate 'Construction Inc.' %}</small></span></a></div>
         {% include "operations/sidebar_nav.html" %}
-        <div class="sidebar-footer"><div class="sidebar-user"><span class="avatar">{{ request.user.first_name|slice:':1'|default:request.user.username|slice:':1'|upper }}</span><span><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>{% if team_mode %}Employee workspace{% else %}Operations workspace{% endif %}</small></span></div><a class="sidebar-back" href="{% if team_mode %}{% url 'operations:team' %}{% else %}{% url 'operations:dashboard' %}{% endif %}">Overview</a><form method="post" action="{% url 'operations:logout' %}">{% csrf_token %}<button class="sidebar-reset" type="submit">Sign out</button></form></div>
+        <div class="sidebar-footer"><div class="sidebar-user"><span class="avatar">{{ request.user.first_name|slice:':1'|default:request.user.username|slice:':1'|upper }}</span><span><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>{% if team_mode %}{% translate 'Employee workspace' %}{% else %}{% translate 'Operations workspace' %}{% endif %}</small></span></div><a class="sidebar-back" href="{% if team_mode %}{% url 'operations:team' %}{% else %}{% url 'operations:dashboard' %}{% endif %}">{% translate 'Overview' %}</a><form method="post" action="{% url 'operations:logout' %}">{% csrf_token %}<button class="sidebar-reset" type="submit">{% translate 'Sign out' %}</button></form></div>
     </aside>
     <div class="admin-main">
-        <header class="admin-topbar"><button class="admin-menu-toggle" type="button" data-admin-menu-toggle aria-expanded="false" aria-label="Open Operations navigation">Menu</button><div><span class="admin-breadcrumb">Grand Coast / {% if team_mode %}Employee workspace{% else %}Operations{% endif %} / Review</span><h1>Weekly action list</h1></div><div class="admin-top-actions"><a class="topbar-link" href="{% if team_mode %}{% url 'operations:team' %}{% else %}{% url 'operations:dashboard' %}{% endif %}">Overview</a></div></header>
-        <div class="admin-workspace-notice"><span class="staging-label">WEEKLY OPERATIONS</span><span>Week of {{ weekly_review.week_of }}</span><span class="staging-spacer"></span><span class="admin-workspace-user">{{ request.user.get_full_name|default:request.user.username }}</span></div>
+        <header class="admin-topbar"><button class="admin-menu-toggle" type="button" data-admin-menu-toggle aria-expanded="false" aria-label="Open Operations navigation">{% translate 'Menu' %}</button><div><span class="admin-breadcrumb">{% translate 'Grand Coast /' %} {% if team_mode %}{% translate 'Employee workspace' %}{% else %}{% translate 'Operations' %}{% endif %} {% translate '/ Review' %}</span><h1>{% translate 'Weekly action list' %}</h1></div><div class="admin-top-actions"><a class="topbar-link" href="{% if team_mode %}{% url 'operations:team' %}{% else %}{% url 'operations:dashboard' %}{% endif %}">{% translate 'Overview' %}</a></div></header>
+        <div class="admin-workspace-notice"><span class="staging-label">{% translate 'WEEKLY OPERATIONS' %}</span><span>{% translate 'Week of' %} {{ weekly_review.week_of }}</span><span class="staging-spacer"></span><span class="admin-workspace-user">{{ request.user.get_full_name|default:request.user.username }}</span></div>
         <main class="admin-content construction-content">
-            <section class="construction-hero"><div><span class="section-kicker">Action over information</span><h2>What happened, what is next, and who must act?</h2><p>This review is generated from authorized project activity and attention items. Open the exact project work area to resolve each item.</p></div></section>
+            <section class="construction-hero"><div><span class="section-kicker">{% translate 'Action over information' %}</span><h2>{% translate 'What happened, what is next, and who must act?' %}</h2><p>{% translate 'This review is generated from authorized project activity and attention items. Open the exact project work area to resolve each item.' %}</p></div></section>
 
             {% for project_review in review_projects %}
             <section class="construction-panel weekly-review-project" id="project-{{ project_review.project_id }}">
                 <div class="construction-panel-heading">
-                    <div><span class="section-kicker">{{ project_review.current_phase|title }} · {{ project_review.health_status|title }}</span><h3><a href="{{ project_review.action_url }}">{{ project_review.project_title }}</a></h3></div>
-                    <a class="button button-outline button-small" href="{{ project_review.action_url }}">Open project</a>
+                    <div><span class="section-kicker">{{ project_review.current_phase|title }} &middot; {{ project_review.health_status|title }}</span><h3><a href="{{ project_review.action_url }}">{{ project_review.project_title }}</a></h3></div>
+                    <a class="button button-outline button-small" href="{{ project_review.action_url }}">{% translate 'Open project' %}</a>
                 </div>
                 <div class="construction-question-grid weekly-review-grid">
-                    <article><span>What happened?</span>{% for event in project_review.what_happened|slice:':3' %}<strong>{{ event.type|title }}</strong>{% empty %}<strong>No recorded activity yet</strong>{% endfor %}</article>
-                    <article><span>What is next?</span><strong>{{ project_review.next_action|default:"Set the next action" }}</strong></article>
-                    <article><span>What is behind?</span><strong>{% if project_review.behind %}Health review needed{% else %}No risk flag{% endif %}</strong></article>
-                    <article><span>What payment is next?</span><strong>{% if project_review.next_payment %}&#36;{{ project_review.next_payment.amount }}{% else %}Restricted or none{% endif %}</strong></article>
+                    <article><span>{% translate 'What happened?' %}</span>{% for event in project_review.what_happened|slice:':3' %}<strong>{{ event.type|title }}</strong>{% empty %}<strong>{% translate 'No recorded activity yet' %}</strong>{% endfor %}</article>
+                    <article><span>{% translate 'What is next?' %}</span><strong>{{ project_review.next_action|default:"Set the next action" }}</strong></article>
+                    <article><span>{% translate 'What is behind?' %}</span><strong>{% if project_review.behind %}{% translate 'Health review needed' %}{% else %}{% translate 'No risk flag' %}{% endif %}</strong></article>
+                    <article><span>{% translate 'What payment is next?' %}</span><strong>{% if project_review.next_payment %}{% translate '$' %}{{ project_review.next_payment.amount }}{% else %}{% translate 'Restricted or none' %}{% endif %}</strong></article>
                 </div>
                 <div class="construction-list">
                     {% for action in project_review.action_items %}
-                    <a class="construction-attention-row priority-{{ action.priority }}" href="{{ action.action_url }}"><span class="construction-attention-icon">→</span><span class="construction-attention-copy"><strong>{{ action.title }}</strong><small>{{ action.description }}</small></span><span class="construction-attention-meta"><b>{{ action.priority|upper }}</b><small>{{ action.source }}</small></span></a>
-                    {% empty %}<div class="construction-empty"><strong>No open action items.</strong><span>Continue the next scheduled step.</span></div>{% endfor %}
+                    <a class="construction-attention-row priority-{{ action.priority }}" href="{{ action.action_url }}"><span class="construction-attention-icon">&rarr;</span><span class="construction-attention-copy"><strong>{{ action.title }}</strong><small>{{ action.description }}</small></span><span class="construction-attention-meta"><b>{{ action.priority|upper }}</b><small>{{ action.source }}</small></span></a>
+                    {% empty %}<div class="construction-empty"><strong>{% translate 'No open action items.' %}</strong><span>{% translate 'Continue the next scheduled step.' %}</span></div>{% endfor %}
                 </div>
-                {% if project_review.blocking %}<p class="construction-pulse-note"><strong>Blocked by:</strong> {% for action in project_review.blocking %}{{ action.title }}{% if not forloop.last %}; {% endif %}{% endfor %}</p>{% endif %}
+                {% if project_review.blocking %}<p class="construction-pulse-note"><strong>{% translate 'Blocked by:' %}</strong> {% for action in project_review.blocking %}{{ action.title }}{% if not forloop.last %}{% translate ';' %} {% endif %}{% endfor %}</p>{% endif %}
             </section>
             {% empty %}
-            <section class="construction-panel construction-empty"><strong>No active projects are visible to this account.</strong></section>
+            <section class="construction-panel construction-empty"><strong>{% translate 'No active projects are visible to this account.' %}</strong></section>
             {% endfor %}
 
             {% if weekly_review.company_actions %}
-            <section class="construction-panel"><div class="construction-panel-heading"><div><span class="section-kicker">Company follow-ups</span><h3>Sales and shared actions</h3></div></div><div class="construction-list">{% for action in weekly_review.company_actions %}<a class="construction-attention-row priority-{{ action.priority }}" href="{% if team_mode %}{% url 'operations:team' %}{% else %}{% url 'operations:dashboard' %}{% endif %}"><span class="construction-attention-icon">→</span><span class="construction-attention-copy"><strong>{{ action.title }}</strong><small>{{ action.description }}</small></span><span class="construction-attention-meta"><b>{{ action.priority|upper }}</b><small>{{ action.source }}</small></span></a>{% endfor %}</div></section>
+            <section class="construction-panel"><div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Company follow-ups' %}</span><h3>{% translate 'Sales and shared actions' %}</h3></div></div><div class="construction-list">{% for action in weekly_review.company_actions %}<a class="construction-attention-row priority-{{ action.priority }}" href="{% if team_mode %}{% url 'operations:team' %}{% else %}{% url 'operations:dashboard' %}{% endif %}"><span class="construction-attention-icon">&rarr;</span><span class="construction-attention-copy"><strong>{{ action.title }}</strong><small>{{ action.description }}</small></span><span class="construction-attention-meta"><b>{{ action.priority|upper }}</b><small>{{ action.source }}</small></span></a>{% endfor %}</div></section>
             {% endif %}
         </main>
     </div>

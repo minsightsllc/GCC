@@ -28,27 +28,31 @@ def client_is_live(asset):
                 and asset.project.client_id and publication.shared_client_id == asset.project.client_id)
 
 
-def media_presentation(asset, destination, *, preview=False, publication=None):
+def media_presentation(asset, destination, *, preview=False, publication=None, language="en"):
     publication = publication or publication_for(asset, destination)
     data = (publication.draft_data() if preview else publication.published_data) if publication else {}
     client_name = data.get("client_name", "")
+    localized = str(language).lower().startswith("es") and destination == "website"
     return {
         "pk": asset.pk, "file": bool(asset.file), "media_type": asset.media_type,
         "display_url": reverse("operations:media-file", kwargs={"pk": asset.pk}),
-        "title": data.get("title", ""), "caption": data.get("caption", ""),
-        "label": data.get("label", ""),
+        "title": (data.get("title_es") or data.get("title", "")) if localized else data.get("title", ""),
+        "caption": (data.get("caption_es") or data.get("caption", "")) if localized else data.get("caption", ""),
+        "label": (data.get("label_es") or data.get("label", "")) if localized else data.get("label", ""),
         "location": data.get("location", "") if destination != "website" else "",
         "client_name": client_name, "sort_order": data.get("sort_order", 0),
     }
 
 
-def website_post_presentation(post, *, preview=False):
+def website_post_presentation(post, *, preview=False, language="en"):
     """Build public-safe copy and slide URLs from one post snapshot."""
     data = post.draft_data() if preview else (post.published_data or {})
     items = {
         str(item.asset_id): item.asset
         for item in post.items.select_related("asset").prefetch_related("asset__publications")
     }
+    localized = str(language).lower().startswith("es")
+    display_title = (data.get("title_es") or data.get("title", "")) if localized else data.get("title", "")
     slides = []
     for slide in data.get("slides", []):
         asset = items.get(str(slide.get("asset_id", "")))
@@ -74,13 +78,13 @@ def website_post_presentation(post, *, preview=False):
                 if slide.get("poster_image") and asset.media_type == MediaAsset.MediaType.VIDEO
                 else static("operations/images/video-poster-placeholder.svg")
             ),
-            "alt_text": data.get("title") or "Project photo or video",
+            "alt_text": display_title or ("Foto o video del proyecto" if localized else "Project photo or video"),
         })
     return {
         "pk": post.pk,
-        "title": data.get("title", ""),
-        "caption": data.get("caption", ""),
-        "label": data.get("label", ""),
+        "title": display_title,
+        "caption": (data.get("caption_es") or data.get("caption", "")) if localized else data.get("caption", ""),
+        "label": (data.get("label_es") or data.get("label", "")) if localized else data.get("label", ""),
         "client_name": data.get("client_name", "") if data.get("show_client_name") else "",
         "layout": data.get("layout", WebsiteGalleryPost.Layout.SPLIT),
         "accent": data.get("accent", WebsiteGalleryPost.Accent.GOLD),

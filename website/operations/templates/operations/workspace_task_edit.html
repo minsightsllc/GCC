@@ -1,9 +1,10 @@
+{% load i18n %}
 {% if active_section == 'tasks' and request.GET.edit == 'task' and can_edit_selected_task %}
-<div class="detail-header"><div><span class="section-kicker">Task editor</span><h3>Edit task</h3><p>{{ selected_task.title }}</p></div><span class="status-badge">{{ selected_task.get_status_display }}</span></div>
+<div class="detail-header"><div><span class="section-kicker">{% translate 'Task editor' %}</span><h3>{% translate 'Edit task' %}</h3><p>{{ selected_task.title }}</p></div><span class="status-badge">{{ selected_task.get_status_display }}</span></div>
 <form class="workspace-form task-association-form" data-task-association-form method="post" action="{% if team_mode %}/team/tasks/{{ selected_task.pk }}/update/{% else %}/dashboard/tasks/{{ selected_task.pk }}/update/{% endif %}" novalidate>
     {% csrf_token %}
     {{ task_form.non_field_errors }}
     <div class="workspace-form-grid">{% for field in task_form %}<label class="form-field{% if field.name == 'project' %} task-project-field{% endif %}"{% if field.name == 'project' %} data-task-project-field{% endif %}>{{ field.label }}{{ field }}{% if field.help_text %}<small class="field-help">{{ field.help_text }}</small>{% endif %}{{ field.errors }}</label>{% endfor %}</div>
-    <div class="detail-actions"><button class="button button-primary" type="submit">Save changes</button><a class="button button-outline" href="?task={{ selected_task.pk }}">Cancel</a></div>
+    <div class="detail-actions"><button class="button button-primary" type="submit">{% translate 'Save changes' %}</button><a class="button button-outline" href="?task={{ selected_task.pk }}">{% translate 'Cancel' %}</a></div>
 </form>
 {% endif %}

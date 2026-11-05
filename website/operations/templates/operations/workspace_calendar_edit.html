@@ -1,7 +1,8 @@
+{% load i18n %}
 {% if active_section == 'calendar' and can_manage_schedule and request.GET.edit == 'event' and selected_event %}
 <section id='calendar-editor' class='record-detail workspace-form time-edit-panel' tabindex='-1'>
-    <div class='admin-section-heading compact'><div><span class='section-kicker'>Calendar editor</span><h3>Update {{ selected_event.title }}</h3></div></div>
-    <form method='post' action='{% url "operations:schedule-update" selected_event.pk %}'>{% csrf_token %}<div class='workspace-form-grid'>{% for field in event_form %}<label class='form-field'>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}</div><div class='calendar-editor-actions'><button class='button button-primary' type='submit'>Save event</button></div></form>
-    <form class='calendar-delete-form' method='post' action='{% url "operations:schedule-delete" selected_event.pk %}' onsubmit="return window.confirm('Delete this calendar event?');">{% csrf_token %}<button class='button button-danger' type='submit'>Delete event</button></form>
+    <div class='admin-section-heading compact'><div><span class='section-kicker'>{% translate 'Calendar editor' %}</span><h3>{% translate 'Update' %} {{ selected_event.title }}</h3></div></div>
+    <form method='post' action='{% url "operations:schedule-update" selected_event.pk %}'>{% csrf_token %}<div class='workspace-form-grid'>{% for field in event_form %}<label class='form-field'>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}</div><div class='calendar-editor-actions'><button class='button button-primary' type='submit'>{% translate 'Save event' %}</button></div></form>
+    <form class='calendar-delete-form' method='post' action='{% url "operations:schedule-delete" selected_event.pk %}' onsubmit="return window.confirm('Delete this calendar event?');">{% csrf_token %}<button class='button button-danger' type='submit'>{% translate 'Delete event' %}</button></form>
 </section>
 {% endif %}

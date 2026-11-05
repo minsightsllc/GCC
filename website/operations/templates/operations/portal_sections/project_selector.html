@@ -1,6 +1,7 @@
+{% load i18n %}
 {% if portal_projects|length > 1 %}
     <div class="portal-project-selector" aria-label="Choose a project">
-        <span class="section-kicker">Your projects</span>
+        <span class="section-kicker">{% translate 'Your projects' %}</span>
         {% for project in portal_projects %}
             <a class="{% if project.pk == portal_project.pk %}is-current{% endif %}" href="{% url 'operations:portal-section' section=portal_section %}?client={{ portal_client.pk }}&amp;project={{ project.pk }}{% if portal_section == 'estimate-files' and portal_estimate %}&amp;estimate={{ portal_estimate.pk }}{% endif %}">{{ project.title }}</a>
         {% endfor %}

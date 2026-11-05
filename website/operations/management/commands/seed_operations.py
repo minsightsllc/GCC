@@ -68,33 +68,41 @@ class Command(BaseCommand):
 
     def seed_services(self):
         specs = [
-            ("renovations", "Renovations", "Kitchens, baths, additions, and the thoughtful updates that make a home work better.", "operations/images/hero-kitchen.png", 1),
-            ("custom-homes", "Custom homes", "A clear path from early ideas to a finished home shaped around the way you live.", "operations/images/project-adu.png", 2),
-            ("restoration", "Restoration", "Careful assessment and durable repairs for spaces that need a considered second chapter.", "operations/images/project-bathroom.png", 3),
-            ("commercial", "Commercial construction", "Organized build-outs and owner-side coordination for spaces made to support good work.", "operations/images/progress-kitchen.png", 4),
-            ("project-management", "Project management", "Visible next steps, dependable coordination, and a calm point of contact from start to finish.", "operations/images/project-adu.png", 5),
+            ("renovations", "Renovations", "Kitchens, baths, additions, and the thoughtful updates that make a home work better.", "Remodelaciones", "Cocinas, baños, ampliaciones y mejoras bien pensadas que hacen que una casa funcione mejor.", "operations/images/hero-kitchen.png", 1),
+            ("custom-homes", "Custom homes", "A clear path from early ideas to a finished home shaped around the way you live.", "Casas personalizadas", "Un camino claro desde las primeras ideas hasta una casa terminada, diseñada para su forma de vivir.", "operations/images/project-adu.png", 2),
+            ("restoration", "Restoration", "Careful assessment and durable repairs for spaces that need a considered second chapter.", "Restauración", "Evaluaciones cuidadosas y reparaciones duraderas para espacios que necesitan una nueva etapa bien planificada.", "operations/images/project-bathroom.png", 3),
+            ("commercial", "Commercial construction", "Organized build-outs and owner-side coordination for spaces made to support good work.", "Construcción comercial", "Adecuaciones bien organizadas y coordinación en representación del propietario para espacios diseñados para apoyar el trabajo.", "operations/images/progress-kitchen.png", 4),
+            ("project-management", "Project management", "Visible next steps, dependable coordination, and a calm point of contact from start to finish.", "Gestión de proyectos", "Próximos pasos claros, coordinación confiable y una persona de contacto disponible de principio a fin.", "operations/images/project-adu.png", 5),
         ]
         return [
             Service.objects.get_or_create(
                 slug=slug,
-                defaults={"title": title, "description": description, "image_path": image_path, "sort_order": order},
+                defaults={
+                    "title": title, "description": description,
+                    "title_es": title_es, "description_es": description_es,
+                    "image_path": image_path, "sort_order": order,
+                },
             )[0]
-            for slug, title, description, image_path, order in specs
+            for slug, title, description, title_es, description_es, image_path, order in specs
         ]
 
     def seed_process_steps(self):
         specs = [
-            ("inquire", "Start with a conversation", "Tell us what you are building, what matters most, and where you want a clearer path."),
-            ("plan", "Shape the right plan", "We turn the first conversation into scope, priorities, and a practical sequence of decisions."),
-            ("build", "Build with visibility", "You always know the current stage, the next action, and what the team is moving forward."),
-            ("handoff", "Finish well", "A careful final walkthrough brings the details together and leaves you ready for what comes next."),
+            ("inquire", "Start with a conversation", "Tell us what you are building, what matters most, and where you want a clearer path.", "Comience con una conversación", "Cuéntenos qué quiere construir, qué es lo más importante y en qué aspectos busca mayor claridad."),
+            ("plan", "Shape the right plan", "We turn the first conversation into scope, priorities, and a practical sequence of decisions.", "Definamos el plan adecuado", "Convertimos la primera conversación en un alcance, prioridades y una secuencia práctica de decisiones."),
+            ("build", "Build with visibility", "You always know the current stage, the next action, and what the team is moving forward.", "Construimos con claridad", "Siempre sabrá en qué etapa está el proyecto, cuál es el siguiente paso y qué está avanzando el equipo."),
+            ("handoff", "Finish well", "A careful final walkthrough brings the details together and leaves you ready for what comes next.", "Terminamos bien", "Un recorrido final detallado reúne todos los detalles y le deja listo para lo que sigue."),
         ]
         return [
             ProcessStep.objects.get_or_create(
                 key=key,
-                defaults={"title": title, "description": description, "sort_order": index},
+                defaults={
+                    "title": title, "description": description,
+                    "title_es": title_es, "description_es": description_es,
+                    "sort_order": index,
+                },
             )[0]
-            for index, (key, title, description) in enumerate(specs, start=1)
+            for index, (key, title, description, title_es, description_es) in enumerate(specs, start=1)
         ]
 
     def seed_clients(self, client_password, staff_user):

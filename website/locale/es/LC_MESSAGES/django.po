@@ -1,0 +1,3470 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Grand Coast\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-04 00:00+0000\n"
+"PO-Revision-Date: 2026-11-04 00:00+0000\n"
+"Last-Translator: Grand Coast\n"
+"Language-Team: Spanish\n"
+"MIME-Version: 1.0\n"
+"Language: es\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "% complete"
+msgstr "% completado"
+
+msgid "% complete ·"
+msgstr "% completado ·"
+
+msgid "'s weekly hours do not overlap this short-day window."
+msgstr "Las horas semanales no coinciden con este horario reducido."
+
+msgid "(805) 718-1502 →"
+msgstr "(805) 718-1502 →"
+
+msgid "+ Add client"
+msgstr " + Agregar cliente"
+
+msgid "+ New task"
+msgstr "+ Nueva tarea"
+
+msgid "+ Schedule event"
+msgstr "+ Programar evento"
+
+msgid ", here’s your project."
+msgstr ", aquí está su proyecto."
+
+msgid ". Copy the one-time link as a backup:"
+msgstr ". Copie el enlace de un solo uso como respaldo:"
+
+msgid ". Create your sign-in details to view project updates, media, and estimates."
+msgstr ". Cree sus datos de acceso para ver las actualizaciones, los archivos multimedia y los presupuestos del proyecto."
+
+msgid ". The one-time link is also available above."
+msgstr ". El enlace de un solo uso también aparece arriba:"
+
+msgid "A clear view of the work moving through Grand Coast."
+msgstr "Una vista clara del trabajo que avanza en Grand Coast."
+
+msgid "A clearer way to build"
+msgstr "Una forma más clara de construir"
+
+msgid "A one-time password reset link is ready to copy."
+msgstr "El enlace de un solo uso para restablecer la contraseña está listo para copiar."
+
+msgid "Accept agreement"
+msgstr "Aceptar acuerdo"
+
+msgid "Acceptance is recorded with a timestamp and security audit entry."
+msgstr "La aceptación se registra con fecha, hora y una entrada de auditoría de seguridad."
+
+msgid "Accepted"
+msgstr "Aceptado"
+
+msgid "Access"
+msgstr "Acceso"
+
+msgid "Access unavailable"
+msgstr "Acceso no disponible"
+
+msgid "Account"
+msgstr "Cuenta"
+
+msgid "Account & support"
+msgstr "Cuenta y ayuda"
+
+msgid "Account recovery"
+msgstr "Recuperación de cuenta"
+
+msgid "Account security"
+msgstr "Seguridad de la cuenta"
+
+msgid "Account settings"
+msgstr "Configuración de la cuenta"
+
+msgid "Action list"
+msgstr "Lista de acciones"
+
+msgid "Active"
+msgstr "Activo"
+
+msgid "Active employee"
+msgstr "Empleado activo"
+
+msgid "Add"
+msgstr "Agregar"
+
+msgid "Add client"
+msgstr "Agregar cliente"
+
+msgid "Add estimate link"
+msgstr "Agregar enlace al presupuesto"
+
+msgid "Add internal update"
+msgstr "Agregar actualización interna"
+
+msgid "Add media report →"
+msgstr "Agregar informe multimedia →"
+
+msgid "Add photos or files"
+msgstr "Agregar fotos o archivos"
+
+msgid "Adjust a day's schedule"
+msgstr "Ajustar el horario de un día"
+
+msgid "Adjust a day’s schedule"
+msgstr "Ajustar el horario de un día"
+
+msgid "Adjust one employee day"
+msgstr "Ajustar el horario de un empleado para un día"
+
+msgid "Adjust this day's schedule"
+msgstr "Ajustar el horario de este día"
+
+msgid "Adjust this day’s schedule"
+msgstr "Ajustar el horario de este día"
+
+msgid "Administration home"
+msgstr "Inicio de administración"
+
+msgid "Agreement"
+msgstr "Acuerdo"
+
+msgid "Agreement accepted. Grand Coast will confirm the next step."
+msgstr "Se aceptó el acuerdo. Grand Coast confirmará el siguiente paso."
+
+msgid "An estimate will appear here when the team records its status."
+msgstr "El presupuesto aparecerá aquí cuando el equipo registre su estado."
+
+msgid "Approve change order"
+msgstr "Aprobar orden de cambio"
+
+msgid "Ask a question or send an update."
+msgstr "Haga una pregunta o envíe una actualización."
+
+msgid "Ask the Grand Coast team to create a new client portal invitation."
+msgstr "Pida al equipo de Grand Coast que cree una nueva invitación al portal."
+
+msgid "Assigned projects"
+msgstr "Proyectos asignados"
+
+msgid "Assigned projects, tasks, and today’s schedule in one place."
+msgstr "Proyectos asignados, tareas y el horario de hoy en un solo lugar."
+
+msgid "Assigned to"
+msgstr "Asignado a"
+
+msgid "Assignments, schedule changes, and client replies that need your attention."
+msgstr "Asignaciones, cambios de horario y respuestas de clientes que requieren su atención."
+
+msgid "Blue · Gold · California"
+msgstr "Azul · Dorado · California"
+
+msgid "Building with confidence |"
+msgstr "Construimos con confianza |"
+
+msgid "Built around your vision."
+msgstr "Diseñado en torno a su visión."
+
+msgid "CLIENT PORTAL"
+msgstr "PORTAL DEL CLIENTE"
+
+msgid "Calendar"
+msgstr "Calendario"
+
+msgid "Calendar editor"
+msgstr "Editor del calendario"
+
+msgid "Calendar event updated."
+msgstr "Se actualizó el evento del calendario."
+
+msgid "Calendar events"
+msgstr "Eventos del calendario"
+
+msgid "Calendar items"
+msgstr "Elementos del calendario"
+
+msgid "California coast"
+msgstr "Costa de California"
+
+msgid "Camera and file uploads are available in the mobile workspace."
+msgstr "Puede usar la cámara y subir archivos desde el espacio de trabajo móvil."
+
+msgid "Cancel"
+msgstr "Cancelar"
+
+msgid "Cancel edit"
+msgstr "Cancelar edición"
+
+msgid "Capture jobsite media"
+msgstr "Registrar archivos multimedia de la obra"
+
+msgid "Change language"
+msgstr "Cambiar idioma"
+
+msgid "Change order approved. The project balance was updated."
+msgstr "Se aprobó la orden de cambio y se actualizó el saldo del proyecto."
+
+msgid "Change orders"
+msgstr "Órdenes de cambio"
+
+msgid "Change password"
+msgstr "Cambiar contraseña"
+
+msgid "Change password | Grand Coast Construction Inc."
+msgstr "Cambiar contraseña | Grand Coast Construction Inc."
+
+msgid "Change your password."
+msgstr "Cambie su contraseña."
+
+msgid "Changes here apply only to this date."
+msgstr "Los cambios de esta sección solo se aplican a esta fecha."
+
+msgid "Check that the Django server is running and that the app is using the right local network address."
+msgstr "Verifique que el servidor esté activo y que la aplicación use la dirección de red local correcta."
+
+msgid "Check your email | Grand Coast Construction Inc."
+msgstr "Revise su correo | Grand Coast Construction Inc."
+
+msgid "Check your inbox."
+msgstr "Revise su bandeja de entrada."
+
+msgid "Choose a new password | Grand Coast Construction Inc."
+msgstr "Elegir una nueva contraseña | Grand Coast Construction Inc."
+
+msgid "Choose a new password."
+msgstr "Elija una nueva contraseña."
+
+msgid "Choose an image for this service."
+msgstr "Elija una imagen para este servicio."
+
+msgid "Choose at least one photo or video."
+msgstr "Elija al menos una foto o un video."
+
+msgid "Choose photos or video"
+msgstr "Elegir fotos o videos"
+
+msgid "Choose what you need next."
+msgstr "Elija qué necesita hacer."
+
+msgid "Clear"
+msgstr "Borrar"
+
+msgid "Clear all"
+msgstr "Borrar todo"
+
+msgid "Clear removes only the exception and returns to the weekly template."
+msgstr "Al borrar, solo se elimina la excepción y se vuelve al horario semanal."
+
+msgid "Client"
+msgstr "Cliente"
+
+msgid "Client & Job Operations"
+msgstr "Operaciones de clientes y proyectos"
+
+msgid "Client Media"
+msgstr "Archivos multimedia del cliente"
+
+msgid "Client access"
+msgstr "Acceso del cliente"
+
+msgid "Client access, project context, and conversations."
+msgstr "Acceso del cliente, contexto del proyecto y conversaciones."
+
+msgid "Client account"
+msgstr "Cuenta del cliente"
+
+msgid "Client context"
+msgstr "Contexto del cliente"
+
+msgid "Client conversation"
+msgstr "Conversación con el cliente"
+
+msgid "Client conversations"
+msgstr "Conversaciones con clientes"
+
+msgid "Client details saved."
+msgstr "Se guardaron los datos del cliente."
+
+msgid "Client invite email failed."
+msgstr "No se pudo enviar la invitación al cliente."
+
+msgid "Client invite emailed."
+msgstr "Se envió la invitación al cliente."
+
+msgid "Client invite ready."
+msgstr "La invitación al cliente está lista."
+
+msgid "Client perspective"
+msgstr "La opinión de nuestros clientes"
+
+msgid "Client portal"
+msgstr "Portal del cliente"
+
+msgid "Client portal access was revoked."
+msgstr "Se revocó el acceso del cliente al portal."
+
+msgid "Client record"
+msgstr "Registro del cliente"
+
+msgid "Client ·"
+msgstr "Cliente ·"
+
+msgid "Client-ready documents will appear here when the team shares them."
+msgstr "Los documentos preparados para clientes aparecerán aquí cuando los comparta el equipo."
+
+msgid "Client-ready files stay separate from internal project material."
+msgstr "Los archivos para clientes se mantienen separados del material interno del proyecto."
+
+msgid "Client-ready progress updates will appear here once your team is assigned."
+msgstr "Las actualizaciones de avance aparecerán aquí cuando se asigne su equipo."
+
+msgid "Client-ready updates from the Grand Coast team."
+msgstr "Actualizaciones del equipo de Grand Coast preparadas para clientes."
+
+msgid "Client:"
+msgstr "Cliente:"
+
+msgid "Clients"
+msgstr "Clientes"
+
+msgid "Clock in"
+msgstr "Entrada"
+
+msgid "Clock in now"
+msgstr "Registrar entrada"
+
+msgid "Clock out"
+msgstr "Salida"
+
+msgid "Clock out -"
+msgstr "Fin de jornada -"
+
+msgid "Clock-in and clock-out"
+msgstr "Entrada y salida"
+
+msgid "Company closed"
+msgstr "Empresa cerrada"
+
+msgid "Conflict"
+msgstr "Conflicto"
+
+msgid "Construction Inc."
+msgstr "Construction Inc."
+
+msgid "Contact"
+msgstr "Contacto"
+
+msgid "Contact Grand Coast"
+msgstr "Contactar a Grand Coast"
+
+msgid "Conversation"
+msgstr "Conversación"
+
+msgid "Coordination"
+msgstr "Coordinación"
+
+msgid "Coordination watch"
+msgstr "Supervisión de coordinación"
+
+msgid "Copyright © 2026 Grand Coast Construction Inc. - All Rights Reserved"
+msgstr "Copyright © 2026 Grand Coast Construction Inc. - Todos los derechos reservados"
+
+msgid "Correction"
+msgstr "Corrección"
+
+msgid "Create employee invite"
+msgstr "Crear invitación para empleado"
+
+msgid "Create password reset link →"
+msgstr "Crear enlace para restablecer la contraseña →"
+
+msgid "Create portal access"
+msgstr "Crear acceso al portal"
+
+msgid "Create portal access | Grand Coast Construction Inc."
+msgstr "Crear acceso al portal | Grand Coast Construction Inc."
+
+msgid "Create portal access →"
+msgstr "Crear acceso al portal →"
+
+msgid "Create portal invite"
+msgstr "Crear invitación al portal"
+
+msgid "Credit"
+msgstr "Crédito"
+
+msgid "Current password"
+msgstr "Contraseña actual"
+
+msgid "Current records"
+msgstr "Registros actuales"
+
+msgid "Current status"
+msgstr "Estado actual"
+
+msgid "Daily report"
+msgstr "Informe diario"
+
+msgid "Dashboard"
+msgstr "Panel"
+
+msgid "Date exception"
+msgstr "Excepción para una fecha"
+
+msgid "Day details"
+msgstr "Detalles del día"
+
+msgid "Day exception"
+msgstr "Excepción de horario"
+
+msgid "Day off"
+msgstr "Día libre"
+
+msgid "Delete"
+msgstr "Eliminar"
+
+msgid "Delete account"
+msgstr "Eliminar cuenta"
+
+msgid "Delete event"
+msgstr "Eliminar evento"
+
+msgid "Deleting your account disables portal access and anonymizes your personal details. Project history remains available to Grand Coast as an anonymous record."
+msgstr "Al eliminar su cuenta, se desactiva el acceso al portal y se anonimiza su información personal. Grand Coast conserva el historial del proyecto como registro anónimo."
+
+msgid "Delivery"
+msgstr "Entrega"
+
+msgid "Description"
+msgstr "Descripción"
+
+msgid "Details"
+msgstr "Detalles"
+
+msgid "Details for the selected date appear below the calendar."
+msgstr "Los detalles de la fecha seleccionada aparecen debajo del calendario."
+
+msgid "Discuss your project →"
+msgstr "Hablemos de su proyecto →"
+
+msgid "Documents"
+msgstr "Documentos"
+
+msgid "Download"
+msgstr "Descargar"
+
+msgid "Download file"
+msgstr "Descargar archivo"
+
+msgid "Draft saved. Published content has not changed."
+msgstr "Se guardó el borrador. El contenido publicado no cambió."
+
+msgid "Due"
+msgstr "Vence"
+
+msgid "Due date"
+msgstr "Fecha de vencimiento"
+
+msgid "EMPLOYEE WORKSPACE"
+msgstr "ESPACIO DE TRABAJO DEL EMPLEADO"
+
+msgid "Edit assigned task"
+msgstr "Editar tarea asignada"
+
+msgid "Edit client"
+msgstr "Editar cliente"
+
+msgid "Edit event →"
+msgstr "Editar evento →"
+
+msgid "Edit profile & access"
+msgstr "Editar perfil y acceso"
+
+msgid "Edit task"
+msgstr "Editar tarea"
+
+msgid "Edit →"
+msgstr "Editar →"
+
+msgid "Email"
+msgstr "Correo electrónico"
+
+msgid "Email delivery failed. Use the one-time copy link below:"
+msgstr "No se pudo enviar el correo. Use el enlace de un solo uso que aparece abajo:"
+
+msgid "Email is pending or disabled. Copy the one-time link below:"
+msgstr "El envío del correo está pendiente o desactivado. Copie el enlace de un solo uso que aparece abajo:"
+
+msgid "Email is pending or disabled. Use the one-time copy link below:"
+msgstr "El envío del correo está pendiente o desactivado. Use el enlace de un solo uso que aparece abajo:"
+
+msgid "Employee"
+msgstr "Empleado"
+
+msgid "Employee access still needs to be accepted"
+msgstr "El empleado aún debe aceptar el acceso"
+
+msgid "Employee clock records"
+msgstr "Registros de entrada y salida"
+
+msgid "Employee invite email failed."
+msgstr "No se pudo enviar la invitación al empleado."
+
+msgid "Employee invite emailed."
+msgstr "Se envió la invitación al empleado."
+
+msgid "Employee invite ready."
+msgstr "La invitación al empleado está lista."
+
+msgid "Employee links expire after seven days and can be used once."
+msgstr "Los enlaces para empleados vencen después de siete días y solo se pueden usar una vez."
+
+msgid "Employee overview"
+msgstr "Resumen del empleado"
+
+msgid "Employee records"
+msgstr "Registros de empleados"
+
+msgid "Employee schedule"
+msgstr "Horario del empleado"
+
+msgid "Employee shifts"
+msgstr "Turnos del equipo"
+
+msgid "Employee support"
+msgstr "Ayuda para empleados"
+
+msgid "Employee time log"
+msgstr "Registro de horas del empleado"
+
+msgid "Employee workspace"
+msgstr "Espacio de trabajo del empleado"
+
+msgid "End"
+msgstr "Fin"
+
+msgid "Enjoying the experience?"
+msgstr "¿Está disfrutando la experiencia?"
+
+msgid "Enter the email connected to your client or employee account. If it matches, we’ll send a one-time reset link."
+msgstr "Ingrese el correo asociado a su cuenta de cliente o empleado. Si coincide, le enviaremos un enlace de un solo uso para restablecer la contraseña."
+
+msgid "Enter your current password to continue."
+msgstr "Ingrese su contraseña actual para continuar."
+
+msgid "Estimate"
+msgstr "Presupuesto"
+
+msgid "Estimate & files"
+msgstr "Presupuesto y archivos"
+
+msgid "Estimate details remain with the third-party estimate service. Grand Coast shows the current status and links you to the shared document."
+msgstr "Los detalles del presupuesto permanecen en el servicio externo. Grand Coast muestra el estado actual y le da acceso al documento compartido."
+
+msgid "Estimate history"
+msgstr "Historial de presupuestos"
+
+msgid "Estimate link and status saved."
+msgstr "Se guardaron el enlace y el estado del presupuesto."
+
+msgid "Estimates"
+msgstr "Presupuestos"
+
+msgid "Execution"
+msgstr "Ejecución"
+
+msgid "Explore our work"
+msgstr "Explore nuestros proyectos"
+
+msgid "Explore photos and videos from Grand Coast projects."
+msgstr "Explore fotos y videos de los proyectos de Grand Coast."
+
+msgid "External approval recorded. Next: create the project from this estimate."
+msgstr "Se registró la aprobación externa. Siguiente paso: crear el proyecto a partir de este presupuesto."
+
+msgid "External decline recorded. The estimate remains closed in GCC."
+msgstr "Se registró el rechazo externo. El presupuesto permanece cerrado en GCC."
+
+msgid "External estimate"
+msgstr "Presupuesto externo"
+
+msgid "FIELD WORKSPACE"
+msgstr "ESPACIO DE TRABAJO DE CAMPO"
+
+msgid "Featured project copy (Spanish)"
+msgstr "Texto del proyecto destacado (español)"
+
+msgid "Featured project title (Spanish)"
+msgstr "Título del proyecto destacado (español)"
+
+msgid "Featured work"
+msgstr "Proyectos destacados"
+
+msgid "Field operations"
+msgstr "Operaciones de campo"
+
+msgid "Field workspace"
+msgstr "Espacio de trabajo de campo"
+
+msgid "Files shared with you"
+msgstr "Archivos compartidos con usted"
+
+msgid "Filter"
+msgstr "Filtrar"
+
+msgid "First name"
+msgstr "Nombre"
+
+msgid "Forgot your password?"
+msgstr "¿Olvidó su contraseña?"
+
+msgid "Fri"
+msgstr "Vie"
+
+msgid "From focused remodels to full project oversight, the right plan keeps every decision moving forward."
+msgstr "Desde remodelaciones puntuales hasta la supervisión integral del proyecto, un buen plan mantiene cada decisión en marcha."
+
+msgid "GRAND COAST CONSTRUCTION INC."
+msgstr "GRAND COAST CONSTRUCTION INC."
+
+msgid "Go back"
+msgstr "Volver"
+
+msgid "Go to Home"
+msgstr "Ir al inicio"
+
+msgid "Google ratings"
+msgstr "calificaciones de Google"
+
+msgid "Google review"
+msgstr "Reseña de Google"
+
+msgid "Grand Coast"
+msgstr "Grand Coast"
+
+msgid "Grand Coast /"
+msgstr "Grand Coast /"
+
+msgid "Grand Coast / Field"
+msgstr "Grand Coast / Campo"
+
+msgid "Grand Coast / Operations"
+msgstr "Grand Coast / Operaciones"
+
+msgid "Grand Coast Construction Inc."
+msgstr "Grand Coast Construction Inc."
+
+msgid "Grand Coast has not published the estimate link to your portal yet. Contact the team if you expected to see it."
+msgstr "Grand Coast aún no ha publicado el enlace del presupuesto en su portal. Comuníquese con el equipo si esperaba verlo."
+
+msgid "Grand Coast is assigning an employee to your project. Project work has not started yet; we’ll update this space when your team is assigned."
+msgstr "Grand Coast está asignando a una persona de su equipo. El trabajo aún no ha comenzado; actualizaremos este espacio cuando se asigne su equipo."
+
+msgid "Grand Coast is assigning an employee. Client-ready progress updates will appear here once your team is assigned."
+msgstr "Grand Coast está asignando a un miembro del equipo. Las actualizaciones de avance para clientes aparecerán aquí cuando su equipo esté asignado."
+
+msgid "Grand Coast last confirmed this status on"
+msgstr "Grand Coast confirmó este estado por última vez el"
+
+msgid "Grand Coast staff confirmed that the estimate was declined in the external service. Contact Grand Coast if you would like to discuss a revision."
+msgstr "El equipo de Grand Coast confirmó que se rechazó el presupuesto en el servicio externo. Comuníquese con Grand Coast si desea conversar sobre una revisión."
+
+msgid "Grand Coast staff confirmed the approval in the external estimate service. The Owner will set up your project next."
+msgstr "El equipo de Grand Coast confirmó la aprobación en el servicio externo. El propietario configurará su proyecto a continuación."
+
+msgid "Grand Coast will connect your client record to this workspace before sharing an invitation."
+msgstr "Grand Coast conectará su cuenta de cliente con este espacio antes de enviarle una invitación."
+
+msgid "Grand Coast will share client-ready progress updates once a project is connected to your account."
+msgstr "Grand Coast compartirá actualizaciones preparadas para clientes cuando se vincule un proyecto con su cuenta."
+
+msgid "Have a good experience?"
+msgstr "¿Tuvo una buena experiencia?"
+
+msgid "Have a project in mind?"
+msgstr "¿Tiene un proyecto en mente?"
+
+msgid "Headline (Spanish)"
+msgstr "Titular (español)"
+
+msgid "Historical estimate records are read-only in GCC. There are no Accept or Decline actions in this portal."
+msgstr "Los presupuestos anteriores son de solo lectura en GCC. Este portal no permite aceptarlos ni rechazarlos."
+
+msgid "Historical status:"
+msgstr "Estado histórico:"
+
+msgid "Home"
+msgstr "Inicio"
+
+msgid "Hours:"
+msgstr "Horas:"
+
+msgid "If an eligible client or employee account uses that email, a one-time password reset link is on its way."
+msgstr "Si ese correo está asociado a una cuenta de cliente o empleado, recibirá un enlace de un solo uso para restablecer la contraseña."
+
+msgid "Important project alerts, decisions, and updates."
+msgstr "Alertas, decisiones y actualizaciones importantes del proyecto."
+
+msgid "Inactive"
+msgstr "Inactivo"
+
+msgid "Inbox"
+msgstr "Bandeja de entrada"
+
+msgid "Internal action list"
+msgstr "Lista interna de acciones"
+
+msgid "Internal employee work. Linking a lead, client, or project is optional."
+msgstr "Trabajo interno del equipo. Vincular un cliente potencial, cliente o proyecto es opcional."
+
+msgid "Internal project"
+msgstr "Proyecto interno"
+
+msgid "Internal reporting"
+msgstr "Informes internos"
+
+msgid "Invite employees and maintain access intentionally."
+msgstr "Invite a empleados y administre el acceso con cuidado."
+
+msgid "Invite links are manual and expire after seven days. Keep these people in view until they finish setup."
+msgstr "Las invitaciones se envían manualmente y vencen después de siete días. Mantenga a estas personas a la vista hasta que completen la configuración."
+
+msgid "Invite links expire after seven days and can only be used once."
+msgstr "Los enlaces de invitación vencen después de siete días y solo se pueden usar una vez."
+
+msgid "Invite needed"
+msgstr "Se necesita una invitación"
+
+msgid "Invite pending"
+msgstr "Invitación pendiente"
+
+msgid "Invite unavailable"
+msgstr "Invitación no disponible"
+
+msgid "Invite unavailable | Grand Coast Construction Inc."
+msgstr "Invitación no disponible | Grand Coast Construction Inc."
+
+msgid "Invoice"
+msgstr "Factura"
+
+msgid "Job title"
+msgstr "Puesto"
+
+msgid "Keep the next step moving."
+msgstr "Mantengamos el próximo paso en marcha."
+
+msgid "Keep the work moving"
+msgstr "Mantenga el trabajo en marcha"
+
+msgid "Keep your account details and access under your control."
+msgstr "Mantenga el control de los datos y el acceso a su cuenta."
+
+msgid "Keep your contact details current."
+msgstr "Mantenga sus datos de contacto actualizados."
+
+msgid "Last name"
+msgstr "Apellido"
+
+msgid "Latest update"
+msgstr "Actualización más reciente"
+
+msgid "Lead / client / project"
+msgstr "Cliente potencial / cliente / proyecto"
+
+msgid "Lead assignment updated."
+msgstr "Se actualizó la asignación del cliente potencial."
+
+msgid "Lead priority updated."
+msgstr "Se actualizó la prioridad del cliente potencial."
+
+msgid "Lead status updated."
+msgstr "Se actualizó el estado del cliente potencial."
+
+msgid "Lead ·"
+msgstr "Cliente potencial ·"
+
+msgid "Leads"
+msgstr "Clientes potenciales"
+
+msgid "Let’s plan the first step."
+msgstr "Planeemos el primer paso."
+
+msgid "Let’s talk through the first step."
+msgstr "Hablemos del primer paso."
+
+msgid "Live"
+msgstr "En vivo"
+
+msgid "Loading Grand Coast..."
+msgstr "Cargando Grand Coast..."
+
+msgid "Loading sign in..."
+msgstr "Cargando inicio de sesión..."
+
+msgid "Location"
+msgstr "Ubicación"
+
+msgid "Log out"
+msgstr "Cerrar sesión"
+
+msgid "Manage your access"
+msgstr "Administre su acceso"
+
+msgid "Manager correction"
+msgstr "Corrección del gerente"
+
+msgid "Managers can correct"
+msgstr "Los gerentes pueden corregir"
+
+msgid "Mark all read"
+msgstr "Marcar todo como leído"
+
+msgid "Mark as read"
+msgstr "Marcar como leído"
+
+msgid "Mark complete"
+msgstr "Marcar como completada"
+
+msgid "Mark read"
+msgstr "Marcar como leído"
+
+msgid "Me"
+msgstr "Yo"
+
+msgid "Media"
+msgstr "Multimedia"
+
+msgid "Media details saved."
+msgstr "Se guardaron los datos multimedia."
+
+msgid "Media reports"
+msgstr "Informes multimedia"
+
+msgid "Menu"
+msgstr "Menú"
+
+msgid "Message"
+msgstr "Mensaje"
+
+msgid "Message sent"
+msgstr "Mensaje enviado"
+
+msgid "Message the team"
+msgstr "Escribir al equipo"
+
+msgid "Messages"
+msgstr "Mensajes"
+
+msgid "Messages with"
+msgstr "Mensajes con"
+
+msgid "Messages with Grand Coast"
+msgstr "Mensajes con Grand Coast"
+
+msgid "Milestones"
+msgstr "Hitos"
+
+msgid "Miscellaneous"
+msgstr "Otros"
+
+msgid "Mon"
+msgstr "Lun"
+
+msgid "Month grid shows this employee's shifts. Day details list all employee shifts."
+msgstr "La vista mensual muestra los turnos de este empleado. Los detalles diarios muestran todos los turnos del equipo."
+
+msgid "Month grid shows this employee’s shifts. Day details list all employee shifts."
+msgstr "La vista mensual muestra los turnos de este empleado. Los detalles diarios muestran los turnos del equipo."
+
+msgid "Monthly view"
+msgstr "Vista mensual"
+
+msgid "More"
+msgstr "Más"
+
+msgid "More updates will appear as work progresses."
+msgstr "Aparecerán más actualizaciones a medida que avance el trabajo."
+
+msgid "Most recent 50 entries"
+msgstr "50 registros más recientes"
+
+msgid "My schedule"
+msgstr "Mi horario"
+
+msgid "Needed by"
+msgstr "Fecha requerida"
+
+msgid "Needs attention"
+msgstr "Requiere atención"
+
+msgid "New task"
+msgstr "Nueva tarea"
+
+msgid "Next"
+msgstr "Siguiente"
+
+msgid "Next step"
+msgstr "Próximo paso"
+
+msgid "Next up"
+msgstr "Lo siguiente"
+
+msgid "Next →"
+msgstr "Siguiente →"
+
+msgid "No active employees are available for scheduling."
+msgstr "No hay empleados activos disponibles para programar."
+
+msgid "No active entry"
+msgstr "No hay un registro activo"
+
+msgid "No assigned work today."
+msgstr "No hay trabajo asignado para hoy."
+
+msgid "No calendar event changes were needed."
+msgstr "No fue necesario cambiar el evento del calendario."
+
+msgid "No clients match this search."
+msgstr "Ningún cliente coincide con esta búsqueda."
+
+msgid "No effective shift"
+msgstr "No hay un turno vigente"
+
+msgid "No employee day schedule changes were needed."
+msgstr "No fue necesario cambiar el horario de ese día."
+
+msgid "No employee profiles yet. Create an invite to add the first teammate."
+msgstr "Todavía no hay perfiles de empleados. Cree una invitación para agregar al primer miembro del equipo."
+
+msgid "No employee shift"
+msgstr "No hay turno asignado"
+
+msgid "No employee shift is configured for this day."
+msgstr "No hay un turno configurado para este día."
+
+msgid "No employee shifts scheduled"
+msgstr "No hay turnos del equipo programados"
+
+msgid "No employee time entries have been recorded yet."
+msgstr "Todavía no se han registrado horas de empleados."
+
+msgid "No messages yet. Start the conversation below."
+msgstr "Aún no hay mensajes. Inicie la conversación abajo."
+
+msgid "No milestones have been added."
+msgstr "Aún no se han agregado hitos."
+
+msgid "No open tasks assigned."
+msgstr "No hay tareas abiertas asignadas."
+
+msgid "No project documents have been uploaded yet."
+msgstr "Aún no se han subido documentos del proyecto."
+
+msgid "No project media is available to this role yet."
+msgstr "Todavía no hay archivos multimedia del proyecto disponibles para este rol."
+
+msgid "No project messages yet."
+msgstr "Todavía no hay mensajes del proyecto."
+
+msgid "No project or task dates are set for this month. Dates and milestones will appear here alongside employee hours."
+msgstr "No hay fechas de proyectos o tareas para este mes. Aquí aparecerán junto con el horario del equipo."
+
+msgid "No project selected"
+msgstr "No hay un proyecto seleccionado"
+
+msgid "No projects are assigned to this workspace yet."
+msgstr "Todavía no hay proyectos asignados a este espacio."
+
+msgid "No projects are assigned yet."
+msgstr "Aún no hay proyectos asignados."
+
+msgid "No projects are connected yet."
+msgstr "Aún no hay proyectos vinculados."
+
+msgid "No results found."
+msgstr "No se encontraron resultados."
+
+msgid "No schedule events are visible for this day."
+msgstr "No hay eventos programados visibles para este día."
+
+msgid "No schedule events or job dates are visible for this workspace."
+msgstr "No hay eventos de calendario ni fechas de trabajo visibles en este espacio."
+
+msgid "No schedule items are coming up."
+msgstr "No hay eventos próximos en el calendario."
+
+msgid "No scheduled event today."
+msgstr "No hay eventos programados para hoy."
+
+msgid "No shift in short-day hours"
+msgstr "No hay turno dentro del horario reducido"
+
+msgid "No task selected"
+msgstr "No hay una tarea seleccionada"
+
+msgid "No tasks are assigned yet."
+msgstr "Aún no hay tareas asignadas."
+
+msgid "No tasks match these filters."
+msgstr "Ninguna tarea coincide con estos filtros."
+
+msgid "No time entries yet."
+msgstr "Aún no hay registros de horas."
+
+msgid "No weekly hours or date-specific schedule is configured for this employee on this day."
+msgstr "Este empleado no tiene horas semanales ni un horario específico configurado para este día."
+
+msgid "No weekly schedule changes were needed."
+msgstr "No fue necesario cambiar el horario semanal."
+
+msgid "Normal clears the exception. Short-day events must fit between the configured hours; closed days cannot contain events."
+msgstr "El horario normal elimina la excepción. Los eventos de un día reducido deben quedar dentro del horario configurado; los días cerrados no pueden tener eventos."
+
+msgid "Normal day"
+msgstr "Día normal"
+
+msgid "Not scheduled"
+msgstr "No programado"
+
+msgid "Not scheduled during the short-day hours"
+msgstr "Fuera del horario reducido"
+
+msgid "Not shared in the portal yet"
+msgstr "Aún no se ha compartido en el portal"
+
+msgid "Note"
+msgstr "Nota"
+
+msgid "Notes"
+msgstr "Notas"
+
+msgid "Nothing flagged yet"
+msgstr "Todavía no hay asuntos señalados"
+
+msgid "Notifications"
+msgstr "Notificaciones"
+
+msgid "OPERATIONS WORKSPACE"
+msgstr "ESPACIO DE TRABAJO DE OPERACIONES"
+
+msgid "Off"
+msgstr "Inactivo"
+
+msgid "On"
+msgstr "Activo"
+
+msgid "One clear conversation with the Grand Coast team."
+msgstr "Un solo hilo claro para comunicarse con el equipo de Grand Coast."
+
+msgid "One clear thread for client questions, updates, and replies."
+msgstr "Un hilo claro para preguntas, actualizaciones y respuestas de clientes."
+
+msgid "One clear thread for questions, updates, and replies."
+msgstr "Un hilo claro para preguntas, actualizaciones y respuestas."
+
+msgid "Only employees assigned to this project can read or reply here."
+msgstr "Solo los empleados asignados a este proyecto pueden leer o responder aquí."
+
+msgid "Open actual estimate →"
+msgstr "Abrir presupuesto actual →"
+
+msgid "Open estimate & files"
+msgstr "Abrir presupuesto y archivos"
+
+msgid "Open estimate link →"
+msgstr "Abrir enlace del presupuesto →"
+
+msgid "Open estimates and client-ready files."
+msgstr "Abra los presupuestos y archivos preparados para clientes."
+
+msgid "Open invoice →"
+msgstr "Abrir factura →"
+
+msgid "Open larger photo"
+msgstr "Abrir foto ampliada"
+
+msgid "Open navigation"
+msgstr "Abrir navegación"
+
+msgid "Open project"
+msgstr "Abrir proyecto"
+
+msgid "Open project work area →"
+msgstr "Abrir el espacio de trabajo del proyecto →"
+
+msgid "Open related work →"
+msgstr "Abrir trabajo relacionado →"
+
+msgid "Open tasks"
+msgstr "Tareas abiertas"
+
+msgid "Open the estimate and files page to access the estimate link shared by Grand Coast. Questions can be sent from Messages."
+msgstr "Abra la página de presupuestos y archivos para acceder al enlace que compartió Grand Coast. Puede enviar preguntas desde Mensajes."
+
+msgid "Open the project, see the assigned work, then send the office a clear update from the jobsite."
+msgstr "Abra el proyecto, revise el trabajo asignado y envíe una actualización clara a la oficina desde la obra."
+
+msgid "Open work area →"
+msgstr "Abrir área de trabajo →"
+
+msgid "Opening workspace..."
+msgstr "Abriendo el espacio de trabajo..."
+
+msgid "Operations"
+msgstr "Operaciones"
+
+msgid "Operations alerts"
+msgstr "Alertas de Operaciones"
+
+msgid "Operations workspace"
+msgstr "Espacio de Operaciones"
+
+msgid "Optional"
+msgstr "Opcional"
+
+msgid "Our process"
+msgstr "Nuestro proceso"
+
+msgid "Our process details will be added soon."
+msgstr "Pronto agregaremos los detalles de nuestro proceso."
+
+msgid "Our process |"
+msgstr "Nuestro proceso |"
+
+msgid "Overview"
+msgstr "Resumen"
+
+msgid "Owner & project team"
+msgstr "Propietario y equipo del proyecto"
+
+msgid "Owner controls"
+msgstr "Controles del propietario"
+
+msgid "Owner job timeline"
+msgstr "Cronograma del proyecto"
+
+msgid "Owner view: employee hours plus every project/task date and scheduled job event."
+msgstr "Vista del propietario: horas del equipo, fechas de proyectos y tareas, y eventos de trabajo programados."
+
+msgid "PT"
+msgstr "Hora del Pacífico"
+
+msgid "Pacific Time"
+msgstr "Hora del Pacífico"
+
+msgid "Password"
+msgstr "Contraseña"
+
+msgid "Password reset link ready."
+msgstr "El enlace para restablecer la contraseña está listo."
+
+msgid "Password updated"
+msgstr "Contraseña actualizada"
+
+msgid "Password updated | Grand Coast Construction Inc."
+msgstr "Contraseña actualizada | Grand Coast Construction Inc."
+
+msgid "Password updated."
+msgstr "La contraseña se actualizó."
+
+msgid "Pause steps"
+msgstr "Pausar los pasos"
+
+msgid "Payment schedule"
+msgstr "Calendario de pagos"
+
+msgid "Payments are recorded by Grand Coast. No card or bank details are stored in this portal."
+msgstr "Grand Coast registra los pagos. Este portal no almacena datos de tarjetas ni cuentas bancarias."
+
+msgid "Pending onboarding"
+msgstr "Configuración pendiente"
+
+msgid "People & access"
+msgstr "Personas y acceso"
+
+msgid "Persistent alerts for the work moving through Grand Coast."
+msgstr "Alertas persistentes del trabajo en curso en Grand Coast."
+
+msgid "Phone"
+msgstr "Teléfono"
+
+msgid "Photos & videos"
+msgstr "Fotos y videos"
+
+msgid "Photos & videos from the job."
+msgstr "Fotos y videos del trabajo."
+
+msgid "Photos and videos will be shared here as the project moves forward."
+msgstr "Aquí se compartirán fotos y videos a medida que avance el proyecto."
+
+msgid "Please add a message before sending."
+msgstr "Escriba un mensaje antes de enviarlo."
+
+msgid "Please choose a project and valid media files."
+msgstr "Seleccione un proyecto y archivos multimedia válidos."
+
+msgid "Please choose a valid document and project."
+msgstr "Seleccione un documento y un proyecto válidos."
+
+msgid "Please correct the calendar event details."
+msgstr "Corrija los datos del evento del calendario."
+
+msgid "Please correct the client details and try again."
+msgstr "Corrija los datos del cliente e inténtelo de nuevo."
+
+msgid "Please correct the employee day override details."
+msgstr "Corrija los datos de la excepción de horario del empleado."
+
+msgid "Please correct the media details and try again."
+msgstr "Corrija los datos multimedia e inténtelo de nuevo."
+
+msgid "Please correct the task details and try again."
+msgstr "Corrija los datos de la tarea e inténtelo de nuevo."
+
+msgid "Please correct the time entry."
+msgstr "Corrija las horas registradas."
+
+msgid "Please correct the weekly shift details."
+msgstr "Corrija los datos del turno semanal."
+
+msgid "Please correct your profile details."
+msgstr "Corrija los datos de su perfil."
+
+msgid "Please write a message before replying."
+msgstr "Escriba un mensaje antes de responder."
+
+msgid "Portal active"
+msgstr "Portal activo"
+
+msgid "Portal invite email failed. Copy the one-time link from the alert above."
+msgstr "No se pudo enviar la invitación al portal. Copie el enlace de un solo uso de la alerta anterior."
+
+msgid "Portal invite email is pending or disabled. Copy the one-time link from the alert above."
+msgstr "El envío de la invitación al portal está pendiente o desactivado. Copie el enlace de un solo uso de la alerta anterior."
+
+msgid "Portal invite email was sent to"
+msgstr "Se envió la invitación al portal a"
+
+msgid "Post draft saved. The live post is unchanged."
+msgstr "Se guardó el borrador de la publicación. La publicación activa no cambió."
+
+msgid "Post unpublished. Its original photos and videos are retained."
+msgstr "Se retiró la publicación. Las fotos y videos originales se conservaron."
+
+msgid "Pre-project scope"
+msgstr "Alcance previo al proyecto"
+
+msgid "Previous"
+msgstr "Anterior"
+
+msgid "Previous updates"
+msgstr "Actualizaciones anteriores"
+
+msgid "Priority"
+msgstr "Prioridad"
+
+msgid "Privacy Policy"
+msgstr "Política de privacidad"
+
+msgid "Private work area · Updates are saved to the application."
+msgstr "Área de trabajo privada · Las actualizaciones se guardan en la aplicación."
+
+msgid "Process"
+msgstr "Proceso"
+
+msgid "Process step deleted."
+msgstr "Se eliminó el paso del proceso."
+
+msgid "Process step saved."
+msgstr "Se guardó el paso del proceso."
+
+msgid "Product decisions"
+msgstr "Decisiones sobre productos"
+
+msgid "Profile"
+msgstr "Perfil"
+
+msgid "Project"
+msgstr "Proyecto"
+
+msgid "Project contact"
+msgstr "Contacto del proyecto"
+
+msgid "Project context for your assignments."
+msgstr "Contexto de los proyectos que tiene asignados."
+
+msgid "Project dates, task due and completion times, milestones, and project events appear alongside employee hours."
+msgstr "Las fechas del proyecto, vencimientos y finalizaciones de tareas, hitos y eventos aparecen junto con las horas del equipo."
+
+msgid "Project decisions"
+msgstr "Decisiones del proyecto"
+
+msgid "Project details"
+msgstr "Detalles del proyecto"
+
+msgid "Project details saved."
+msgstr "Se guardaron los datos del proyecto."
+
+msgid "Project document uploaded."
+msgstr "Se subió el documento del proyecto."
+
+msgid "Project documents"
+msgstr "Documentos del proyecto"
+
+msgid "Project gallery"
+msgstr "Galería de proyectos"
+
+msgid "Project history"
+msgstr "Historial del proyecto"
+
+msgid "Project milestones"
+msgstr "Hitos del proyecto"
+
+msgid "Project note"
+msgstr "Nota del proyecto"
+
+msgid "Project or task"
+msgstr "Proyecto o tarea"
+
+msgid "Project photos and videos will appear here when published."
+msgstr "Las fotos y videos del proyecto aparecerán aquí cuando se publiquen."
+
+msgid "Project post published with its photos and videos."
+msgstr "Se publicó la entrada del proyecto con sus fotos y videos."
+
+msgid "Project progress"
+msgstr "Avance del proyecto"
+
+msgid "Project records"
+msgstr "Registros del proyecto"
+
+msgid "Project story"
+msgstr "Historia del proyecto"
+
+msgid "Project type"
+msgstr "Tipo de proyecto"
+
+msgid "Project update published to the selected audience."
+msgstr "La actualización del proyecto se publicó para el público seleccionado."
+
+msgid "Project updates"
+msgstr "Actualizaciones del proyecto"
+
+msgid "Project updates will appear here."
+msgstr "Las actualizaciones del proyecto aparecerán aquí."
+
+msgid "Project updates, decisions, and next steps in one place."
+msgstr "Actualizaciones del proyecto, decisiones y próximos pasos en un solo lugar."
+
+msgid "Project workspace"
+msgstr "Espacio de trabajo del proyecto"
+
+msgid "Project workspace file"
+msgstr "Archivo del espacio de trabajo del proyecto"
+
+msgid "Projects"
+msgstr "Proyectos"
+
+msgid "Projects |"
+msgstr "Proyectos |"
+
+msgid "Public city or region"
+msgstr "Ciudad o región pública"
+
+msgid "Public city or region (Spanish)"
+msgstr "Ciudad o región pública (español)"
+
+msgid "Public project description"
+msgstr "Descripción pública del proyecto"
+
+msgid "Public project description (Spanish)"
+msgstr "Descripción pública del proyecto (español)"
+
+msgid "Public project title"
+msgstr "Título público del proyecto"
+
+msgid "Public project title (Spanish)"
+msgstr "Título público del proyecto (español)"
+
+msgid "Publish Content"
+msgstr "Publicar contenido"
+
+msgid "Published project galleries, shared by Grand Coast."
+msgstr "Galerías de proyectos publicadas por Grand Coast."
+
+msgid "Quantity"
+msgstr "Cantidad"
+
+msgid "Questions, updates, and replies."
+msgstr "Preguntas, actualizaciones y respuestas."
+
+msgid "Read on Google"
+msgstr "Leer en Google"
+
+msgid "Read-only team schedule."
+msgstr "Horario del equipo de solo lectura."
+
+msgid "Ready when you are"
+msgstr "Cuando usted esté listo"
+
+msgid "Recent entries"
+msgstr "Registros recientes"
+
+msgid "Record your work hours in Pacific time. This is not payroll software."
+msgstr "Registre sus horas de trabajo en horario del Pacífico. Este sistema no procesa nóminas."
+
+msgid "Recovery unavailable"
+msgstr "Recuperación no disponible"
+
+msgid "Recurring weekly template"
+msgstr "Horario semanal recurrente"
+
+msgid "Refreshing Grand Coast..."
+msgstr "Actualizando Grand Coast..."
+
+msgid "Regenerate portal invite"
+msgstr "Generar otra invitación al portal"
+
+msgid "Relationships"
+msgstr "Relaciones"
+
+msgid "Repeats weekly"
+msgstr "Se repite cada semana"
+
+msgid "Replies stay connected to your Grand Coast workspace."
+msgstr "Las respuestas permanecen en su espacio de Grand Coast."
+
+msgid "Reply"
+msgstr "Responder"
+
+msgid "Reply to client"
+msgstr "Responder al cliente"
+
+msgid "Report"
+msgstr "Informar"
+
+msgid "Report a problem"
+msgstr "Informar un problema"
+
+msgid "Request a new password reset link to continue."
+msgstr "Solicite un nuevo enlace para restablecer la contraseña."
+
+msgid "Request an Estimate"
+msgstr "Solicitar un presupuesto"
+
+msgid "Request an Estimate →"
+msgstr "Solicitar un presupuesto →"
+
+msgid "Request an estimate |"
+msgstr "Solicite un presupuesto |"
+
+msgid "Request materials"
+msgstr "Solicitar materiales"
+
+msgid "Reset password"
+msgstr "Restablecer contraseña"
+
+msgid "Reset password | Grand Coast Construction Inc."
+msgstr "Restablecer contraseña | Grand Coast Construction Inc."
+
+msgid "Reset your password."
+msgstr "Restablezca su contraseña."
+
+msgid "Residential construction"
+msgstr "Construcción residencial"
+
+msgid "Return to Grand Coast"
+msgstr "Volver a Grand Coast"
+
+msgid "Return to public site"
+msgstr "Volver al sitio público"
+
+msgid "Return to sign in"
+msgstr "Volver al inicio de sesión"
+
+msgid "Return to sign in →"
+msgstr "Volver al inicio de sesión →"
+
+msgid "Return to website →"
+msgstr "Volver al sitio web →"
+
+msgid "Review"
+msgstr "Ver"
+
+msgid "Review and respond in the external estimate service. Grand Coast will record the result here after checking it."
+msgstr "Revise y responda en el servicio externo de presupuestos. Grand Coast registrará aquí el resultado después de verificarlo."
+
+msgid "Review employee clock-in and clock-out records in Pacific time."
+msgstr "Revise los registros de entrada y salida del equipo en hora del Pacífico."
+
+msgid "Review estimate"
+msgstr "Revisar presupuesto"
+
+msgid "Review project alerts and decisions."
+msgstr "Revise las alertas y decisiones del proyecto."
+
+msgid "Review tasks"
+msgstr "Revisar tareas"
+
+msgid "Review tasks →"
+msgstr "Revisar tareas →"
+
+msgid "Review us on Google →"
+msgstr "Déjenos una reseña en Google →"
+
+msgid "Reviews are displayed in Google’s returned relevance order."
+msgstr "Las reseñas aparecen en el orden de relevancia proporcionado por Google."
+
+msgid "Revoke portal access"
+msgstr "Revocar acceso al portal"
+
+msgid "Role:"
+msgstr "Rol:"
+
+msgid "Sat"
+msgstr "Sáb"
+
+msgid "Save"
+msgstr "Guardar"
+
+msgid "Save changes"
+msgstr "Guardar cambios"
+
+msgid "Save client"
+msgstr "Guardar cliente"
+
+msgid "Save correction"
+msgstr "Guardar corrección"
+
+msgid "Save day setting"
+msgstr "Guardar horario del día"
+
+msgid "Save employee day"
+msgstr "Guardar horario del empleado"
+
+msgid "Save event"
+msgstr "Guardar evento"
+
+msgid "Save note"
+msgstr "Guardar nota"
+
+msgid "Save password"
+msgstr "Guardar contraseña"
+
+msgid "Save password →"
+msgstr "Guardar contraseña →"
+
+msgid "Save profile"
+msgstr "Guardar perfil"
+
+msgid "Save task"
+msgstr "Guardar tarea"
+
+msgid "Save weekly schedule"
+msgstr "Guardar horario semanal"
+
+msgid "Schedule"
+msgstr "Horario"
+
+msgid "Schedule details"
+msgstr "Detalles del horario"
+
+msgid "Scope updates"
+msgstr "Actualizaciones del alcance"
+
+msgid "Secure access"
+msgstr "Acceso seguro"
+
+msgid "See Our Process"
+msgstr "Conozca nuestro proceso"
+
+msgid "See all"
+msgstr "Ver todo"
+
+msgid "See all reviews"
+msgstr "Ver todas las reseñas"
+
+msgid "See more projects"
+msgstr "Ver más proyectos"
+
+msgid "See the latest project progress."
+msgstr "Consulte el avance más reciente del proyecto."
+
+msgid "Select a client to see access, projects, and messages."
+msgstr "Seleccione un cliente para ver su acceso, proyectos y mensajes."
+
+msgid "Select a task to see ownership and status."
+msgstr "Seleccione una tarea para ver quién es responsable y su estado."
+
+msgid "Selections"
+msgstr "Selecciones"
+
+msgid "Send a message directly to the Grand Coast team."
+msgstr "Envíe un mensaje directamente al equipo de Grand Coast."
+
+msgid "Send message"
+msgstr "Enviar mensaje"
+
+msgid "Send problem report"
+msgstr "Enviar informe del problema"
+
+msgid "Send progress update"
+msgstr "Enviar actualización de avance"
+
+msgid "Send request"
+msgstr "Enviar solicitud"
+
+msgid "Send reset link"
+msgstr "Enviar enlace para restablecer"
+
+msgid "Send reset link →"
+msgstr "Enviar enlace para restablecer →"
+
+msgid "Sent to"
+msgstr "Enviado a"
+
+msgid "Service deleted."
+msgstr "Se eliminó el servicio."
+
+msgid "Service saved."
+msgstr "Se guardó el servicio."
+
+msgid "Services"
+msgstr "Servicios"
+
+msgid "Services |"
+msgstr "Servicios |"
+
+msgid "Serving Ventura County and nearby Southern California communities"
+msgstr "Atendemos el condado de Ventura y comunidades cercanas del sur de California"
+
+msgid "Session"
+msgstr "Sesión"
+
+msgid "Set a new password for your Grand Coast workspace."
+msgstr "Establezca una nueva contraseña para su espacio de Grand Coast."
+
+msgid "Set each employee's recurring workdays and hours. One save updates the full weekly template; use a date exception for a one-time change."
+msgstr "Configure los días y horas de trabajo habituales de cada empleado. Al guardar, se actualiza el horario semanal completo; use una excepción de fecha para un cambio de un solo día."
+
+msgid "Set each employee’s recurring workdays and hours. One save updates the full weekly template; use a date exception for a one-time change."
+msgstr "Configure los días y horas de trabajo habituales de cada empleado. Al guardar, se actualiza el horario semanal completo; use una excepción de fecha para un cambio de un solo día."
+
+msgid "Set the schedule exception for a specific date."
+msgstr "Configure una excepción de horario para una fecha específica."
+
+msgid "Set up your portal."
+msgstr "Configure su portal."
+
+msgid "Setup in progress"
+msgstr "Configuración en curso"
+
+msgid "Severity"
+msgstr "Gravedad"
+
+msgid "Share field context with the Operations team."
+msgstr "Comparta información del trabajo de campo con el equipo de Operaciones."
+
+msgid "Shared by Grand Coast as work moves forward."
+msgstr "Compartidos por Grand Coast a medida que avanza el trabajo."
+
+msgid "Shared progress photos and videos will become available after a project is connected to your account."
+msgstr "Las fotos y videos de avance estarán disponibles cuando se vincule un proyecto con su cuenta."
+
+msgid "Shift"
+msgstr "Turno"
+
+msgid "Shift for"
+msgstr "Turno de"
+
+msgid "Sign in"
+msgstr "Iniciar sesión"
+
+msgid "Sign in to your Grand Coast workspace."
+msgstr "Inicie sesión en su espacio de Grand Coast."
+
+msgid "Sign in | Grand Coast Construction Inc."
+msgstr "Iniciar sesión | Grand Coast Construction Inc."
+
+msgid "Sign in →"
+msgstr "Iniciar sesión →"
+
+msgid "Sign out"
+msgstr "Cerrar sesión"
+
+msgid "Sign out on this device or permanently remove your employee access and personal details."
+msgstr "Cierre sesión en este dispositivo o elimine permanentemente su acceso de empleado y sus datos personales."
+
+msgid "Sign out or permanently remove your employee account and personal details."
+msgstr "Cierre sesión o elimine permanentemente su cuenta de empleado y sus datos personales."
+
+msgid "Simple on the surface"
+msgstr "Sencillo y claro"
+
+msgid "Staff"
+msgstr "Personal"
+
+msgid "Staff assignment required"
+msgstr "Se requiere asignación de personal"
+
+msgid "Staff preview: use the Operations client workspace to send a message."
+msgstr "Vista previa del personal: use el espacio de clientes de Operaciones para enviar un mensaje."
+
+msgid "Stage"
+msgstr "Etapa"
+
+msgid "Start"
+msgstr "Inicio"
+
+msgid "Start again →"
+msgstr "Volver a empezar →"
+
+msgid "Start the conversation"
+msgstr "Comencemos la conversación"
+
+msgid "Started"
+msgstr "Inicio"
+
+msgid "Status"
+msgstr "Estado"
+
+msgid "Status updates are limited to the assigned employee."
+msgstr "Solo el empleado asignado puede actualizar el estado."
+
+msgid "Submit choice"
+msgstr "Enviar selección"
+
+msgid "Submit report"
+msgstr "Enviar informe"
+
+msgid "Summary"
+msgstr "Resumen"
+
+msgid "Sun"
+msgstr "Dom"
+
+msgid "Supporting copy (Spanish)"
+msgstr "Texto de apoyo (español)"
+
+msgid "Switch to English"
+msgstr "Cambiar a inglés"
+
+msgid "Switch to Spanish"
+msgstr "Cambiar a español"
+
+msgid "Task"
+msgstr "Tarea"
+
+msgid "Task changes saved."
+msgstr "Se guardaron los cambios de la tarea."
+
+msgid "Task editor"
+msgstr "Editor de tareas"
+
+msgid "Task record"
+msgstr "Registro de tarea"
+
+msgid "Task saved."
+msgstr "Se guardó la tarea."
+
+msgid "Task status updated."
+msgstr "Se actualizó el estado de la tarea."
+
+msgid "Tasks"
+msgstr "Tareas"
+
+msgid "Team"
+msgstr "Equipo"
+
+msgid "Team reports are internal until the Owner publishes a client update."
+msgstr "Los informes del equipo son internos hasta que el propietario publique una actualización para el cliente."
+
+msgid "Team schedule"
+msgstr "Horario del equipo"
+
+msgid "Tell us about the project"
+msgstr "Cuéntenos sobre el proyecto"
+
+msgid "Tell us what you’re building."
+msgstr "Cuéntenos qué quiere construir."
+
+msgid "Terms of Service"
+msgstr "Términos del servicio"
+
+msgid "Thanks for reaching out. We will be in touch soon."
+msgstr "Gracias por comunicarse. Pronto nos pondremos en contacto."
+
+msgid "That employee cannot be assigned to this lead."
+msgstr "No se puede asignar ese empleado a este cliente potencial."
+
+msgid "That link has expired."
+msgstr "Ese enlace venció."
+
+msgid "That task status is not valid."
+msgstr "Ese estado de la tarea no es válido."
+
+msgid "The Grand Coast team will post the next client-visible update here."
+msgstr "El equipo de Grand Coast publicará aquí la próxima actualización para clientes."
+
+msgid "The experience matters."
+msgstr "La experiencia importa."
+
+msgid "The link expires after one hour and does not sign you in automatically."
+msgstr "El enlace vence después de una hora y no iniciará sesión automáticamente."
+
+msgid "The project record remains the center of delivery."
+msgstr "El registro del proyecto sigue siendo el centro de la ejecución."
+
+msgid "The project sequence will appear here soon."
+msgstr "Pronto aparecerán aquí las etapas del proyecto."
+
+msgid "The task already has that status."
+msgstr "La tarea ya tiene ese estado."
+
+msgid "The weekly schedule resumes after this closure."
+msgstr "El horario semanal se reanuda después de este cierre."
+
+msgid "This agreement is not currently awaiting acceptance."
+msgstr "Este acuerdo no está pendiente de aceptación."
+
+msgid "This change order is not currently awaiting approval."
+msgstr "Esta orden de cambio no está pendiente de aprobación."
+
+msgid "This client already has portal access."
+msgstr "Este cliente ya tiene acceso al portal."
+
+msgid "This client does not have active portal access."
+msgstr "Este cliente no tiene acceso activo al portal."
+
+msgid "This employee has a date-specific day off."
+msgstr "Este empleado tiene el día libre en esta fecha."
+
+msgid "This estimate status was already recorded."
+msgstr "Ese estado del presupuesto ya estaba registrado."
+
+msgid "This invite has expired."
+msgstr "Esta invitación venció."
+
+msgid "This is an older estimate record kept for reference. Message Grand Coast for current scope, pricing, or a revised estimate."
+msgstr "Este registro de presupuesto anterior se conserva como referencia. Escriba a Grand Coast para consultar el alcance, el precio o un presupuesto actualizado."
+
+msgid "This link can be used once. You’ll sign in from the login page afterward."
+msgstr "Este enlace solo se puede usar una vez. Después, inicie sesión desde la página de acceso."
+
+msgid "This reviewer shared a rating without a written comment."
+msgstr "Esta persona dejó una calificación sin comentario escrito."
+
+msgid "This schedule repeats every week; date exceptions apply to one specific day."
+msgstr "Este horario se repite cada semana; las excepciones de fecha se aplican a un solo día."
+
+msgid "This secure invitation is for"
+msgstr "Esta invitación segura es para"
+
+msgid "This selection is no longer awaiting your choice."
+msgstr "Esta selección ya no está pendiente de su respuesta."
+
+msgid "Thoughtful construction. Clear communication. Better builds."
+msgstr "Construcción bien pensada. Comunicación clara. Mejores proyectos."
+
+msgid "Thu"
+msgstr "Jue"
+
+msgid "Time"
+msgstr "Horas"
+
+msgid "Time entry corrected."
+msgstr "Se corrigieron las horas registradas."
+
+msgid "Time tracking"
+msgstr "Registro de horas"
+
+msgid "Timezone"
+msgstr "Zona horaria"
+
+msgid "Today's assigned work"
+msgstr "Trabajo asignado para hoy"
+
+msgid "Today's work"
+msgstr "Trabajo de hoy"
+
+msgid "Today's work | Grand Coast Construction Inc."
+msgstr "Trabajo de hoy | Grand Coast Construction Inc."
+
+msgid "Today’s assigned work"
+msgstr "Trabajo asignado para hoy"
+
+msgid "Today’s work"
+msgstr "Trabajo de hoy"
+
+msgid "Today’s work | Grand Coast Construction Inc."
+msgstr "Trabajo de hoy | Grand Coast Construction Inc."
+
+msgid "Try again"
+msgstr "Intentar de nuevo"
+
+msgid "Try another email"
+msgstr "Probar con otro correo"
+
+msgid "Tue"
+msgstr "Mar"
+
+msgid "Type DELETE exactly to confirm account deletion."
+msgstr "Escriba DELETE exactamente para confirmar la eliminación de la cuenta."
+
+msgid "Type DELETE to confirm"
+msgstr "Escriba DELETE para confirmar"
+
+msgid "Unable to reach Grand Coast"
+msgstr "No se pudo conectar con Grand Coast"
+
+msgid "Unassigned"
+msgstr "Sin asignar"
+
+msgid "Unlinked work"
+msgstr "Trabajo sin vincular"
+
+msgid "Unread messages"
+msgstr "Mensajes sin leer"
+
+msgid "Upcoming schedule"
+msgstr "Próximo horario"
+
+msgid "Update"
+msgstr "Actualizar"
+
+msgid "Update sent to the client."
+msgstr "Se envió la actualización al cliente."
+
+msgid "Update status"
+msgstr "Actualizar estado"
+
+msgid "Update the password for"
+msgstr "Actualizar la contraseña de"
+
+msgid "Update title"
+msgstr "Título de la actualización"
+
+msgid "Updated"
+msgstr "Actualizado"
+
+msgid "Updated from your project workspace"
+msgstr "Actualizado desde el espacio de su proyecto"
+
+msgid "Updates"
+msgstr "Actualizaciones"
+
+msgid "Updates will appear after setup is complete."
+msgstr "Las actualizaciones aparecerán cuando termine la configuración."
+
+msgid "Updates will appear as work progresses."
+msgstr "Las actualizaciones aparecerán a medida que avance el trabajo."
+
+msgid "Upload document"
+msgstr "Subir documento"
+
+msgid "Upload project media"
+msgstr "Subir archivos multimedia del proyecto"
+
+msgid "Upload project photos and videos for the team. These originals remain private until an Owner prepares a separate client share or website publication."
+msgstr "Suba fotos y videos del proyecto para el equipo. Los originales seguirán siendo privados hasta que el propietario prepare una copia para el cliente o una publicación en el sitio web."
+
+msgid "Upload up to 20 files at a time."
+msgstr "Suba hasta 20 archivos a la vez."
+
+msgid "Use camera"
+msgstr "Usar cámara"
+
+msgid "Use the one-time copy link below:"
+msgstr "Use el enlace de un solo uso que aparece abajo:"
+
+msgid "Username"
+msgstr "Nombre de usuario"
+
+msgid "Video"
+msgstr "Video"
+
+msgid "View details"
+msgstr "Ver detalles"
+
+msgid "View details →"
+msgstr "Ver detalles →"
+
+msgid "View larger"
+msgstr "Ampliar imagen"
+
+msgid "View shared photos and videos."
+msgstr "Vea las fotos y videos compartidos."
+
+msgid "View signed agreement →"
+msgstr "Ver acuerdo firmado →"
+
+msgid "View tasks →"
+msgstr "Ver tareas →"
+
+msgid "Visible records"
+msgstr "Registros visibles"
+
+msgid "We couldn’t send your message. Check your connection and try again."
+msgstr "No pudimos enviar su mensaje. Revise su conexión e inténtelo de nuevo."
+
+msgid "Website Publishing"
+msgstr "Publicación del sitio web"
+
+msgid "Wed"
+msgstr "Mié"
+
+msgid "Weekly schedule resumes after this closure."
+msgstr "El horario semanal se reanuda después de este cierre."
+
+msgid "Weekly schedule saved."
+msgstr "Se guardó el horario semanal."
+
+msgid "Weekly templates"
+msgstr "Horarios semanales"
+
+msgid "Welcome back."
+msgstr "Le damos la bienvenida."
+
+msgid "Welcome,"
+msgstr "Le damos la bienvenida,"
+
+msgid "We’re preparing your project workspace."
+msgstr "Estamos preparando el espacio de su proyecto."
+
+msgid "What do you need?"
+msgstr "?Qu? necesita?"
+
+msgid "What is wrong?"
+msgstr "?Qu? problema hay?"
+
+msgid "What we do"
+msgstr "Lo que hacemos"
+
+msgid "What’s happening on your project."
+msgstr "Novedades de su proyecto."
+
+msgid "When"
+msgstr "Cuándo"
+
+msgid "When a project is assigned, its address, work, schedule, and capture tools will appear here."
+msgstr "Cuando se le asigne un proyecto, aquí aparecerán su dirección, tareas, horario y herramientas para enviar información."
+
+msgid "Where am I going? What am I doing? What do I need?"
+msgstr "?Adónde voy? ?Qu? debo hacer? ?Qu? necesito?"
+
+msgid "Work completed"
+msgstr "Trabajo realizado"
+
+msgid "Work in motion"
+msgstr "Trabajo en curso"
+
+msgid "Work worth living with."
+msgstr "Espacios para disfrutar cada día."
+
+msgid "Working"
+msgstr "Laborable"
+
+msgid "Workspace | Grand Coast Construction Inc."
+msgstr "Espacio de trabajo | Grand Coast Construction Inc."
+
+msgid "Write a message to Grand Coast..."
+msgstr "Escriba un mensaje a Grand Coast..."
+
+msgid "Write a message to the client..."
+msgstr "Escriba un mensaje al cliente..."
+
+msgid "You are marked off for this date."
+msgstr "Tiene el día libre en esta fecha."
+
+msgid "Your Grand Coast employee account is ready."
+msgstr "Su cuenta de empleado de Grand Coast está lista."
+
+msgid "Your account"
+msgstr "Su cuenta"
+
+msgid "Your account is active. The Grand Coast team will add project details and next steps here."
+msgstr "Su cuenta está activa. El equipo de Grand Coast agregará aquí los detalles y próximos pasos del proyecto."
+
+msgid "Your assigned schedule and effective working hours."
+msgstr "Su horario asignado y sus horas laborales vigentes."
+
+msgid "Your client portal account is ready."
+msgstr "Su cuenta del portal de clientes está lista."
+
+msgid "Your client portal account was deleted and personal details were anonymized."
+msgstr "Se eliminó su cuenta del portal y se anonimizaron sus datos personales."
+
+msgid "Your conversation will appear here."
+msgstr "Su conversación aparecerá aquí."
+
+msgid "Your detailed estimate is hosted by the estimate service selected by Grand Coast. The service is authoritative for your response."
+msgstr "Su presupuesto detallado está alojado en el servicio elegido por Grand Coast. Su respuesta se registra en ese servicio."
+
+msgid "Your effective shift"
+msgstr "Su turno vigente"
+
+msgid "Your employee account was deleted and personal details were anonymized."
+msgstr "Se eliminó su cuenta de empleado y se anonimizaron sus datos personales."
+
+msgid "Your employee profile has not been created yet."
+msgstr "Todavía no se ha creado su perfil de empleado."
+
+msgid "Your estimate and shared project files."
+msgstr "Su presupuesto y los archivos compartidos del proyecto."
+
+msgid "Your estimates"
+msgstr "Sus presupuestos"
+
+msgid "Your inbox"
+msgstr "Su bandeja de entrada"
+
+msgid "Your message was added to the project conversation."
+msgstr "Se agregó su mensaje a la conversación del proyecto."
+
+msgid "Your new password is active. Sign in to return to your Grand Coast workspace."
+msgstr "Su nueva contraseña está activa. Inicie sesión para volver a su espacio de Grand Coast."
+
+msgid "Your portal is ready when your project is assigned."
+msgstr "Su portal estará listo cuando se le asigne un proyecto."
+
+msgid "Your profile title was saved."
+msgstr "Se guardó el cargo de su perfil."
+
+msgid "Your project"
+msgstr "Su proyecto"
+
+msgid "Your project is being set up."
+msgstr "Se está configurando su proyecto."
+
+msgid "Your project is underway."
+msgstr "Su proyecto está en marcha."
+
+msgid "Your project story will appear here."
+msgstr "La historia de su proyecto aparecerá aquí."
+
+msgid "Your projects"
+msgstr "Sus proyectos"
+
+msgid "Your reply was added to the conversation."
+msgstr "Se agregó su respuesta a la conversación."
+
+msgid "Your scope is ready to review."
+msgstr "El alcance está listo para revisarlo."
+
+msgid "Your scope is taking shape."
+msgstr "El alcance de su proyecto está tomando forma."
+
+msgid "Your selection was submitted to Grand Coast."
+msgstr "Se envió su selección a Grand Coast."
+
+msgid "Your time"
+msgstr "Sus horas"
+
+msgid "Your weekly hours do not overlap this short-day window."
+msgstr "Su horario semanal no coincide con este horario reducido."
+
+msgid "Your work"
+msgstr "Su trabajo"
+
+msgid "Your workspace"
+msgstr "Su espacio"
+
+msgid "You’re all caught up. New assignments and workflow alerts will appear here."
+msgstr "Está al día. Aquí aparecerán las nuevas asignaciones y alertas de flujo de trabajo."
+
+msgid "You’re all caught up. New project updates and decisions will appear here."
+msgstr "Está al día. Aquí aparecerán las nuevas actualizaciones y decisiones del proyecto."
+
+msgid "from"
+msgstr "de"
+
+msgid "hours / week"
+msgstr "horas por semana"
+
+msgid "job event"
+msgstr "evento de trabajo"
+
+msgid "job events"
+msgstr "eventos de trabajo"
+
+msgid "material request"
+msgstr "solicitud de materiales"
+
+msgid "material requests"
+msgstr "solicitudes de materiales"
+
+msgid "message"
+msgstr "mensaje"
+
+msgid "more"
+msgstr "más"
+
+msgid "on"
+msgstr "el"
+
+msgid "pending"
+msgstr "pendiente"
+
+msgid "reviews"
+msgstr "reseñas"
+
+msgid "scheduling conflict"
+msgstr "conflicto de horario"
+
+msgid "scheduling conflicts"
+msgstr "conflictos de horario"
+
+msgid "team"
+msgstr "equipo"
+
+msgid "this month"
+msgstr "este mes"
+
+msgid "timestamp"
+msgstr "fecha y hora"
+
+msgid "unread"
+msgstr "sin leer"
+
+msgid "| Client portal | Grand Coast Construction Inc."
+msgstr "| Portal del cliente | Grand Coast Construction Inc."
+
+msgid "·"
+msgstr "·"
+
+msgid "· History"
+msgstr "· Historial"
+
+msgid "· Invoice"
+msgstr "· Factura"
+
+msgid "· Keep the work moving"
+msgstr "· Mantenga el trabajo en marcha"
+
+msgid "· Lead task"
+msgstr "· Tarea de cliente potencial"
+
+msgid "· Link pending · Expires"
+msgstr "· Enlace pendiente · Vence"
+
+msgid "· Project workspace file"
+msgstr "· Archivo del espacio de trabajo del proyecto"
+
+msgid "· Video"
+msgstr "· Video"
+
+msgid "← Previous"
+msgstr "← Anterior"
+
+msgid "← Return to public site"
+msgstr "← Volver al sitio público"
+
+msgid "← Return to workspace"
+msgstr "← Volver al espacio de trabajo"
+
+msgid "Language"
+msgstr "Idioma"
+
+msgid "- Needed"
+msgstr "- Necesario para"
+
+msgid "Add a permit"
+msgstr "Agregar permiso"
+
+msgid "Add commitment"
+msgstr "Agregar compromiso"
+
+msgid "Add permit"
+msgstr "Agregar permiso"
+
+msgid "Add project task"
+msgstr "Agregar tarea al proyecto"
+
+msgid "Add selection"
+msgstr "Agregar selección"
+
+msgid "Add site visit"
+msgstr "Agregar visita al sitio"
+
+msgid "Advance selection"
+msgstr "Avanzar selección"
+
+msgid "Assign scoped work and keep its status current"
+msgstr "Asigne el trabajo definido y mantenga actualizado su estado"
+
+msgid "Assign work package"
+msgstr "Asignar paquete de trabajo"
+
+msgid "Assigned work · status"
+msgstr "Trabajo asignado · estado"
+
+msgid "Capture scope, conditions, measurements, and next steps"
+msgstr "Registrar el alcance, las condiciones, las medidas y los próximos pasos"
+
+msgid "Client decisions and procurement"
+msgstr "Decisiones del cliente y adquisiciones"
+
+msgid "Closeout and warranty"
+msgstr "Cierre y garantía"
+
+msgid "Complete"
+msgstr "Completar"
+
+msgid "Complete milestone"
+msgstr "Completar hito"
+
+msgid "Complete visit"
+msgstr "Completar visita"
+
+msgid "Create and update project work without leaving the project"
+msgstr "Cree y actualice el trabajo del proyecto sin salir de esta página"
+
+msgid "Daily reports, materials, and problems"
+msgstr "Informes diarios, materiales y problemas"
+
+msgid "Documents and activity"
+msgstr "Documentos y actividad"
+
+msgid "Enabled for this project"
+msgstr "Activado para este proyecto"
+
+msgid "Financial ledger"
+msgstr "Registro financiero"
+
+msgid "Finish required items, then keep warranty work visible"
+msgstr "Complete los elementos pendientes y mantenga visible el trabajo de garantía"
+
+msgid "Material"
+msgstr "Material"
+
+msgid "Material request"
+msgstr "Solicitud de materiales"
+
+msgid "Move approved selections through ordering, receiving, and installation"
+msgstr "Procese las selecciones aprobadas: pedido, recepción e instalación"
+
+msgid "No closeout checklist items are available."
+msgstr "No hay elementos disponibles en la lista de cierre."
+
+msgid "No commitments recorded yet."
+msgstr "Todavía no se registraron compromisos."
+
+msgid "No inspections tracked yet."
+msgstr "Todavía no se registraron inspecciones."
+
+msgid "No milestones are defined yet."
+msgstr "Todavía no se definieron hitos."
+
+msgid "No payment schedule exists yet."
+msgstr "Todavía no hay un calendario de pagos."
+
+msgid "No permits tracked yet."
+msgstr "Todavía no se registraron permisos."
+
+msgid "No project tasks are assigned yet."
+msgstr "Todavía no hay tareas asignadas al proyecto."
+
+msgid "No selections tracked yet."
+msgstr "Todavía no se registraron selecciones."
+
+msgid "No site visits are linked to this project yet."
+msgstr "Todavía no hay visitas al sitio vinculadas con este proyecto."
+
+msgid "No subcontractor assignments yet."
+msgstr "Todavía no hay asignaciones a subcontratistas."
+
+msgid "No warranty items are open."
+msgstr "No hay asuntos de garantía pendientes."
+
+msgid "Open"
+msgstr "Abierto"
+
+msgid "Permits and inspections"
+msgstr "Permisos e inspecciones"
+
+msgid "Pilot execution loop"
+msgstr "Ciclo piloto de ejecución"
+
+msgid "Problem report"
+msgstr "Informe de problema"
+
+msgid "Record commitment"
+msgstr "Registrar compromiso"
+
+msgid "Record cost"
+msgstr "Registrar costo"
+
+msgid "Record payment"
+msgstr "Registrar pago"
+
+msgid "Record payment received"
+msgstr "Registrar pago recibido"
+
+msgid "Record project cost"
+msgstr "Registrar costo del proyecto"
+
+msgid "Record receipts and costs; margins remain permission controlled"
+msgstr "Registre ingresos y costos; el acceso a los márgenes depende de los permisos"
+
+msgid "Record result"
+msgstr "Registrar resultado"
+
+msgid "Reopen milestone"
+msgstr "Reabrir hito"
+
+msgid "Report problem"
+msgstr "Informar un problema"
+
+msgid "Run the project from here"
+msgstr "Gestione el proyecto desde aquí"
+
+msgid "Save task status"
+msgstr "Guardar estado de la tarea"
+
+msgid "Save visit"
+msgstr "Guardar visita"
+
+msgid "Save warranty resolution"
+msgstr "Guardar resolución de garantía"
+
+msgid "Schedule an inspection"
+msgstr "Programar una inspección"
+
+msgid "Schedule and tasks"
+msgstr "Programación y tareas"
+
+msgid "Schedule inspection"
+msgstr "Programar inspección"
+
+msgid "Schedule inspections, record results, and keep corrections visible"
+msgstr "Programe inspecciones, registre los resultados y mantenga visibles las correcciones"
+
+msgid "Send jobsite facts to the project record"
+msgstr "Envíe los datos de la obra al registro del proyecto"
+
+msgid "Site visits"
+msgstr "Visitas al sitio"
+
+msgid "Subcontractor assignments"
+msgstr "Asignaciones a subcontratistas"
+
+msgid "These actions write to the same protected project records used by the Command Center, field workspace, and client portal."
+msgstr "Estas acciones actualizan los mismos registros protegidos que usan el Centro de operaciones, el espacio de trabajo de campo y el portal del cliente."
+
+msgid "Update assignment"
+msgstr "Actualizar asignación"
+
+msgid "Update closeout"
+msgstr "Actualizar cierre"
+
+msgid "Update commitment"
+msgstr "Actualizar compromiso"
+
+msgid "Update permit"
+msgstr "Actualizar permiso"
+
+msgid "Upload a protected project record into the single source of truth"
+msgstr "Cargue un registro protegido del proyecto en la fuente central de información"
+
+msgid "Upload project document"
+msgstr "Cargar documento del proyecto"
+
+msgid "· Due"
+msgstr "· Vence"
+
+msgid "% milestone progress"
+msgstr "% de avance de hitos"
+
+msgid "Actual costs"
+msgstr "Costos reales"
+
+msgid "Assign a manager"
+msgstr "Asignar gerente"
+
+msgid "Assign an owner, due date, and notes without leaving the project"
+msgstr "Asigne a un responsable, una fecha límite y notas sin salir del proyecto"
+
+msgid "Assigned work packages"
+msgstr "Paquetes de trabajo asignados"
+
+msgid "Attach media"
+msgstr "Adjuntar archivos multimedia"
+
+msgid "Attach problem media"
+msgstr "Adjuntar archivos del problema"
+
+msgid "Attach report media"
+msgstr "Adjuntar archivos del informe"
+
+msgid "Attach supporting media"
+msgstr "Adjuntar archivos de respaldo"
+
+msgid "Attach visit media"
+msgstr "Adjuntar archivos de la visita"
+
+msgid "Audit trail"
+msgstr "Registro de auditoría"
+
+msgid "Camera, photo library, and document picker are available in the mobile workspace."
+msgstr "La cámara, la fototeca y el selector de documentos están disponibles en el espacio de trabajo móvil."
+
+msgid "Capture or attach files"
+msgstr "Capturar o adjuntar archivos"
+
+msgid "Choose document"
+msgstr "Elegir documento"
+
+msgid "Client decisions"
+msgstr "Decisiones del cliente"
+
+msgid "Closeout checklist has not been initialized."
+msgstr "La lista de cierre todavía no se ha configurado."
+
+msgid "Contract changes"
+msgstr "Cambios del contrato"
+
+msgid "Create a change order"
+msgstr "Crear una orden de cambio"
+
+msgid "Current contract"
+msgstr "Contrato actual"
+
+msgid "Customer links"
+msgstr "Enlaces para el cliente"
+
+msgid "Date not set"
+msgstr "Fecha no establecida"
+
+msgid "Decisions and corrections stay visible"
+msgstr "Las decisiones y correcciones permanecen visibles"
+
+msgid "Estimate and payment status"
+msgstr "Estado del presupuesto y los pagos"
+
+msgid "Estimate status"
+msgstr "Estado del presupuesto"
+
+msgid "Event"
+msgstr "Evento"
+
+msgid "Existing condition"
+msgstr "Condición existente"
+
+msgid "Field requests"
+msgstr "Solicitudes de campo"
+
+msgid "Files are attached to this project after the server verifies your role and the file signature."
+msgstr "Los archivos se adjuntan al proyecto después de que el servidor verifica su rol y la firma del archivo."
+
+msgid "Finish the project well"
+msgstr "Finalice bien el proyecto"
+
+msgid "Grand Coast stores the estimate or payment link and the status confirmed by staff. Detailed estimate, invoice, signature, and payment activity remain in the service your team uses."
+msgstr "Grand Coast guarda el enlace del presupuesto o del pago y el estado confirmado por el equipo. Los detalles del presupuesto, las facturas, las firmas y los pagos permanecen en el servicio que usa su equipo."
+
+msgid "Gross margin"
+msgstr "Margen bruto"
+
+msgid "Human approval required"
+msgstr "Requiere aprobación humana"
+
+msgid "Inspections"
+msgstr "Inspecciones"
+
+msgid "Invoices"
+msgstr "Facturas"
+
+msgid "Jobsite files"
+msgstr "Archivos de la obra"
+
+msgid "Keep scope current"
+msgstr "Mantenga actualizado el alcance"
+
+msgid "Last confirmation"
+msgstr "Última confirmación"
+
+msgid "Legacy project view"
+msgstr "Vista anterior del proyecto"
+
+msgid "Manual confirmation"
+msgstr "Confirmación manual"
+
+msgid "Manual invoice confirmations"
+msgstr "Confirmaciones manuales de facturas"
+
+msgid "Manual ledger only. Approved change orders and recorded payments are reflected transactionally."
+msgstr "Solo registro manual. Las ?rdenes de cambio aprobadas y los pagos registrados se reflejan en los totales."
+
+msgid "Materials and problems"
+msgstr "Materiales y problemas"
+
+msgid "Mobile capture"
+msgstr "Captura móvil"
+
+msgid "New projects created from accepted estimates receive the checklist automatically."
+msgstr "Los proyectos nuevos creados a partir de presupuestos aceptados reciben la lista automáticamente."
+
+msgid "Next draw"
+msgstr "Próximo pago programado"
+
+msgid "No activity has been recorded yet."
+msgstr "Todavía no se ha registrado actividad."
+
+msgid "No change orders require media."
+msgstr "Ninguna orden de cambio requiere archivos multimedia."
+
+msgid "No change orders yet."
+msgstr "Todavía no hay órdenes de cambio."
+
+msgid "No daily reports submitted yet."
+msgstr "Todavía no se han enviado informes diarios."
+
+msgid "No inspections are tracked yet."
+msgstr "Todavía no se registran inspecciones."
+
+msgid "No open blockers."
+msgstr "No hay impedimentos pendientes."
+
+msgid "No open field requests or problems."
+msgstr "No hay solicitudes de campo ni problemas pendientes."
+
+msgid "No payment schedules have been created yet."
+msgstr "Todavía no se han creado calendarios de pagos."
+
+msgid "No project documents are available to this role."
+msgstr "Este rol no tiene documentos del proyecto disponibles."
+
+msgid "No project media is available to this role."
+msgstr "Este rol no tiene archivos multimedia del proyecto disponibles."
+
+msgid "No project-linked calendar events yet."
+msgstr "Todavía no hay eventos del calendario vinculados al proyecto."
+
+msgid "No selections have been added."
+msgstr "Todavía no se han agregado selecciones."
+
+msgid "No site visits are linked to this project."
+msgstr "No hay visitas al sitio vinculadas a este proyecto."
+
+msgid "No subcontractor assignments are visible."
+msgstr "No hay asignaciones a subcontratistas visibles."
+
+msgid "No updates have been posted."
+msgstr "Todavía no se han publicado actualizaciones."
+
+msgid "Not confirmed"
+msgstr "Sin confirmar"
+
+msgid "Nothing flagged"
+msgstr "Nada señalado"
+
+msgid "Open estimate"
+msgstr "Abrir presupuesto"
+
+msgid "Outstanding balance"
+msgstr "Saldo pendiente"
+
+msgid "Owner / Manager / Office"
+msgstr "Propietario / gerente / oficina"
+
+msgid "Owner / assigned manager"
+msgstr "Propietario / gerente asignado"
+
+msgid "PROJECT HEALTH"
+msgstr "ESTADO DEL PROYECTO"
+
+msgid "Permission controlled"
+msgstr "Acceso según permisos"
+
+msgid "Permit path"
+msgstr "Proceso de permisos"
+
+msgid "Preconstruction"
+msgstr "Preconstrucción"
+
+msgid "Price impact"
+msgstr "Impacto en el precio"
+
+msgid "Project files"
+msgstr "Archivos del proyecto"
+
+msgid "Project financials"
+msgstr "Finanzas del proyecto"
+
+msgid "Project manager"
+msgstr "Gerente del proyecto"
+
+msgid "Project performance"
+msgstr "Rendimiento del proyecto"
+
+msgid "Protected upload"
+msgstr "Carga protegida"
+
+msgid "Publish a project update"
+msgstr "Publicar una actualización del proyecto"
+
+msgid "Publish update"
+msgstr "Publicar actualización"
+
+msgid "Readiness details"
+msgstr "Detalles de preparación"
+
+msgid "Readiness has not been initialized."
+msgstr "La preparación todavía no se ha configurado."
+
+msgid "Ready for construction"
+msgstr "Listo para construcción"
+
+msgid "Recent field reports"
+msgstr "Informes recientes de campo"
+
+msgid "Recent photos and video"
+msgstr "Fotos y videos recientes"
+
+msgid "Record the estimate status"
+msgstr "Registrar el estado del presupuesto"
+
+msgid "Remaining budget"
+msgstr "Presupuesto restante"
+
+msgid "Restricted"
+msgstr "Restringido"
+
+msgid "Risks"
+msgstr "Riesgos"
+
+msgid "Save change order"
+msgstr "Guardar orden de cambio"
+
+msgid "Save estimate status"
+msgstr "Guardar estado del presupuesto"
+
+msgid "Save invoice status"
+msgstr "Guardar estado de la factura"
+
+msgid "Save readiness details"
+msgstr "Guardar detalles de preparación"
+
+msgid "Schedule and field work"
+msgstr "Programación y trabajo de campo"
+
+msgid "Schedule event"
+msgstr "Programar evento"
+
+msgid "Schedule impact (days)"
+msgstr "Impacto en el calendario (días)"
+
+msgid "Schedule the next site activity here."
+msgstr "Programe aquí la próxima actividad en el sitio."
+
+msgid "Send to client for approval"
+msgstr "Enviar al cliente para aprobación"
+
+msgid "Staff workspace"
+msgstr "Espacio de trabajo del personal"
+
+msgid "Subcontractors"
+msgstr "Subcontratistas"
+
+msgid "Title"
+msgstr "Título"
+
+msgid "Update invoice status"
+msgstr "Actualizar estado de la factura"
+
+msgid "Visible to the project team"
+msgstr "Visible para el equipo del proyecto"
+
+msgid "Warranty"
+msgstr "Garantía"
+
+msgid "What is holding us up?"
+msgstr "¿Qué nos está deteniendo?"
+
+msgid "What is next?"
+msgstr "¿Qué sigue?"
+
+msgid "When is the next payment?"
+msgstr "¿Cuándo es el próximo pago?"
+
+msgid "When something stops progress, flag it here."
+msgstr "Si algo detiene el avance, indíquelo aquí."
+
+msgid "Where are we?"
+msgstr "¿En qué etapa estamos?"
+
+msgid "Who needs to act?"
+msgstr "¿Quién debe actuar?"
+
+msgid "Work moving through the jobsite"
+msgstr "Trabajo en curso en la obra"
+
+msgid "open blocker"
+msgstr "impedimento pendiente"
+
+msgid "· Confirmed"
+msgstr "· Confirmado"
+
+msgid "· Unassigned"
+msgstr "· Sin asignar"
+
+msgid "Â· Due"
+msgstr "· Vence"
+
+msgid "Â· Needed"
+msgstr "· Necesario para"
+
+msgid "← Overview"
+msgstr "← Resumen"
+
+msgid "Confirmed"
+msgstr "Confirmado"
+
+msgid "Add a description for each line item."
+msgstr "Agregue una descripción para cada concepto."
+
+msgid "Add at least one photo or video to this post."
+msgstr "Agregue al menos una foto o un video a esta publicación."
+
+msgid "An estimate needs at least one line item."
+msgstr "Un presupuesto necesita al menos un concepto."
+
+msgid "Choose a JPG, PNG, or WebP video thumbnail."
+msgstr "Elija una miniatura de video JPG, PNG o WebP."
+
+msgid "Choose a client before selecting a project."
+msgstr "Elija un cliente antes de seleccionar un proyecto."
+
+msgid "Choose a lead or client for this estimate."
+msgstr "Elija un cliente potencial o un cliente para este presupuesto."
+
+msgid "Choose a project before adding existing media."
+msgstr "Elija un proyecto antes de agregar archivos multimedia existentes."
+
+msgid "Choose a project linked to a client before preparing client media."
+msgstr "Elija un proyecto vinculado a un cliente antes de preparar archivos para el portal."
+
+msgid "Choose a project that belongs to the selected client."
+msgstr "Elija un proyecto que pertenezca al cliente seleccionado."
+
+msgid "Choose an image for this process step."
+msgstr "Elija una imagen para este paso del proceso."
+
+msgid "Choose the client connected to this lead."
+msgstr "Elija el cliente vinculado a este cliente potencial."
+
+msgid "Clear the lead selection before choosing a client."
+msgstr "Quite el cliente potencial seleccionado antes de elegir un cliente."
+
+msgid "Clear the lead selection before choosing a project."
+msgstr "Quite el cliente potencial seleccionado antes de elegir un proyecto."
+
+msgid "Convert this lead into a client before creating an estimate."
+msgstr "Convierta este cliente potencial en cliente antes de crear un presupuesto."
+
+msgid "Deposit amount cannot be negative."
+msgstr "El importe del anticipo no puede ser negativo."
+
+msgid "Enter a PIN before turning PIN protection on."
+msgstr "Ingrese un PIN antes de activar la protección con PIN."
+
+msgid "Enter six numeric digits."
+msgstr "Ingrese seis dígitos numéricos."
+
+msgid "Enter the six-digit PIN."
+msgstr "Ingrese el PIN de seis dígitos."
+
+msgid "Enter the six-digit authenticator code."
+msgstr "Ingrese el código de autenticación de seis dígitos."
+
+msgid "Estimate links cannot contain embedded credentials."
+msgstr "Los enlaces de presupuestos no pueden incluir credenciales."
+
+msgid "Optional · photos, video, PDF, DOCX, spreadsheet, or text file"
+msgstr "Opcional · fotos, video, PDF, DOCX, hoja de cálculo o archivo de texto"
+
+msgid "Passwords do not match."
+msgstr "Las contraseñas no coinciden."
+
+msgid "That username is already in use."
+msgstr "Ese nombre de usuario ya está en uso."
+
+msgid "The combined upload size must be 100 MB or smaller."
+msgstr "El tamaño total de los archivos debe ser de 100 MB o menos."
+
+msgid "The end time must be after the start time."
+msgstr "La hora de finalización debe ser posterior a la hora de inicio."
+
+msgid "The new PINs do not match."
+msgstr "Los PIN nuevos no coinciden."
+
+msgid "Use an HTTPS estimate link."
+msgstr "Use un enlace HTTPS para el presupuesto."
+
+msgid "Working overrides need a start time."
+msgstr "Los horarios laborales personalizados necesitan una hora de inicio."
+
+msgid "Working overrides need an end time."
+msgstr "Los horarios laborales personalizados necesitan una hora de finalización."
+
+msgid "Create this project after an external estimate has been approved and recorded in GCC."
+msgstr "Cree este proyecto después de que un presupuesto externo se haya aprobado y registrado en GCC."
+
+msgid "Video thumbnails must be 5 MB or smaller."
+msgstr "Las miniaturas de video deben pesar 5 MB o menos."
+
+msgid "Short days need a start time."
+msgstr "Los días de horario reducido necesitan una hora de inicio."
+
+msgid "Short days need an end time."
+msgstr "Los días de horario reducido necesitan una hora de finalización."
+
+msgid "The short-day end time must be after its start time."
+msgstr "La hora de finalización del horario reducido debe ser posterior a la hora de inicio."
+
+msgid "+ New lead"
+msgstr "+ Nuevo cliente potencial"
+
+msgid "Accepted estimates can become projects without re-entering the client or scope."
+msgstr "Los presupuestos aceptados pueden convertirse en proyectos sin volver a ingresar el cliente ni el alcance."
+
+msgid "Action-first operations view ·"
+msgstr "Vista de operaciones centrada en acciones ·"
+
+msgid "Active contract value"
+msgstr "Valor de contratos activos"
+
+msgid "Active projects"
+msgstr "Proyectos activos"
+
+msgid "Budget risk projects"
+msgstr "Proyectos con riesgo presupuestario"
+
+msgid "Cash and budget metrics are visible only to the owner and assigned project managers."
+msgstr "Las cifras de efectivo y presupuesto solo son visibles para el propietario y los gerentes de proyecto asignados."
+
+msgid "Cash and budget watch"
+msgstr "Seguimiento de efectivo y presupuesto"
+
+msgid "Cash expected in 30 days"
+msgstr "Efectivo previsto en 30 días"
+
+msgid "Cash expected in 60 days"
+msgstr "Efectivo previsto en 60 días"
+
+msgid "Cash expected in 90 days"
+msgstr "Efectivo previsto en 90 días"
+
+msgid "Company pulse"
+msgstr "Panorama de la empresa"
+
+msgid "Conversion rate"
+msgstr "Tasa de conversión"
+
+msgid "Financials"
+msgstr "Finanzas"
+
+msgid "Financials are visible only to the owner and assigned project managers."
+msgstr "Las finanzas solo son visibles para el propietario y los gerentes de proyecto asignados."
+
+msgid "Forecast"
+msgstr "Pronóstico"
+
+msgid "Forecast profit"
+msgstr "Ganancia prevista"
+
+msgid "Next:"
+msgstr "Siguiente:"
+
+msgid "No active projects yet."
+msgstr "Todavía no hay proyectos activos."
+
+msgid "Nothing urgent is waiting."
+msgstr "No hay asuntos urgentes pendientes."
+
+msgid "OPERATING SYSTEM"
+msgstr "OPERACIONES"
+
+msgid "OWNER WORKSPACE"
+msgstr "ESPACIO DEL PROPIETARIO"
+
+msgid "One calm view of the decisions, blockers, payments, and follow-ups that keep Grand Coast moving."
+msgstr "Una vista clara de las decisiones, los impedimentos, los pagos y el seguimiento que mantienen en marcha a Grand Coast."
+
+msgid "Open actions"
+msgstr "Acciones abiertas"
+
+msgid "Open opportunities"
+msgstr "Oportunidades abiertas"
+
+msgid "Outstanding receivables"
+msgstr "Cuentas por cobrar pendientes"
+
+msgid "Overview | Grand Coast Construction Inc."
+msgstr "Resumen | Grand Coast Construction Inc."
+
+msgid "Pipeline value"
+msgstr "Valor del flujo de oportunidades"
+
+msgid "Prioritized by urgency"
+msgstr "Ordenado por urgencia"
+
+msgid "Project health"
+msgstr "Estado del proyecto"
+
+msgid "Projects need a schedule review"
+msgstr "Hay que revisar el calendario de los proyectos"
+
+msgid "Ready or overdue"
+msgstr "Listo o vencido"
+
+msgid "Revenue collected"
+msgstr "Ingresos recibidos"
+
+msgid "Schedule risk"
+msgstr "Riesgo de programaci?n"
+
+msgid "Staff account"
+msgstr "Cuenta del personal"
+
+msgid "The bigger picture"
+msgstr "Panorama general"
+
+msgid "The next action will appear here as the team works."
+msgstr "La pr?xima acci?n aparecer? aqu? mientras avanza el trabajo del equipo."
+
+msgid "Today"
+msgstr "Hoy"
+
+msgid "Upcoming draws"
+msgstr "Pr?ximos pagos programados"
+
+msgid "View existing projects →"
+msgstr "Ver proyectos existentes →"
+
+msgid "Visible to your role"
+msgstr "Visible seg?n su rol"
+
+msgid "Weekly action list"
+msgstr "Lista semanal de acciones"
+
+msgid "What needs my attention today?"
+msgstr "?Qu? requiere mi atenci?n hoy?"
+
+msgid "blocker"
+msgstr "impedimento"
+
+msgid "closed"
+msgstr "cerrado"
+
+msgid "need attention"
+msgstr "requiere atenci?n"
+
+msgid "won of"
+msgstr "ganados de"
+
+msgid "/ Review"
+msgstr "/ Revisi?n"
+
+msgid "Action over information"
+msgstr "Acci?n antes que informaci?n"
+
+msgid "Blocked by:"
+msgstr "Bloqueado por:"
+
+msgid "Company follow-ups"
+msgstr "Seguimientos de la empresa"
+
+msgid "Continue the next scheduled step."
+msgstr "Contin?e con el siguiente paso programado."
+
+msgid "Health review needed"
+msgstr "Se requiere revisar el estado"
+
+msgid "No active projects are visible to this account."
+msgstr "Esta cuenta no tiene proyectos activos visibles."
+
+msgid "No open action items."
+msgstr "No hay acciones pendientes."
+
+msgid "No recorded activity yet"
+msgstr "Todav?a no hay actividad registrada"
+
+msgid "No risk flag"
+msgstr "Sin alertas de riesgo"
+
+msgid "Restricted or none"
+msgstr "Restringido o ninguno"
+
+msgid "Sales and shared actions"
+msgstr "Ventas y acciones compartidas"
+
+msgid "This review is generated from authorized project activity and attention items. Open the exact project work area to resolve each item."
+msgstr "Este resumen se genera a partir de la actividad autorizada del proyecto y los asuntos que requieren atenci?n. Abra el ?rea de trabajo del proyecto correspondiente para resolver cada elemento."
+
+msgid "WEEKLY OPERATIONS"
+msgstr "OPERACIONES SEMANALES"
+
+msgid "Week of"
+msgstr "Semana del"
+
+msgid "Weekly action list | Grand Coast Construction Inc."
+msgstr "Lista semanal de acciones | Grand Coast Construction Inc."
+
+msgid "What happened, what is next, and who must act?"
+msgstr "?Qu? ocurri?, qu? sigue y qui?n debe actuar?"
+
+msgid "What happened?"
+msgstr "?Qu? ocurri??"
+
+msgid "What is behind?"
+msgstr "?Qu? est? atrasado?"
+
+msgid "What payment is next?"
+msgstr "?Cu?l es el pr?ximo pago?"
+
+msgid "Add a client email address before choosing email delivery."
+msgstr "Agregue el correo electr?nico del cliente antes de elegir el env?o por correo electr?nico."
+
+msgid "Add a client phone number before choosing text message delivery."
+msgstr "Agregue el tel?fono del cliente antes de elegir el env?o por mensaje de texto."
+
+msgid "Add a client to this project before saving or sending a client draft."
+msgstr "Agregue un cliente a este proyecto antes de guardar o enviar un borrador para el cliente."
+
+msgid "Add an estimate link and client before sending."
+msgstr "Agregue el enlace del presupuesto y el cliente antes de enviarlo."
+
+msgid "Admin note saved. It is visible only to staff."
+msgstr "Nota administrativa guardada. Solo el personal puede verla."
+
+msgid "Choose a client and provide a secure external estimate link."
+msgstr "Elija un cliente y proporcione un enlace seguro a un presupuesto externo."
+
+msgid "Choose an eligible project file to prepare for client media."
+msgstr "Elija un archivo de proyecto v?lido para prepararlo para el portal del cliente."
+
+msgid "Choose valid estimate delivery methods."
+msgstr "Elija m?todos v?lidos para enviar el presupuesto."
+
+msgid "Choose whether to keep the draft or send it to the client."
+msgstr "Elija si desea conservar el borrador o enviarlo al cliente."
+
+msgid "Client draft deleted. The original internal update is unchanged."
+msgstr "Borrador para el cliente eliminado. La actualizaci?n interna original no cambi?."
+
+msgid "Client draft saved. It is still private."
+msgstr "Borrador para el cliente guardado. Sigue siendo privado."
+
+msgid "Draft post deleted. Original files and any Client Media shares remain unchanged."
+msgstr "Borrador de publicaci?n eliminado. Los archivos originales y los elementos compartidos con el cliente no cambiaron."
+
+msgid "Estimate details are maintained in the external estimate service. GCC keeps legacy internal estimates as read-only history."
+msgstr "Los detalles del presupuesto se mantienen en el servicio externo. GCC conserva los presupuestos internos anteriores como historial de solo lectura."
+
+msgid "Estimate link is saved for the client portal. The client can open it after accepting a portal invitation."
+msgstr "El enlace del presupuesto se guard? en el portal del cliente. El cliente podr? abrirlo despu?s de aceptar una invitaci?n al portal."
+
+msgid "Existing project media is ready for client media review."
+msgstr "Los archivos multimedia existentes del proyecto est?n listos para que se revisen en el portal del cliente."
+
+msgid "Lead permanently deleted."
+msgstr "Cliente potencial eliminado permanentemente."
+
+msgid "No task changes were needed."
+msgstr "No fue necesario cambiar la tarea."
+
+msgid "One or more leads are no longer in Trash. Reload before deleting."
+msgstr "Uno o m?s clientes potenciales ya no est?n en la papelera. Vuelva a cargar la p?gina antes de eliminarlos."
+
+msgid "Open the text message draft and tap Send to finish text delivery."
+msgstr "Abra el borrador del mensaje de texto y toque Enviar para completar el env?o."
+
+msgid "Open the text message draft and tap Send. After sending it, record the estimate as Sent in Update estimate."
+msgstr "Abra el borrador del mensaje de texto y toque Enviar. Despu?s, en Actualizar presupuesto, m?rquelo como enviado."
+
+msgid "Past project added. You can now create its photo or video post."
+msgstr "Proyecto anterior agregado. Ahora puede crear una publicaci?n con sus fotos o videos."
+
+msgid "Please add a title and update message."
+msgstr "Agregue un t?tulo y el mensaje de actualizaci?n."
+
+msgid "Please correct the admin note and try again."
+msgstr "Corrija la nota administrativa e int?ntelo de nuevo."
+
+msgid "Please correct the content fields and try again."
+msgstr "Corrija los campos de contenido e int?ntelo de nuevo."
+
+msgid "Please correct the employee invitation details."
+msgstr "Corrija los datos de la invitaci?n del empleado."
+
+msgid "Please correct the employee profile."
+msgstr "Corrija el perfil del empleado."
+
+msgid "Please correct the lead details and try again."
+msgstr "Corrija los datos del cliente potencial e int?ntelo de nuevo."
+
+msgid "Please correct the project details and try again."
+msgstr "Corrija los datos del proyecto e int?ntelo de nuevo."
+
+msgid "Please correct the project fields and try again."
+msgstr "Corrija los campos del proyecto e int?ntelo de nuevo."
+
+msgid "Record your response in the linked estimate service. Grand Coast will update this status after confirming it."
+msgstr "Registre su respuesta en el servicio de presupuestos vinculado. Grand Coast actualizar? este estado despu?s de confirmarla."
+
+msgid "Remove this file from its project post before removing it from the website file list."
+msgstr "Quite este archivo de la publicaci?n del proyecto antes de quitarlo de la lista de archivos del sitio web."
+
+msgid "Removed from Publish Content. The original file and any Client Media share remain unchanged."
+msgstr "Se quit? de Publicar contenido. El archivo original y cualquier elemento compartido con el cliente no cambiaron."
+
+msgid "Review and accept the estimate in the linked estimate service. Grand Coast will record the outcome here after confirming it."
+msgstr "Revise y acepte el presupuesto en el servicio vinculado. Grand Coast registrar? aqu? el resultado despu?s de confirmarlo."
+
+msgid "Select at least one estimate delivery method."
+msgstr "Seleccione al menos un m?todo para enviar el presupuesto."
+
+msgid "Shared with the client."
+msgstr "Compartido con el cliente."
+
+msgid "Stopped sharing. The original file and draft are retained."
+msgstr "Se dej? de compartir. El archivo original y el borrador se conservaron."
+
+msgid "That project update was already published."
+msgstr "Esa actualizaci?n del proyecto ya se public?."
+
+msgid "The client record could not be linked to this lead. Please try again or contact support."
+msgstr "No se pudo vincular el registro del cliente con este cliente potencial. Int?ntelo de nuevo o comun?quese con soporte."
+
+msgid "The employee invitation was created, but email delivery failed. Use the one-time copy link below."
+msgstr "Se cre? la invitaci?n del empleado, pero no se pudo enviar por correo. Use el enlace de un solo uso que aparece abajo."
+
+msgid "The employee invitation was created, but no deliverable email address was available. Use the one-time copy link below."
+msgstr "Se cre? la invitaci?n del empleado, pero no hay una direcci?n de correo v?lida. Use el enlace de un solo uso que aparece abajo."
+
+msgid "The employee invitation was created. Email delivery is pending or disabled; use the one-time copy link below."
+msgstr "Se cre? la invitaci?n del empleado. El env?o por correo est? pendiente o desactivado; use el enlace de un solo uso que aparece abajo."
+
+msgid "The invite was created, but email delivery failed. Use the one-time copy link below."
+msgstr "Se cre? la invitaci?n, pero no se pudo enviar por correo. Use el enlace de un solo uso que aparece abajo."
+
+msgid "The invite was created, but this client has no deliverable email address. Use the one-time copy link below."
+msgstr "Se cre? la invitaci?n, pero el cliente no tiene una direcci?n de correo v?lida. Use el enlace de un solo uso que aparece abajo."
+
+msgid "The invite was created. Email delivery is pending or disabled; use the one-time copy link below."
+msgstr "Se cre? la invitaci?n. El env?o por correo est? pendiente o desactivado; use el enlace de un solo uso que aparece abajo."
+
+msgid "The milestone could not be updated. Reload the project and try again."
+msgstr "No se pudo actualizar el hito. Vuelva a cargar el proyecto e int?ntelo de nuevo."
+
+msgid "The selected leads could not be verified. Reload Trash and try again."
+msgstr "No se pudieron verificar los clientes potenciales seleccionados. Vuelva a cargar la papelera e int?ntelo de nuevo."
+
+msgid "There are no active leads to move to Trash."
+msgstr "No hay clientes potenciales activos para mover a la papelera."
+
+msgid "There are no leads selected for permanent deletion."
+msgstr "No hay clientes potenciales seleccionados para eliminarlos permanentemente."
+
+msgid "There is no saved client draft to delete."
+msgstr "No hay borradores de cliente guardados para eliminar."
+
+msgid "This client update has already been sent."
+msgstr "Esta actualizaci?n del cliente ya se envi?."
+
+msgid "This estimate is closed. Create a new estimate if the scope has changed."
+msgstr "Este presupuesto est? cerrado. Cree uno nuevo si cambi? el alcance."
+
+msgid "This project needs a client contact before an invite can be created."
+msgstr "Este proyecto necesita un contacto de cliente antes de crear una invitaci?n."
+
+msgid "%(client)s was added to Clients."
+msgstr "%(client)s se agregó a Clientes."
+
+msgid "%(count)s lead moved to Trash. You can restore it from the lead pipeline."
+msgid_plural "%(count)s leads moved to Trash. You can restore them from the lead pipeline."
+msgstr[0] "%(count)s cliente potencial se movió a la papelera. Puede restaurarlo desde el proceso de clientes potenciales."
+msgstr[1] "%(count)s clientes potenciales se movieron a la papelera. Puede restaurarlos desde el proceso de clientes potenciales."
+
+msgid "%(count)s lead permanently deleted."
+msgid_plural "%(count)s leads permanently deleted."
+msgstr[0] "%(count)s cliente potencial se eliminó permanentemente."
+msgstr[1] "%(count)s clientes potenciales se eliminaron permanentemente."
+
+msgid "%(count)s file uploaded to the project workspace."
+msgid_plural "%(count)s files uploaded to the project workspace."
+msgstr[0] "Se subió %(count)s archivo al espacio de trabajo del proyecto."
+msgstr[1] "Se subieron %(count)s archivos al espacio de trabajo del proyecto."
+
+msgid "%(count)s file uploaded as a client media draft."
+msgid_plural "%(count)s files uploaded as client media drafts."
+msgstr[0] "Se subió %(count)s archivo como borrador de contenido multimedia para el cliente."
+msgstr[1] "Se subieron %(count)s archivos como borradores de contenido multimedia para el cliente."
+
+msgid "%(date)s returned to a normal day."
+msgstr "El día %(date)s volvió a su horario normal."
+
+msgid "%(date)s was already a normal day."
+msgstr "El día %(date)s ya tenía su horario normal."
+
+msgid "%(date)s %(status)s setting %(action)s."
+msgstr "La configuración del calendario para %(date)s (%(status)s) se %(action)s."
+
+msgid "%(date)s already has that setting."
+msgstr "El día %(date)s ya tiene esa configuración."
+
+msgid "%(title)s was added to the calendar."
+msgstr "%(title)s se agregó al calendario."
+
+msgid "%(title)s was removed from the calendar."
+msgstr "%(title)s se quitó del calendario."
+
+msgid "%(title)s was added to Tasks."
+msgstr "%(title)s se agregó a Tareas."
+
+msgid "%(employee)s clocked out."
+msgstr "%(employee)s registró su salida."
+
+msgid "%(employee)s is clocked in."
+msgstr "%(employee)s tiene su entrada registrada."
+
+msgid "%(profile)s profile updated."
+msgstr "Se actualizó el perfil de %(profile)s."
+
+msgid "%(lead)s was added to the lead pipeline."
+msgstr "%(lead)s se agregó al proceso de clientes potenciales."
+
+msgid "%(lead)s was moved to Trash. You can restore it from the lead pipeline."
+msgstr "%(lead)s se movió a la papelera. Puede restaurarlo desde el proceso de clientes potenciales."
+
+msgid "%(lead)s was restored to the lead pipeline."
+msgstr "%(lead)s se restauró al proceso de clientes potenciales."
+
+msgid "Estimate #%(number)s created."
+msgstr "Se creó el presupuesto n.º %(number)s."
+
+msgid "Estimate link published to %(client)s's client portal."
+msgstr "El enlace al presupuesto se publicó en el portal del cliente de %(client)s."
+
+msgid "Estimate link emailed to %(email)s. It is also published in the client portal."
+msgstr "Se envió por correo el enlace al presupuesto a %(email)s. También está publicado en el portal del cliente."
+
+msgid "Estimate link emailed to %(email)s. It is saved for the portal after the client accepts an invitation."
+msgstr "Se envió por correo el enlace al presupuesto a %(email)s. Se guardará en el portal cuando el cliente acepte una invitación."
+
+msgid "Estimate link emailed to %(email)s. It was not published to the client portal."
+msgstr "Se envió por correo el enlace al presupuesto a %(email)s. No se publicó en el portal del cliente."
+
+msgid "Estimate email queued for %(email)s. The link is also published in the client portal."
+msgstr "Se puso en cola el correo con el presupuesto para %(email)s. El enlace también está publicado en el portal del cliente."
+
+msgid "Estimate email queued for %(email)s. The link will be available in the portal after the client accepts an invitation."
+msgstr "Se puso en cola el correo con el presupuesto para %(email)s. El enlace estará disponible en el portal cuando el cliente acepte una invitación."
+
+msgid "Estimate email queued for %(email)s. The link was not published to the client portal."
+msgstr "Se puso en cola el correo con el presupuesto para %(email)s. El enlace no se publicó en el portal del cliente."
+
+msgid "%(title)s was created."
+msgstr "Se creó %(title)s."
+
+msgid "%(title)s is now in Projects."
+msgstr "%(title)s ahora está en Proyectos."
+
+msgid "%(page)s content saved."
+msgstr "Se guardó el contenido de %(page)s."
+
+msgid "Synced %(count)s review for %(place)s."
+msgid_plural "Synced %(count)s reviews for %(place)s."
+msgstr[0] "Se sincronizó %(count)s reseña de %(place)s."
+msgstr[1] "Se sincronizaron %(count)s reseñas de %(place)s."
+
+msgid "A one-time client portal invite was emailed to %(email)s. The copy link remains available below."
+msgstr "Se envió por correo una invitación de un solo uso al portal del cliente a %(email)s. El enlace para copiar sigue disponible abajo."
+
+msgid "You have now converted %(lead)s to a client. Their dashboard access is already active; they can sign in with their existing account. Contact them if they are having trouble."
+msgstr "Ahora convirtió a %(lead)s en cliente. Su acceso al panel ya está activo y puede iniciar sesión con su cuenta actual. Comuníquese con esta persona si tiene problemas."
+
+msgid "You have now converted %(lead)s to a client. Next, send a sign-in invitation link to their email from the client record. They must use that link to access their dashboard. Contact them if they are having trouble."
+msgstr "Ahora convirtió a %(lead)s en cliente. Después, envíe un enlace de invitación a su correo desde el registro del cliente. Debe usar ese enlace para acceder al panel. Comuníquese con esta persona si tiene problemas."
+
+msgid "You have now converted %(lead)s to a client. Add their email address, then send a sign-in invitation link so they can access their dashboard. Contact them if they are having trouble."
+msgstr "Ahora convirtió a %(lead)s en cliente. Agregue su correo y luego envíe un enlace de invitación para que pueda acceder al panel. Comuníquese con esta persona si tiene problemas."
+
+msgid "Employee invitation emailed to %(email)s. Copy the one-time link below as a backup."
+msgstr "Se envió por correo una invitación para el empleado a %(email)s. Copie el enlace de un solo uso que aparece abajo como respaldo."
+
+msgid "short day"
+msgstr "día corto"
+
+msgid "updated"
+msgstr "actualizó"
+
+msgid "added"
+msgstr "agregó"
+
+msgid "Lead-derived projects require an externally approved estimate recorded in GCC."
+msgstr "Los proyectos derivados de clientes potenciales requieren un presupuesto externo aprobado y registrado en GCC."
+
+msgid "You can upload up to %(max_files)s files per request."
+msgstr "Puede subir hasta %(max_files)s archivos por solicitud."
+
+msgid "Add up to %(max_slides)s slides to one post."
+msgstr "Agregue hasta %(max_slides)s diapositivas en una publicación."
+
+msgid "A post can contain up to %(max_slides)s photos or videos."
+msgstr "Una publicación puede incluir hasta %(max_slides)s fotos o videos."
+
+msgid "%(filename)s is empty."
+msgstr "El archivo %(filename)s está vacío."
+
+msgid "%(filename)s: project-gallery files must be %(max_size)s MB or smaller."
+msgstr "%(filename)s: los archivos de la galería del proyecto deben medir %(max_size)s MB o menos."
+
+msgid "Files must be 50 MB or smaller."
+msgstr "Los archivos deben tener un tamaño máximo de 50 MB."
+
+msgid "Upload a JPG, PNG, or WebP photo, or an MP4 or MOV video."
+msgstr "Suba una foto JPG, PNG o WebP, o un video MP4 o MOV."
+
+msgid "The file contents do not match the selected photo or video type."
+msgstr "El contenido del archivo no coincide con el tipo de foto o video seleccionado."
+
+msgid "Upload a JPG, PNG, or WebP photo; an MP4 or MOV video; or a supported document."
+msgstr "Suba una foto JPG, PNG o WebP; un video MP4 o MOV; o un documento compatible."
+
+msgid "The file contents do not match the selected file type."
+msgstr "El contenido del archivo no coincide con el tipo de archivo seleccionado."
+
+msgid "Documents must be 50 MB or smaller."
+msgstr "Los documentos deben tener un tamaño máximo de 50 MB."
+
+msgid "Upload a PDF, DOC, DOCX, XLS, XLSX, CSV, or TXT file."
+msgstr "Suba un archivo PDF, DOC, DOCX, XLS, XLSX, CSV o TXT."
+
+msgid "The file contents do not match the selected document type."
+msgstr "El contenido del archivo no coincide con el tipo de documento seleccionado."
+
+msgid "Signed agreement files must be PDF documents."
+msgstr "Los documentos del acuerdo firmado deben estar en formato PDF."
+
+msgid "Schedule events must end after they start."
+msgstr "Los eventos del calendario deben terminar después de comenzar."
+
+msgid "The selected task must belong to the selected project."
+msgstr "La tarea seleccionada debe pertenecer al proyecto seleccionado."
+
+msgid "Clock-out must be after clock-in."
+msgstr "La hora de salida debe ser posterior a la hora de entrada."
+
+msgid "Complete the security check and try again."
+msgstr "Complete la verificación de seguridad e inténtelo de nuevo."
+
+msgid "Unpublish this post before deleting its draft."
+msgstr "Anule la publicaci?n de esta entrada antes de eliminar el borrador."
+
+msgid "Use ?Send estimate to client? on the external estimate record. Existing internal estimates are read-only history."
+msgstr "Use ?Enviar presupuesto al cliente? en el registro del presupuesto externo. Los presupuestos internos existentes son un historial de solo lectura."

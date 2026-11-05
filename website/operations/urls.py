@@ -12,6 +12,7 @@ urlpatterns = [
     path("projects/", views.public_page, {"page": "projects"}, name="projects"),
     path("process/", views.public_page, {"page": "process"}, name="process"),
     path("contact/", views.public_page, {"page": "contact"}, name="contact"),
+    path("accounts/language/", views.set_language, name="set-language"),
     path("accounts/login/", views.GrandCoastLoginView.as_view(), name="login"),
     path("accounts/mobile-owner/pin/", views.mobile_owner_pin, name="mobile-owner-pin"),
     path("accounts/mobile-owner/otp/", views.mobile_owner_otp, name="mobile-owner-otp"),

@@ -1,16 +1,17 @@
 {% extends "operations/base.html" %}
+{% load i18n %}
 {% load static %}
 
-{% block title %}{{ portal_section_title }} | Client portal | Grand Coast Construction Inc.{% endblock %}
+{% block title %}{{ portal_section_title }} {% translate '| Client portal | Grand Coast Construction Inc.' %}{% endblock %}
 {% block body_class %}portal-site{% endblock %}
 
 {% block body %}
 <div class="portal-staging-bar">
-    <span class="staging-label">CLIENT PORTAL</span>
-    <span>Project updates, decisions, and next steps in one place.</span>
+    <span class="staging-label">{% translate 'CLIENT PORTAL' %}</span>
+    <span>{% translate 'Project updates, decisions, and next steps in one place.' %}</span>
     <span class="staging-spacer"></span>
     {% if not request.user.is_staff %}
-        <form method="post" action="{% url 'operations:logout' %}">{% csrf_token %}<button class="portal-signout" type="submit">Sign out</button></form>
+        <form method="post" action="{% url 'operations:logout' %}">{% csrf_token %}<button class="portal-signout" type="submit">{% translate 'Sign out' %}</button></form>
     {% endif %}
 </div>
 {% if portal_client %}
@@ -27,17 +28,18 @@
     <div class="container portal-header-inner">
         <a class="portal-brand" href="{% url 'operations:home' %}">
             <span class="portal-logo-frame"><img src="{% static 'operations/images/gcc-logo.png' %}" alt="Grand Coast Construction Inc. logo"></span>
-            <span><strong>Grand Coast</strong><small>Construction Inc.</small></span>
+            <span><strong>{% translate 'Grand Coast' %}</strong><small>{% translate 'Construction Inc.' %}</small></span>
         </a>
         {% if portal_client %}
             <nav class="portal-nav" aria-label="Client portal navigation">
                 {% for item in portal_nav %}
                     <a class="{% if item.key == portal_section %}is-current{% endif %}" href="{{ item.url }}">
-                        {{ item.label }}{% if item.key == 'notifications' and client_unread_notifications_count %} ({{ client_unread_notifications_count }}){% endif %}
+                        {{ item.label }}{% if item.key == 'notifications' and client_unread_notifications_count %} {% translate '(' %}{{ client_unread_notifications_count }}{% translate ')' %}{% endif %}
                     </a>
                 {% endfor %}
             </nav>
             <div class="portal-user"><span class="avatar avatar-light">{{ portal_client.name|slice:':1'|upper }}</span><span>{{ portal_client.name }}</span></div>
+            {% include "operations/language_switch.html" %}
         {% endif %}
     </div>
 </header>
@@ -47,10 +49,10 @@
         {% if not portal_client %}
             <section class="portal-empty">
                 <span class="gold-rule"></span>
-                <span class="section-kicker">Client access</span>
-                <h1>Your portal is ready when your project is assigned.</h1>
-                <p>Grand Coast will connect your client record to this workspace before sharing an invitation.</p>
-                <a class="button button-primary" href="{% url 'operations:home' %}">Return to Grand Coast</a>
+                <span class="section-kicker">{% translate 'Client access' %}</span>
+                <h1>{% translate 'Your portal is ready when your project is assigned.' %}</h1>
+                <p>{% translate 'Grand Coast will connect your client record to this workspace before sharing an invitation.' %}</p>
+                <a class="button button-primary" href="{% url 'operations:home' %}">{% translate 'Return to Grand Coast' %}</a>
             </section>
         {% elif portal_section == 'overview' %}
             {% include 'operations/portal_sections/overview.html' %}
@@ -69,6 +71,6 @@
         {% endif %}
     </div>
 </main>
-{% if google_review_url %}<div class="google-review-band"><div class="container"><span class="section-kicker">Enjoying the experience?</span><a class="text-link" href="{{ google_review_url }}" target="_blank" rel="noopener">Review us on Google &rarr;</a></div></div>{% endif %}
-<footer class="portal-footer"><div class="container"><span>Grand Coast Construction Inc.</span><span>Client portal</span></div></footer>
+{% if google_review_url %}<div class="google-review-band"><div class="container"><span class="section-kicker">{% translate 'Enjoying the experience?' %}</span><a class="text-link" href="{{ google_review_url }}" target="_blank" rel="noopener">{% translate 'Review us on Google →' %}</a></div></div>{% endif %}
+<footer class="portal-footer"><div class="container"><span>{% translate 'Grand Coast Construction Inc.' %}</span><span>{% translate 'Client portal' %}</span></div></footer>
 {% endblock %}

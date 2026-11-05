@@ -6,10 +6,11 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+from django.utils.translation import gettext_lazy as _
 
 
 TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
-TURNSTILE_ERROR_MESSAGE = "Complete the security check and try again."
+TURNSTILE_ERROR_MESSAGE = _("Complete the security check and try again.")
 MOBILE_WEBVIEW_USER_AGENT_MARKER = "GrandCoastMobile/"
 MOBILE_WEBVIEW_HEADER = "HTTP_X_GRAND_COAST_MOBILE"
 MOBILE_WEBVIEW_SESSION_KEY = "gcc_mobile_webview"

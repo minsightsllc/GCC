@@ -13,6 +13,7 @@ from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.text import get_valid_filename
+from django.utils.translation import gettext_lazy as _
 
 from .storage import ContactSubmissionStorage
 from .media_sanitization import sanitize_uploaded_media
@@ -43,12 +44,12 @@ def validate_uploaded_media(upload):
     if not upload:
         return
     if upload.size > MAX_UPLOAD_SIZE:
-        raise ValidationError("Files must be 50 MB or smaller.")
+        raise ValidationError(_("Files must be 50 MB or smaller."))
     extension = Path(str(upload.name)).suffix.lower()
     if extension not in ALLOWED_UPLOAD_EXTENSIONS:
-        raise ValidationError("Upload a JPG, PNG, or WebP photo, or an MP4 or MOV video.")
+        raise ValidationError(_("Upload a JPG, PNG, or WebP photo, or an MP4 or MOV video."))
     if not _contact_file_signature_matches(upload, extension):
-        raise ValidationError("The file contents do not match the selected photo or video type.")
+        raise ValidationError(_("The file contents do not match the selected photo or video type."))
     sanitize_uploaded_media(upload)
 
 
@@ -125,14 +126,12 @@ def validate_contact_upload(upload):
     if not upload:
         return
     if upload.size > MAX_UPLOAD_SIZE:
-        raise ValidationError("Files must be 50 MB or smaller.")
+        raise ValidationError(_("Files must be 50 MB or smaller."))
     extension = Path(str(upload.name)).suffix.lower()
     if extension not in ALLOWED_CONTACT_UPLOAD_EXTENSIONS:
-        raise ValidationError(
-            "Upload a JPG, PNG, or WebP photo; an MP4 or MOV video; or a supported document."
-        )
+        raise ValidationError(_("Upload a JPG, PNG, or WebP photo; an MP4 or MOV video; or a supported document."))
     if not _contact_file_signature_matches(upload, extension):
-        raise ValidationError("The file contents do not match the selected file type.")
+        raise ValidationError(_("The file contents do not match the selected file type."))
     if extension in ALLOWED_UPLOAD_EXTENSIONS:
         sanitize_uploaded_media(upload)
 
@@ -141,17 +140,17 @@ def validate_uploaded_document(upload):
     if not upload:
         return
     if upload.size > MAX_UPLOAD_SIZE:
-        raise ValidationError("Documents must be 50 MB or smaller.")
+        raise ValidationError(_("Documents must be 50 MB or smaller."))
     name = upload.name.lower()
     if not any(name.endswith(extension) for extension in ALLOWED_DOCUMENT_EXTENSIONS):
-        raise ValidationError("Upload a PDF, DOC, DOCX, XLS, XLSX, CSV, or TXT file.")
+        raise ValidationError(_("Upload a PDF, DOC, DOCX, XLS, XLSX, CSV, or TXT file."))
 
 
 def validate_construction_document(upload):
     validate_uploaded_document(upload)
     extension = Path(str(upload.name)).suffix.lower()
     if not _contact_file_signature_matches(upload, extension):
-        raise ValidationError("The file contents do not match the selected document type.")
+        raise ValidationError(_("The file contents do not match the selected document type."))
 
 
 def validate_signed_pdf(upload):
@@ -159,7 +158,7 @@ def validate_signed_pdf(upload):
         return
     validate_construction_document(upload)
     if Path(str(upload.name)).suffix.lower() != ".pdf":
-        raise ValidationError("Signed agreement files must be PDF documents.")
+        raise ValidationError(_("Signed agreement files must be PDF documents."))
 
 
 class TimeStampedModel(models.Model):
@@ -691,6 +690,9 @@ class Project(TimeStampedModel):
     public_title = models.CharField(max_length=180, blank=True)
     public_location = models.CharField(max_length=160, blank=True, help_text="City or region only.")
     public_summary = models.TextField(blank=True)
+    public_title_es = models.CharField(max_length=180, blank=True)
+    public_location_es = models.CharField(max_length=160, blank=True)
+    public_summary_es = models.TextField(blank=True)
     show_client_name = models.BooleanField(default=False)
     gallery_layout = models.CharField(max_length=16, default="grid", choices=[
         ("grid", "Balanced grid"), ("feature", "Featured first image"), ("stack", "Full-width story"),
@@ -884,6 +886,9 @@ class MediaPublication(models.Model):
     title = models.CharField(max_length=180, blank=True)
     caption = models.TextField(blank=True)
     label = models.CharField(max_length=60, blank=True)
+    title_es = models.CharField(max_length=180, blank=True)
+    caption_es = models.TextField(blank=True)
+    label_es = models.CharField(max_length=60, blank=True)
     location = models.CharField(max_length=160, blank=True)
     show_client_name = models.BooleanField(default=False)
     sort_order = models.PositiveIntegerField(default=0)
@@ -905,6 +910,7 @@ class MediaPublication(models.Model):
         )
         return {
             "title": self.title, "caption": self.caption, "label": self.label,
+            "title_es": self.title_es, "caption_es": self.caption_es, "label_es": self.label_es,
             "location": self.location, "sort_order": self.sort_order,
             "client_name": project.client.name if show_client_name else "",
         }
@@ -933,6 +939,9 @@ class WebsiteGalleryPost(TimeStampedModel):
     title = models.CharField(max_length=180)
     caption = models.TextField(blank=True)
     label = models.CharField(max_length=60, blank=True)
+    title_es = models.CharField(max_length=180, blank=True)
+    caption_es = models.TextField(blank=True)
+    label_es = models.CharField(max_length=60, blank=True)
     show_client_name = models.BooleanField(default=False)
     layout = models.CharField(max_length=16, choices=Layout.choices, default=Layout.SPLIT)
     accent = models.CharField(max_length=16, choices=Accent.choices, default=Accent.GOLD)
@@ -967,6 +976,9 @@ class WebsiteGalleryPost(TimeStampedModel):
             "title": self.title,
             "caption": self.caption,
             "label": self.label,
+            "title_es": self.title_es,
+            "caption_es": self.caption_es,
+            "label_es": self.label_es,
             "show_client_name": self.show_client_name,
             "client_name": client_name,
             "layout": self.layout,
@@ -1047,6 +1059,18 @@ class Activity(models.Model):
         ordering = ["-created_at"]
 
 
+class UserLanguagePreference(models.Model):
+    LANGUAGE_CHOICES = [("en", "English"), ("es", "Spanish")]
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="language_preference",
+    )
+    language = models.CharField(max_length=2, choices=LANGUAGE_CHOICES, default="en")
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class SiteSettings(models.Model):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     headline = models.CharField(max_length=180, default="Build with confidence.")
@@ -1106,6 +1130,28 @@ class SiteSettings(models.Model):
         on_delete=models.SET_NULL,
         related_name="featured_on_site",
     )
+    headline_es = models.CharField(max_length=180, blank=True)
+    subheadline_es = models.TextField(blank=True)
+    featured_title_es = models.CharField(max_length=180, blank=True)
+    featured_body_es = models.TextField(blank=True)
+    services_title_es = models.CharField(max_length=180, blank=True)
+    services_intro_es = models.TextField(blank=True)
+    services_note_es = models.TextField(blank=True)
+    process_page_title_es = models.CharField(max_length=180, blank=True)
+    process_page_intro_es = models.TextField(blank=True)
+    contact_page_kicker_es = models.CharField(max_length=100, blank=True)
+    contact_page_title_es = models.CharField(max_length=180, blank=True)
+    contact_page_intro_es = models.TextField(blank=True)
+    contact_service_areas_heading_es = models.CharField(max_length=100, blank=True)
+    contact_service_areas_es = models.TextField(blank=True)
+    contact_form_kicker_es = models.CharField(max_length=100, blank=True)
+    contact_form_title_es = models.CharField(max_length=180, blank=True)
+    contact_form_intro_es = models.TextField(blank=True)
+    contact_form_privacy_note_es = models.CharField(max_length=180, blank=True)
+    contact_form_footer_note_es = models.CharField(max_length=180, blank=True)
+    contact_direct_heading_es = models.CharField(max_length=100, blank=True)
+    contact_success_message_es = models.CharField(max_length=240, blank=True)
+    contact_form_submit_label_es = models.CharField(max_length=80, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
@@ -1137,6 +1183,8 @@ class Service(models.Model):
     slug = models.SlugField(max_length=80, unique=True)
     title = models.CharField(max_length=120)
     description = models.TextField()
+    title_es = models.CharField(max_length=120, blank=True)
+    description_es = models.TextField(blank=True)
     image_path = models.CharField(max_length=255, blank=True)
     image = models.FileField(upload_to="Public Content/services/", blank=True, validators=[validate_uploaded_media])
     sort_order = models.PositiveIntegerField(default=0)
@@ -1153,6 +1201,8 @@ class ProcessStep(models.Model):
     key = models.SlugField(max_length=40, unique=True)
     title = models.CharField(max_length=120)
     description = models.TextField()
+    title_es = models.CharField(max_length=120, blank=True)
+    description_es = models.TextField(blank=True)
     sort_order = models.PositiveIntegerField(default=0)
     image = models.FileField(upload_to="Public Content/process-steps/", blank=True, validators=[validate_uploaded_media])
     is_active = models.BooleanField(default=True)
@@ -1264,11 +1314,11 @@ class ScheduleEvent(TimeStampedModel):
 
     def clean(self):
         if self.start_at and self.end_at and self.end_at <= self.start_at:
-            raise ValidationError("Schedule events must end after they start.")
+            raise ValidationError(_("Schedule events must end after they start."))
         if self.task_id and self.task.project_id and (
             not self.project_id or self.task.project_id != self.project_id
         ):
-            raise ValidationError("The selected task must belong to the selected project.")
+            raise ValidationError(_("The selected task must belong to the selected project."))
         if self.start_at and self.end_at:
             conflicting_overrides = _calendar_overrides_conflicting_with_event(self)
             if conflicting_overrides:
@@ -1899,11 +1949,11 @@ class TimeEntry(models.Model):
 
     def clean(self):
         if self.clock_out and self.clock_out <= self.clock_in:
-            raise ValidationError("Clock-out must be after clock-in.")
+            raise ValidationError(_("Clock-out must be after clock-in."))
         if self.task_id and self.task.project_id and (
             not self.project_id or self.task.project_id != self.project_id
         ):
-            raise ValidationError("The selected task must belong to the selected project.")
+            raise ValidationError(_("The selected task must belong to the selected project."))
 
 
 class ProjectDocument(models.Model):
@@ -2538,7 +2588,7 @@ class Agreement(TimeStampedModel):
 
     def clean(self):
         if self.signed_pdf and not str(self.signed_pdf.name).lower().endswith(".pdf"):
-            raise ValidationError({"signed_pdf": "Signed agreement files must be PDF documents."})
+            raise ValidationError({"signed_pdf": _("Signed agreement files must be PDF documents.")})
 
     def save(self, *args, **kwargs):
         if self.pk and not self._state.adding:

@@ -20,6 +20,7 @@ from django.core.validators import URLValidator
 from django.db.models import Q
 from django.forms import BaseInlineFormSet, inlineformset_factory
 from django.urls import reverse
+from django.utils.translation import gettext_lazy as _
 
 from .models import (
     Client,
@@ -145,27 +146,27 @@ class WebsitePosterImageField(forms.ImageField):
         if upload:
             extension = str(upload.name).rsplit(".", 1)[-1].lower()
             if f".{extension}" not in {".jpg", ".jpeg", ".png", ".webp"}:
-                raise ValidationError("Choose a JPG, PNG, or WebP video thumbnail.")
+                raise ValidationError(_("Choose a JPG, PNG, or WebP video thumbnail."))
             validate_contact_upload(upload)
         return upload
 
 
 class ContactLeadForm(forms.Form):
-    first_name = forms.CharField(max_length=80, label="First name")
-    last_name = forms.CharField(max_length=80, label="Last name")
-    email = forms.EmailField(label="Email")
-    phone = forms.CharField(max_length=40, required=False, label="Phone")
-    project_type = forms.CharField(max_length=120, label="Project type")
-    location = forms.CharField(max_length=160, label="Location")
+    first_name = forms.CharField(max_length=80, label=_("First name"))
+    last_name = forms.CharField(max_length=80, label=_("Last name"))
+    email = forms.EmailField(label=_("Email"))
+    phone = forms.CharField(max_length=40, required=False, label=_("Phone"))
+    project_type = forms.CharField(max_length=120, label=_("Project type"))
+    location = forms.CharField(max_length=160, label=_("Location"))
     message = forms.CharField(
         widget=forms.Textarea,
         max_length=20000,
-        label="Tell us about the project",
+        label=_("Tell us about the project"),
     )
     photos = ContactUploadField(
         required=False,
-        label="Add photos or files",
-        help_text="Optional · photos, video, PDF, DOCX, spreadsheet, or text file",
+        label=_("Add photos or files"),
+        help_text=_("Optional · photos, video, PDF, DOCX, spreadsheet, or text file"),
     )
 
     def __init__(self, *args, request=None, **kwargs):
@@ -181,9 +182,12 @@ class ContactLeadForm(forms.Form):
     def clean_photos(self):
         uploads = self.cleaned_data.get("photos") or []
         if len(uploads) > CONTACT_MAX_FILES:
-            raise ValidationError(f"You can upload up to {CONTACT_MAX_FILES} files per request.")
+            raise ValidationError(
+                _("You can upload up to %(max_files)s files per request.")
+                % {"max_files": CONTACT_MAX_FILES}
+            )
         if sum(upload.size for upload in uploads) > CONTACT_MAX_TOTAL_SIZE:
-            raise ValidationError("The combined upload size must be 100 MB or smaller.")
+            raise ValidationError(_("The combined upload size must be 100 MB or smaller."))
         return uploads
 
 
@@ -345,17 +349,17 @@ class TaskForm(forms.ModelForm):
         )
 
         if lead and client and not preserve_existing_lead_project:
-            self.add_error("client", "Clear the lead selection before choosing a client.")
+            self.add_error("client", _("Clear the lead selection before choosing a client."))
         if lead and project and not preserve_existing_lead_project:
-            self.add_error("project", "Clear the lead selection before choosing a project.")
+            self.add_error("project", _("Clear the lead selection before choosing a project."))
         if project and not client and not preserve_existing_lead_project:
             if project.client_id:
                 cleaned["client"] = project.client
                 client = project.client
             else:
-                self.add_error("client", "Choose a client before selecting a project.")
+                self.add_error("client", _("Choose a client before selecting a project."))
         if client and project and project.client_id != client.pk:
-            self.add_error("project", "Choose a project that belongs to the selected client.")
+            self.add_error("project", _("Choose a project that belongs to the selected client."))
         return cleaned
 
 
@@ -398,11 +402,11 @@ class EstimateCreateForm(forms.ModelForm):
         lead = cleaned.get("lead")
         client = cleaned.get("client")
         if lead and not lead.client_id:
-            raise ValidationError("Convert this lead into a client before creating an estimate.")
+            raise ValidationError(_("Convert this lead into a client before creating an estimate."))
         if lead and client and lead.client_id != client.pk:
-            raise ValidationError("Choose the client connected to this lead.")
+            raise ValidationError(_("Choose the client connected to this lead."))
         if not lead and not client:
-            raise ValidationError("Choose a lead or client for this estimate.")
+            raise ValidationError(_("Choose a lead or client for this estimate."))
         return cleaned
 
 
@@ -432,9 +436,9 @@ class ExternalEstimateCreateForm(forms.ModelForm):
         URLValidator()(value)
         parsed = urlparse(value)
         if parsed.scheme.lower() != "https" or not parsed.netloc:
-            raise ValidationError("Use an HTTPS estimate link.")
+            raise ValidationError(_("Use an HTTPS estimate link."))
         if parsed.username or parsed.password:
-            raise ValidationError("Estimate links cannot contain embedded credentials.")
+            raise ValidationError(_("Estimate links cannot contain embedded credentials."))
         return value
 
 
@@ -457,7 +461,7 @@ class EstimateForm(forms.ModelForm):
     def clean_deposit_amount(self):
         value = self.cleaned_data["deposit_amount"] or Decimal("0.00")
         if value < 0:
-            raise ValidationError("Deposit amount cannot be negative.")
+            raise ValidationError(_("Deposit amount cannot be negative."))
         return value
 
 
@@ -476,7 +480,7 @@ class EstimateLineItemForm(forms.ModelForm):
         if not self.has_changed():
             return cleaned
         if not cleaned.get("description") and not self.cleaned_data.get("DELETE"):
-            raise ValidationError("Add a description for each line item.")
+            raise ValidationError(_("Add a description for each line item."))
         return cleaned
 
 
@@ -493,7 +497,7 @@ class BaseEstimateLineItemFormSet(BaseInlineFormSet):
             and (form.instance.pk or form.has_changed())
         ]
         if not remaining:
-            raise ValidationError("An estimate needs at least one line item.")
+            raise ValidationError(_("An estimate needs at least one line item."))
 
 
 EstimateLineItemFormSet = inlineformset_factory(
@@ -510,7 +514,7 @@ EstimateLineItemFormSet = inlineformset_factory(
 class ProjectForm(forms.ModelForm):
     class Meta:
         model = Project
-        fields = ["title", "client", "lead", "assigned_staff", "location", "project_type", "admin_stage_note", "next_step", "summary", "start_date", "target_date"]
+        fields = ["title", "client", "lead", "assigned_staff", "location", "project_type", "admin_stage_note", "next_step", "summary", "start_date", "target_date", "public_title", "public_location", "public_summary", "public_title_es", "public_location_es", "public_summary_es"]
         widgets = {
             "summary": forms.Textarea(attrs={"rows": 4}),
             "start_date": forms.DateInput(attrs={"type": "date"}),
@@ -524,6 +528,12 @@ class ProjectForm(forms.ModelForm):
 
     def __init__(self, *args, staff_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["public_title"].label = "Public project title"
+        self.fields["public_location"].label = "Public city or region"
+        self.fields["public_summary"].label = "Public project description"
+        self.fields["public_title_es"].label = "Public project title (Spanish)"
+        self.fields["public_location_es"].label = "Public city or region (Spanish)"
+        self.fields["public_summary_es"].label = "Public project description (Spanish)"
         self.fields["admin_stage_note"].label = "Admin-only stage note"
         self.fields["admin_stage_note"].help_text = (
             "Private staff reference only. Shared project progress and client/team alerts are controlled by milestones."
@@ -540,7 +550,7 @@ class ProjectForm(forms.ModelForm):
         lead = cleaned.get("lead")
         client = cleaned.get("client")
         if lead and client and lead.client_id != client.pk:
-            raise ValidationError("Choose the client connected to this lead.")
+            raise ValidationError(_("Choose the client connected to this lead."))
         if lead:
             has_accepted_estimate = lead.estimates.filter(
                 status=Estimate.Status.ACCEPTED,
@@ -554,7 +564,7 @@ class ProjectForm(forms.ModelForm):
                     and self.instance.estimate.lead_id == lead.pk
                 )
             if not has_accepted_estimate:
-                self.add_error("lead", "Lead-derived projects require an externally approved estimate recorded in GCC.")
+                self.add_error("lead", _("Lead-derived projects require an externally approved estimate recorded in GCC."))
         return cleaned
 
 
@@ -582,7 +592,7 @@ class ProjectCreateForm(ProjectForm):
             if not approved_external_estimate:
                 self.add_error(
                     "client",
-                    "Create this project after an external estimate has been approved and recorded in GCC.",
+                    _("Create this project after an external estimate has been approved and recorded in GCC."),
                 )
         return cleaned
 
@@ -621,12 +631,12 @@ class MediaUploadForm(forms.Form):
     def clean_files(self):
         files = self.cleaned_data["files"]
         if not files:
-            raise ValidationError("Choose at least one photo or video.")
+            raise ValidationError(_("Choose at least one photo or video."))
         if len(files) > 20:
-            raise ValidationError("Upload up to 20 files at a time.")
+            raise ValidationError(_("Upload up to 20 files at a time."))
         for upload in files:
             if upload.size == 0:
-                raise ValidationError(f"{upload.name} is empty.")
+                raise ValidationError(_("%(filename)s is empty.") % {"filename": upload.name})
             try:
                 validate_contact_upload(upload)
             except ValidationError as exc:
@@ -637,7 +647,7 @@ class MediaUploadForm(forms.Form):
         cleaned = super().clean()
         project = cleaned.get("project")
         if self.require_client and project and not project.client_id:
-            self.add_error("project", "Choose a project linked to a client before preparing client media.")
+            self.add_error("project", _("Choose a project linked to a client before preparing client media."))
         return cleaned
 
 
@@ -658,7 +668,7 @@ class WebsiteGalleryPostForm(forms.ModelForm):
 
     class Meta:
         model = WebsiteGalleryPost
-        fields = ["title", "caption", "label", "show_client_name", "layout", "accent"]
+        fields = ["title", "caption", "label", "title_es", "caption_es", "label_es", "show_client_name", "layout", "accent"]
         widgets = {"caption": forms.Textarea(attrs={"rows": 3})}
         labels = {
             "title": "Post title",
@@ -678,6 +688,9 @@ class WebsiteGalleryPostForm(forms.ModelForm):
             "multiple": True,
             "data-website-post-file-input": "",
         })
+        self.fields["title_es"].label = "Post title (Spanish)"
+        self.fields["caption_es"].label = "Post caption (Spanish)"
+        self.fields["label_es"].label = "Post label (Spanish)"
         self.fields["files"].help_text = (
             f"Choose up to {WEBSITE_GALLERY_MAX_SLIDES_PER_POST} slides per post. "
             f"New project-gallery files can be up to {WEBSITE_GALLERY_MAX_UPLOAD_SIZE // (1024 * 1024)} MB each."
@@ -761,14 +774,18 @@ class WebsiteGalleryPostForm(forms.ModelForm):
         files = self.cleaned_data.get("files", [])
         if len(files) > WEBSITE_GALLERY_MAX_SLIDES_PER_POST:
             raise ValidationError(
-                f"Add up to {WEBSITE_GALLERY_MAX_SLIDES_PER_POST} slides to one post."
+                _("Add up to %(max_slides)s slides to one post.")
+                % {"max_slides": WEBSITE_GALLERY_MAX_SLIDES_PER_POST}
             )
         for upload in files:
             if upload.size == 0:
-                raise ValidationError(f"{upload.name} is empty.")
+                raise ValidationError(_("%(filename)s is empty.") % {"filename": upload.name})
             if upload.size > WEBSITE_GALLERY_MAX_UPLOAD_SIZE:
                 max_size_mb = WEBSITE_GALLERY_MAX_UPLOAD_SIZE // (1024 * 1024)
-                raise ValidationError(f"{upload.name}: project-gallery files must be {max_size_mb} MB or smaller.")
+                raise ValidationError(
+                    _("%(filename)s: project-gallery files must be %(max_size)s MB or smaller.")
+                    % {"filename": upload.name, "max_size": max_size_mb}
+                )
             try:
                 validate_contact_upload(upload)
             except ValidationError as exc:
@@ -785,7 +802,7 @@ class WebsiteGalleryPostForm(forms.ModelForm):
             )):
                 continue
             if upload.size > WEBSITE_VIDEO_POSTER_MAX_UPLOAD_SIZE:
-                self.add_error(field_name, "Video thumbnails must be 5 MB or smaller.")
+                self.add_error(field_name, _("Video thumbnails must be 5 MB or smaller."))
         keep_count = len(cleaned.get("items_to_keep", []))
         existing_count = len(cleaned.get("existing_assets", []))
         upload_count = len(cleaned.get("files", []))
@@ -793,15 +810,16 @@ class WebsiteGalleryPostForm(forms.ModelForm):
         if keep_count + existing_count + upload_count > WEBSITE_GALLERY_MAX_SLIDES_PER_POST:
             self.add_error(
                 "files",
-                f"A post can contain up to {WEBSITE_GALLERY_MAX_SLIDES_PER_POST} photos or videos.",
+                _("A post can contain up to %(max_slides)s photos or videos.")
+                % {"max_slides": WEBSITE_GALLERY_MAX_SLIDES_PER_POST},
             )
         if (
             keep_count + existing_count + upload_count == 0
             and (not self.instance.pk or action == "publish")
         ):
-            self.add_error("items_to_keep", "Add at least one photo or video to this post.")
+            self.add_error("items_to_keep", _("Add at least one photo or video to this post."))
         if existing_count and not self.project:
-            self.add_error("existing_assets", "Choose a project before adding existing media.")
+            self.add_error("existing_assets", _("Choose a project before adding existing media."))
         return cleaned
 
 
@@ -839,7 +857,7 @@ class ClientMediaPrepareForm(forms.Form):
 class MediaPublicationForm(forms.ModelForm):
     class Meta:
         model = MediaPublication
-        fields = ["title", "caption", "label", "location", "show_client_name", "sort_order"]
+        fields = ["title", "caption", "label", "title_es", "caption_es", "label_es", "location", "show_client_name", "sort_order"]
         widgets = {"caption": forms.Textarea(attrs={"rows": 3})}
 
     def __init__(self, *args, **kwargs):
@@ -848,9 +866,12 @@ class MediaPublicationForm(forms.ModelForm):
         self.fields["title"].label = "Client-facing filename" if is_client else "Public media title"
         self.fields["caption"].label = "Client note" if is_client else "Public caption"
         self.fields["sort_order"].label = "Display order"
+        self.fields["title_es"].label = "Public media title (Spanish)"
+        self.fields["caption_es"].label = "Public caption (Spanish)"
+        self.fields["label_es"].label = "Public label (Spanish)"
         self.fields["sort_order"].help_text = "Lower numbers appear first."
         if is_client:
-            for name in ("label", "location", "show_client_name"):
+            for name in ("label", "label_es", "title_es", "caption_es", "location", "show_client_name"):
                 self.fields.pop(name)
         else:
             self.fields.pop("location")
@@ -881,7 +902,7 @@ class ServiceImageInput(forms.ClearableFileInput):
 class ServiceForm(forms.ModelForm):
     class Meta:
         model = Service
-        fields = ["title", "description", "image", "is_active"]
+        fields = ["title", "description", "title_es", "description_es", "image", "is_active"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
             "image": ServiceImageInput(attrs={
@@ -902,13 +923,15 @@ class ServiceForm(forms.ModelForm):
             )
         self.fields["image"].label = "Service image (optional)"
         self.fields["image"].help_text = "Use a clear photo that represents this service."
+        self.fields["title_es"].label = "Service title (Spanish)"
+        self.fields["description_es"].label = "Service description (Spanish)"
         self.fields["is_active"].help_text = "Only active services appear on the public Services page."
 
     def clean_image(self):
         image = self.cleaned_data.get("image")
         _normalize_image_upload_extension(image)
         if image and str(image.name).rsplit(".", 1)[-1].lower() not in {"jpg", "jpeg", "png", "webp"}:
-            raise ValidationError("Choose an image for this service.")
+            raise ValidationError(_("Choose an image for this service."))
         if image and hasattr(image, "content_type"):
             validate_contact_upload(image)
         return image
@@ -917,7 +940,7 @@ class ServiceForm(forms.ModelForm):
 class ProcessStepForm(forms.ModelForm):
     class Meta:
         model = ProcessStep
-        fields = ["title", "description", "image", "is_active"]
+        fields = ["title", "description", "title_es", "description_es", "image", "is_active"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
             "image": ServiceImageInput(attrs={
@@ -935,13 +958,15 @@ class ProcessStepForm(forms.ModelForm):
             )
         self.fields["image"].label = "Step image (optional)"
         self.fields["image"].help_text = "This image appears on the Process page, not in the Home process summary."
+        self.fields["title_es"].label = "Step title (Spanish)"
+        self.fields["description_es"].label = "Step description (Spanish)"
         self.fields["is_active"].help_text = "Active steps appear on both the Process page and Home."
 
     def clean_image(self):
         image = self.cleaned_data.get("image")
         _normalize_image_upload_extension(image)
         if image and str(image.name).rsplit(".", 1)[-1].lower() not in {"jpg", "jpeg", "png", "webp"}:
-            raise ValidationError("Choose an image for this process step.")
+            raise ValidationError(_("Choose an image for this process step."))
         if image and hasattr(image, "content_type"):
             validate_contact_upload(image)
         return image
@@ -949,32 +974,54 @@ class ProcessStepForm(forms.ModelForm):
 
 class ContentStudioForm(forms.Form):
     headline = forms.CharField(max_length=180)
+    headline_es = forms.CharField(max_length=180, required=False, label="Headline (Spanish)")
     subheadline = forms.CharField(widget=forms.Textarea, max_length=1000)
+    subheadline_es = forms.CharField(widget=forms.Textarea, max_length=1000, required=False, label="Supporting copy (Spanish)")
     featured_title = forms.CharField(max_length=180)
+    featured_title_es = forms.CharField(max_length=180, required=False, label="Featured project title (Spanish)")
     featured_body = forms.CharField(widget=forms.Textarea, max_length=1200)
+    featured_body_es = forms.CharField(widget=forms.Textarea, max_length=1200, required=False, label="Featured project copy (Spanish)")
     google_review_url = forms.URLField(required=False, assume_scheme="https", max_length=500)
     services_title = forms.CharField(max_length=180, label="Services page heading")
+    services_title_es = forms.CharField(max_length=180, required=False, label="Services page heading (Spanish)")
     services_intro = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=2000, label="Services introduction")
+    services_intro_es = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=2000, required=False, label="Services introduction (Spanish)")
     services_note = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), max_length=1000, required=False, label="Services supporting note")
+    services_note_es = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), max_length=1000, required=False, label="Services supporting note (Spanish)")
     process_page_title = forms.CharField(max_length=180, label="Process page heading")
+    process_page_title_es = forms.CharField(max_length=180, required=False, label="Process page heading (Spanish)")
     process_page_intro = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=2000, label="Process page introduction")
+    process_page_intro_es = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=2000, required=False, label="Process page introduction (Spanish)")
 
     contact_page_kicker = forms.CharField(max_length=100, label="Page eyebrow")
+    contact_page_kicker_es = forms.CharField(max_length=100, required=False, label="Page eyebrow (Spanish)")
     contact_page_title = forms.CharField(max_length=180, label="Page heading")
+    contact_page_title_es = forms.CharField(max_length=180, required=False, label="Page heading (Spanish)")
     contact_page_intro = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=2000, label="Page introduction")
+    contact_page_intro_es = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=2000, required=False, label="Page introduction (Spanish)")
     contact_service_areas_heading = forms.CharField(max_length=100, label="Service area heading")
+    contact_service_areas_heading_es = forms.CharField(max_length=100, required=False, label="Service area heading (Spanish)")
     contact_service_areas = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=1000, required=False, label="Service areas", help_text="Enter one area per line.")
+    contact_service_areas_es = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=1000, required=False, label="Service areas (Spanish)")
     contact_form_kicker = forms.CharField(max_length=100, label="Form eyebrow")
+    contact_form_kicker_es = forms.CharField(max_length=100, required=False, label="Form eyebrow (Spanish)")
     contact_form_title = forms.CharField(max_length=180, label="Form heading")
+    contact_form_title_es = forms.CharField(max_length=180, required=False, label="Form heading (Spanish)")
     contact_form_intro = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=2000, label="Form introduction")
+    contact_form_intro_es = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), max_length=2000, required=False, label="Form introduction (Spanish)")
     contact_form_privacy_note = forms.CharField(max_length=180, label="Privacy note")
+    contact_form_privacy_note_es = forms.CharField(max_length=180, required=False, label="Privacy note (Spanish)")
     contact_form_footer_note = forms.CharField(max_length=180, label="Form footer note")
+    contact_form_footer_note_es = forms.CharField(max_length=180, required=False, label="Form footer note (Spanish)")
     contact_direct_heading = forms.CharField(max_length=100, label="Direct contact heading")
+    contact_direct_heading_es = forms.CharField(max_length=100, required=False, label="Direct contact heading (Spanish)")
     contact_phone = forms.CharField(max_length=40, required=False, label="Phone number")
     contact_email = forms.EmailField(max_length=254, required=False, label="Email address")
     contact_instagram_url = forms.URLField(max_length=500, required=False, label="Instagram URL")
     contact_success_message = forms.CharField(max_length=240, label="After-submission message")
+    contact_success_message_es = forms.CharField(max_length=240, required=False, label="After-submission message (Spanish)")
     contact_form_submit_label = forms.CharField(max_length=80, label="Submit button")
+    contact_form_submit_label_es = forms.CharField(max_length=80, required=False, label="Submit button (Spanish)")
 
     def __init__(self, *args, services=None, process_steps=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -984,14 +1031,14 @@ class ClientMessageForm(forms.ModelForm):
     class Meta:
         model = ClientMessage
         fields = ["body"]
-        widgets = {"body": forms.Textarea(attrs={"rows": 4, "placeholder": "Write a message to Grand Coast..."})}
+        widgets = {"body": forms.Textarea(attrs={"rows": 4, "placeholder": _("Write a message to Grand Coast...")})}
 
 
 class StaffMessageForm(forms.ModelForm):
     class Meta:
         model = ClientMessage
         fields = ["body"]
-        widgets = {"body": forms.Textarea(attrs={"rows": 3, "placeholder": "Write a message to the client..."})}
+        widgets = {"body": forms.Textarea(attrs={"rows": 3, "placeholder": _("Write a message to the client...")})}
 
 
 class EmployeeProfileForm(forms.ModelForm):
@@ -1007,12 +1054,12 @@ class EmployeeProfileForm(forms.ModelForm):
 
 class AccountDeleteForm(forms.Form):
     password = forms.CharField(
-        label="Current password",
+        label=_("Current password"),
         strip=False,
         widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
     )
     confirmation = forms.CharField(
-        label='Type DELETE to confirm',
+        label=_("Type DELETE to confirm"),
         max_length=6,
         widget=forms.TextInput(attrs={"autocomplete": "off", "spellcheck": "false"}),
     )
@@ -1024,13 +1071,13 @@ class AccountDeleteForm(forms.Form):
     def clean_password(self):
         password = self.cleaned_data.get("password", "")
         if not self.user or not self.user.check_password(password):
-            raise ValidationError("Enter your current password to continue.")
+            raise ValidationError(_("Enter your current password to continue."))
         return password
 
     def clean_confirmation(self):
         confirmation = self.cleaned_data.get("confirmation", "")
         if confirmation != "DELETE":
-            raise ValidationError('Type DELETE exactly to confirm account deletion.')
+            raise ValidationError(_("Type DELETE exactly to confirm account deletion."))
         return confirmation
 
 
@@ -1118,11 +1165,11 @@ class CalendarDayOverrideForm(forms.Form):
 
         if status == CalendarDayOverride.Status.SHORT:
             if not short_start:
-                self.add_error('short_start', 'Short days need a start time.')
+                self.add_error('short_start', _('Short days need a start time.'))
             if not short_end:
-                self.add_error('short_end', 'Short days need an end time.')
+                self.add_error('short_end', _('Short days need an end time.'))
             if short_start and short_end and short_end <= short_start:
-                self.add_error('short_end', 'The short-day end time must be after its start time.')
+                self.add_error('short_end', _('The short-day end time must be after its start time.'))
         else:
             cleaned_data['short_start'] = None
             cleaned_data['short_end'] = None
@@ -1207,11 +1254,11 @@ class EmployeeScheduleOverrideForm(forms.Form):
         end_time = cleaned_data.get("end_time")
         if status == EmployeeScheduleOverride.Status.WORKING:
             if not start_time:
-                self.add_error("start_time", "Working overrides need a start time.")
+                self.add_error("start_time", _("Working overrides need a start time."))
             if not end_time:
-                self.add_error("end_time", "Working overrides need an end time.")
+                self.add_error("end_time", _("Working overrides need an end time."))
             if start_time and end_time and end_time <= start_time:
-                self.add_error("end_time", "The end time must be after the start time.")
+                self.add_error("end_time", _("The end time must be after the start time."))
         else:
             cleaned_data["start_time"] = None
             cleaned_data["end_time"] = None
@@ -1275,7 +1322,7 @@ class EmployeeInviteAcceptForm(forms.Form):
     def clean_username(self):
         username = self.cleaned_data.get("username", "").strip()
         if username and get_user_model().objects.filter(username__iexact=username).exists():
-            raise ValidationError("That username is already in use.")
+            raise ValidationError(_("That username is already in use."))
         return username
 
     def clean_password1(self):
@@ -1286,13 +1333,13 @@ class EmployeeInviteAcceptForm(forms.Form):
     def clean(self):
         cleaned = super().clean()
         if cleaned.get("password1") and cleaned.get("password1") != cleaned.get("password2"):
-            raise ValidationError("Passwords do not match.")
+            raise ValidationError(_("Passwords do not match."))
         return cleaned
 
 
 class ClientInviteAcceptForm(forms.Form):
     email = forms.EmailField(
-        label="Email",
+        label=_("Email"),
         disabled=True,
         widget=forms.EmailInput(attrs={"autocomplete": "email"}),
     )
@@ -1326,7 +1373,7 @@ class ClientInviteAcceptForm(forms.Form):
     def clean_username(self):
         username = self.cleaned_data["username"].strip()
         if get_user_model().objects.filter(username__iexact=username).exists():
-            raise ValidationError("That username is already in use.")
+            raise ValidationError(_("That username is already in use."))
         return username
 
     def clean_password1(self):
@@ -1337,7 +1384,7 @@ class ClientInviteAcceptForm(forms.Form):
     def clean(self):
         cleaned = super().clean()
         if cleaned.get("password1") and cleaned.get("password1") != cleaned.get("password2"):
-            raise ValidationError("Passwords do not match.")
+            raise ValidationError(_("Passwords do not match."))
         return cleaned
 
 
@@ -1464,7 +1511,7 @@ class AdminPinForm(forms.Form):
     def clean_pin(self):
         pin = self.cleaned_data["pin"]
         if not re.fullmatch(r"\d{6}", pin):
-            raise ValidationError("Enter the six-digit PIN.")
+            raise ValidationError(_("Enter the six-digit PIN."))
         return pin
 
 
@@ -1479,7 +1526,7 @@ class AdminOtpForm(forms.Form):
     def clean_token(self):
         token = self.cleaned_data["token"]
         if not re.fullmatch(r"\d{6}", token):
-            raise ValidationError("Enter the six-digit authenticator code.")
+            raise ValidationError(_("Enter the six-digit authenticator code."))
         return token
 
 
@@ -1507,13 +1554,13 @@ class AdminRecoveryResetForm(forms.Form):
     def clean_new_pin(self):
         pin = self.cleaned_data["new_pin"]
         if not re.fullmatch(r"\d{6}", pin):
-            raise ValidationError("Enter six numeric digits.")
+            raise ValidationError(_("Enter six numeric digits."))
         return pin
 
     def clean(self):
         cleaned = super().clean()
         if cleaned.get("new_pin") and cleaned.get("new_pin") != cleaned.get("new_pin_confirmation"):
-            raise ValidationError("The new PINs do not match.")
+            raise ValidationError(_("The new PINs do not match."))
         return cleaned
 
 
@@ -1541,15 +1588,15 @@ class AdminPinSettingsForm(forms.Form):
     def clean_new_pin(self):
         pin = self.cleaned_data.get("new_pin", "")
         if pin and not re.fullmatch(r"\d{6}", pin):
-            raise ValidationError("Enter six numeric digits.")
+            raise ValidationError(_("Enter six numeric digits."))
         return pin
 
     def clean(self):
         cleaned = super().clean()
         if cleaned.get("pin_enabled") and not self.profile.pin_hash and not cleaned.get("new_pin"):
-            self.add_error("new_pin", "Enter a PIN before turning PIN protection on.")
+            self.add_error("new_pin", _("Enter a PIN before turning PIN protection on."))
         if cleaned.get("new_pin") != cleaned.get("new_pin_confirmation"):
-            self.add_error("new_pin_confirmation", "The new PINs do not match.")
+            self.add_error("new_pin_confirmation", _("The new PINs do not match."))
         return cleaned
 
 

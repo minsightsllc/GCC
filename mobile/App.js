@@ -47,6 +47,46 @@ const colors = {
   border: '#E3E8EF',
 };
 
+const MOBILE_SPANISH_COPY = {
+  'Dashboard': 'Panel', 'Workspace': 'Espacio de trabajo', 'Overview': 'Resumen', 'More': 'M\u00e1s',
+  'Projects': 'Proyectos', 'Tasks': 'Tareas', 'Calendar': 'Calendario', 'Time': 'Tiempo',
+  'Documents': 'Documentos', 'Media': 'Multimedia', 'Client Media': 'Multimedia del cliente',
+  'Project overview': 'Resumen del proyecto', 'Updates': 'Actualizaciones',
+  'Photos & videos': 'Fotos y videos', 'Estimate & files': 'Presupuesto y archivos',
+  'Estimates': 'Presupuestos', 'Leads': 'Clientes potenciales', 'Clients': 'Clientes',
+  'Messages': 'Mensajes', 'Notifications': 'Notificaciones', 'Profile': 'Perfil', 'Team': 'Equipo',
+  'Content': 'Contenido', 'Publish Content': 'Publicar contenido', 'Client portal': 'Portal del cliente',
+  'Portal home': 'Inicio del portal', 'Explore': 'Explorar', 'Account': 'Cuenta',
+  'Account & support': 'Cuenta y ayuda', 'Session': 'Sesi\u00f3n', 'Privacy Policy': 'Pol\u00edtica de privacidad',
+  'Terms of Service': 'T\u00e9rminos del servicio', 'Log out': 'Cerrar sesi\u00f3n', 'Delete account': 'Eliminar cuenta',
+  'Contact Grand Coast': 'Contactar a Grand Coast', 'Client & Job Operations': 'Operaciones de clientes y proyectos',
+  'Miscellaneous': 'Otros', 'Explore': 'Explorar', 'Website Publishing': 'Publicaci\u00f3n del sitio web', 'Menu': 'Men\u00fa',
+  'Open side navigation': 'Abrir navegaci\u00f3n lateral', 'Open profile': 'Abrir perfil',
+  'Open operations': 'Abrir operaciones', 'Open workspace': 'Abrir espacio de trabajo',
+  'Language': 'Idioma', 'English': 'Ingl\u00e9s', 'Spanish': 'Espa\u00f1ol',
+  'Employee support': 'Ayuda para empleados', 'Back to More': 'Volver a M\u00e1s',
+  'Send a message directly to the Grand Coast team.': 'Env\u00ede un mensaje directamente al equipo de Grand Coast.',
+  'Message sent': 'Mensaje enviado', 'Thanks for reaching out. We will be in touch soon.': 'Gracias por comunicarse. Pronto nos pondremos en contacto.',
+  'First name': 'Nombre', 'Last name': 'Apellido', 'Email': 'Correo electr\u00f3nico', 'Phone': 'Tel\u00e9fono',
+  'Optional': 'Opcional', 'Send message': 'Enviar mensaje', 'Your message': 'Su mensaje',
+  'We couldn\u2019t send your message. Check your connection and try again.': 'No pudimos enviar su mensaje. Revise su conexi\u00f3n e int\u00e9ntelo de nuevo.',
+  'Loading Grand Coast...': 'Cargando Grand Coast...', 'Loading sign in...': 'Cargando inicio de sesi\u00f3n...',
+  'Refreshing Grand Coast...': 'Actualizando Grand Coast...', 'Opening workspace...': 'Abriendo el espacio de trabajo...',
+  'Unable to reach Grand Coast': 'No se pudo conectar con Grand Coast',
+  'Thoughtful construction.': 'Construcci\u00f3n bien pensada.',
+  'Clear communication.': 'Comunicaci\u00f3n clara.',
+  'Check that the Django server is running and that the app is using the right local network address.': 'Verifique que el servidor est\u00e9 activo y que la aplicaci\u00f3n use la direcci\u00f3n de red local correcta.',
+  'Try again': 'Intentar de nuevo', 'Sign in': 'Iniciar sesi\u00f3n', 'Back to More': 'Volver a M\u00e1s',
+  'Project type': 'Tipo de proyecto', 'Location': 'Ubicaci\u00f3n', 'Tell us about the project': 'Cu\u00e9ntenos sobre el proyecto',
+  'Remodel, restoration, or other': 'Remodelaci\u00f3n, restauraci\u00f3n u otro', 'City or project address': 'Ciudad o direcci\u00f3n del proyecto',
+  'How can we help?': '\u00bfC\u00f3mo podemos ayudarle?', 'Please complete all required fields.': 'Complete todos los campos obligatorios.',
+  'Enter a valid email address.': 'Ingrese un correo electr\u00f3nico v\u00e1lido.', 'Unable to send': 'No se pudo enviar'
+};
+
+function nativeText(language, value) {
+  return language === 'es' ? (MOBILE_SPANISH_COPY[value] || value) : value;
+}
+
 const WEB_APP_URL = (
   process.env.EXPO_PUBLIC_WEB_APP_URL || 'http://127.0.0.1:8000'
 ).replace(/\/$/, '');
@@ -181,8 +221,10 @@ const SharedWebViewContext = createContext({
 const NativeShellContext = createContext({
   activeTab: null,
   activeWebPath: null,
+  language: 'en',
   setActiveTab: () => {},
   setActiveWebPath: () => {},
+  setLanguage: () => {},
 });
 
 const transparentNavigationTheme = {
@@ -203,7 +245,9 @@ const clientDrawerPages = [
     path: '/portal/messages/',
     tab: 'Workspace',
     countKey: 'messages',
-    countAccessibilityLabel: (count) => `${count} unread message${count === 1 ? '' : 's'}`,
+    countAccessibilityLabel: (count, language) => language === 'es'
+      ? `${count} ${count === 1 ? 'mensaje sin leer' : 'mensajes sin leer'}`
+      : `${count} unread message${count === 1 ? '' : 's'}`,
   },
   {
     label: 'Estimate & files',
@@ -211,7 +255,9 @@ const clientDrawerPages = [
     path: '/portal/estimate-files/',
     tab: 'Workspace',
     countKey: 'estimates',
-    countAccessibilityLabel: (count) => `${count} estimate${count === 1 ? '' : 's'} to review`,
+    countAccessibilityLabel: (count, language) => language === 'es'
+      ? `${count} ${count === 1 ? 'presupuesto por revisar' : 'presupuestos por revisar'}`
+      : `${count} estimate${count === 1 ? '' : 's'} to review`,
   },
   {
     label: 'Notifications',
@@ -219,7 +265,9 @@ const clientDrawerPages = [
     path: '/portal/notifications/',
     tab: 'Workspace',
     countKey: 'notifications',
-    countAccessibilityLabel: (count) => `${count} unread notification${count === 1 ? '' : 's'}`,
+    countAccessibilityLabel: (count, language) => language === 'es'
+      ? `${count} ${count === 1 ? 'notificación sin leer' : 'notificaciones sin leer'}`
+      : `${count} unread notification${count === 1 ? '' : 's'}`,
   },
   { label: 'Profile', icon: 'person-circle-outline', path: CLIENT_PROFILE_PATH, tab: 'Overview' },
 ];
@@ -306,6 +354,8 @@ const adminDrawerLogout = adminMorePages[2];
 
 const MOBILE_CHROME_SCRIPT = [
   '(function () {',
+  "  var reportLanguage = function () { var code = document.documentElement && document.documentElement.getAttribute('lang') || 'en'; if (window.ReactNativeWebView) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'gcc-language', language: code.substring(0, 2) })); } };",
+  "  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', reportLanguage, { once: true }); } else { reportLanguage(); }",
   '  try {',
   "    document.documentElement.classList.add('mobile-app-webview');",
   "    var styleId = 'grand-coast-mobile-webview-chrome';",
@@ -609,7 +659,7 @@ function openExternalUrl(url) {
 function AppHeader({ navigation }) {
   const insets = useSafeAreaInsets();
   const { navigate } = useContext(SharedWebViewContext);
-  const { setActiveTab, setActiveWebPath } = useContext(NativeShellContext);
+  const { language, setActiveTab, setActiveWebPath } = useContext(NativeShellContext);
   const { workspaceKind, workspacePath } = useSession();
 
   const openProfile = useCallback(() => {
@@ -628,7 +678,7 @@ function AppHeader({ navigation }) {
     <View style={[styles.header, { paddingTop: insets.top }]}>
       <View style={styles.headerRow}>
         <Pressable
-          accessibilityLabel="Open side navigation"
+          accessibilityLabel={nativeText(language, "Open side navigation")}
           hitSlop={10}
           onPress={() => navigation.openDrawer()}
           style={styles.headerButton}
@@ -642,7 +692,7 @@ function AppHeader({ navigation }) {
         </View>
 
         <Pressable
-          accessibilityLabel={workspaceKind === 'employee' || workspaceKind === 'client' ? 'Open profile' : workspaceKind === 'admin' ? 'Open operations' : 'Open workspace'}
+          accessibilityLabel={nativeText(language, workspaceKind === 'employee' || workspaceKind === 'client' ? 'Open profile' : workspaceKind === 'admin' ? 'Open operations' : 'Open workspace')}
           hitSlop={10}
           onPress={openProfile}
           style={styles.headerButton}
@@ -655,6 +705,7 @@ function AppHeader({ navigation }) {
 }
 
 function NativeNotificationBadge({ count, page, lightSurface = false }) {
+  const { language } = useContext(NativeShellContext);
   const numericCount = Number.isFinite(Number(count)) ? Math.max(0, Math.floor(Number(count))) : 0;
 
   if (numericCount === 0) {
@@ -663,8 +714,8 @@ function NativeNotificationBadge({ count, page, lightSurface = false }) {
 
   const displayedCount = numericCount > 99 ? '99+' : String(numericCount);
   const accessibilityLabel = typeof page?.countAccessibilityLabel === 'function'
-    ? page.countAccessibilityLabel(numericCount)
-    : `${page?.label || 'Navigation item'}, ${numericCount}`;
+    ? page.countAccessibilityLabel(numericCount, language)
+    : `${nativeText(language, page?.label || 'Navigation item')}, ${numericCount}`;
 
   return (
     <View
@@ -682,7 +733,7 @@ function NativeNotificationBadge({ count, page, lightSurface = false }) {
 
 function NativeDrawerItem({ navigation, notificationCount, page, isEmployee }) {
   const { navigate } = useContext(SharedWebViewContext);
-  const { setActiveTab, setActiveWebPath } = useContext(NativeShellContext);
+  const { language, setActiveTab, setActiveWebPath } = useContext(NativeShellContext);
 
   return (
     <DrawerItem
@@ -695,7 +746,7 @@ function NativeDrawerItem({ navigation, notificationCount, page, isEmployee }) {
       label={() => (
         <View style={styles.drawerItemLabelRow}>
           <Text style={[isEmployee ? styles.employeeDrawerItemLabel : styles.drawerItemLabel, styles.drawerItemLabelText]}>
-            {page.label}
+            {nativeText(language, page.label)}
           </Text>
           {page.countKey ? (
             <NativeNotificationBadge count={notificationCount} lightSurface={!isEmployee} page={page} />
@@ -716,7 +767,7 @@ function NativeDrawerItem({ navigation, notificationCount, page, isEmployee }) {
 
 function NativeDrawerAction({ action, isAdmin, navigation }) {
   const { requestLogout } = useContext(SharedWebViewContext);
-  const { setActiveTab, setActiveWebPath } = useContext(NativeShellContext);
+  const { language, setActiveTab, setActiveWebPath } = useContext(NativeShellContext);
 
   return (
     <DrawerItem
@@ -724,7 +775,7 @@ function NativeDrawerAction({ action, isAdmin, navigation }) {
       activeTintColor={colors.white}
       icon={({ color, size }) => <Ionicons color={color} name={action.icon} size={size} />}
       inactiveTintColor="#F5F7FA"
-      label={action.label}
+      label={nativeText(language, action.label)}
       labelStyle={styles.employeeDrawerItemLabel}
       onPress={() => {
         requestLogout(isAdmin ? ADMIN_WORKSPACE_PATH : EMPLOYEE_WORKSPACE_PATH);
@@ -741,6 +792,7 @@ function NativeDrawerAction({ action, isAdmin, navigation }) {
 function AppDrawerContent({ navigation, ...props }) {
   const { isAuthenticated, navigationCounts, workspaceKind, workspacePath } = useSession();
   const { webViewRef } = useContext(SharedWebViewContext);
+  const { language } = useContext(NativeShellContext);
   const drawerStatus = useDrawerStatus();
   const isAdmin = workspaceKind === 'admin';
   const isEmployee = workspaceKind === 'employee';
@@ -780,7 +832,7 @@ function AppDrawerContent({ navigation, ...props }) {
           {pages.map((page, index) => (
             <View key={`${page.group || 'overview'}:${page.label}`}>
               {page.group && (index === 0 || page.group !== pages[index - 1].group) ? (
-                <Text style={styles.employeeDrawerWorkflowGroup}>{page.group}</Text>
+                <Text style={styles.employeeDrawerWorkflowGroup}>{nativeText(language, page.group)}</Text>
               ) : null}
               <NativeDrawerItem
                 isEmployee
@@ -796,6 +848,7 @@ function AppDrawerContent({ navigation, ...props }) {
             isAdmin={isAdmin}
             navigation={navigation}
           />
+          {!isAdmin ? <NativeLanguageSwitch isEmployee /> : null}
         </>
       ) : (
         <>
@@ -809,7 +862,7 @@ function AppDrawerContent({ navigation, ...props }) {
             </View>
           </View>
 
-          <Text style={styles.drawerSectionLabel}>{isClient ? 'Client portal' : 'Explore'}</Text>
+          <Text style={styles.drawerSectionLabel}>{nativeText(language, isClient ? 'Client portal' : 'Explore')}</Text>
           {pages.map((page) => (
             <NativeDrawerItem
               key={page.path}
@@ -819,18 +872,54 @@ function AppDrawerContent({ navigation, ...props }) {
             />
           ))}
 
-          <Text style={[styles.drawerSectionLabel, styles.drawerSectionLabelSpaced]}>Account</Text>
+          <Text style={[styles.drawerSectionLabel, styles.drawerSectionLabelSpaced]}>{nativeText(language, "Account")}</Text>
           {accountPages.map((page) => (
             <NativeDrawerItem key={page.path} navigation={navigation} page={page} />
           ))}
 
+          <NativeLanguageSwitch />
           <View style={styles.drawerFooter}>
-            <Text style={styles.drawerFooterText}>Thoughtful construction.</Text>
-            <Text style={styles.drawerFooterText}>Clear communication.</Text>
+            <Text style={styles.drawerFooterText}>{nativeText(language, 'Thoughtful construction.')}</Text>
+            <Text style={styles.drawerFooterText}>{nativeText(language, 'Clear communication.')}</Text>
           </View>
         </>
       )}
     </DrawerContentScrollView>
+  );
+}
+
+function NativeLanguageSwitch({ isEmployee = false }) {
+  const { language, setLanguage } = useContext(NativeShellContext);
+  const { webViewRef } = useContext(SharedWebViewContext);
+  const chooseLanguage = useCallback((nextLanguage) => {
+    if (!['en', 'es'].includes(nextLanguage)) return;
+    setLanguage(nextLanguage);
+    const script = '(function () {' +
+      'var language=' + JSON.stringify(nextLanguage) + ';' +
+      'var match=document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);' +
+      'var csrf=match?decodeURIComponent(match[1]):((document.querySelector("input[name=csrfmiddlewaretoken]")||{}).value||"");' +
+      'fetch("/accounts/language/",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/x-www-form-urlencoded","X-CSRFToken":csrf},body:new URLSearchParams({language:language,next:window.location.pathname+window.location.search+window.location.hash}).toString()}).then(function(){window.location.reload();}).catch(function(){window.location.reload();});' +
+      '})(); true;';
+    webViewRef?.current?.injectJavaScript(script);
+  }, [setLanguage, webViewRef]);
+  return (
+    <View style={[styles.nativeLanguageSwitch, isEmployee && styles.nativeLanguageSwitchEmployee]}>
+      <Text style={[styles.nativeLanguageLabel, isEmployee && styles.nativeLanguageLabelEmployee]}>{nativeText(language, 'Language')}</Text>
+      <View style={styles.nativeLanguageOptions}>
+        {['en', 'es'].map((option) => (
+          <Pressable
+            accessibilityLabel={nativeText(language, option === 'en' ? 'English' : 'Spanish')}
+            accessibilityRole="button"
+            accessibilityState={{ selected: language === option }}
+            key={option}
+            onPress={() => chooseLanguage(option)}
+            style={[styles.nativeLanguageOption, language === option && styles.nativeLanguageOptionSelected, isEmployee && styles.nativeLanguageOptionEmployee, isEmployee && language === option && styles.nativeLanguageOptionSelectedEmployee]}
+          >
+            <Text style={[styles.nativeLanguageOptionText, language === option && styles.nativeLanguageOptionTextSelected, isEmployee && styles.nativeLanguageOptionTextEmployee]}>{option.toUpperCase()}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -1065,6 +1154,7 @@ function SignInGate({ onWebViewLoadEnd, webViewRef }) {
     updateNavigationCounts,
     updateWorkspacePath,
   } = useSession();
+  const { language, setLanguage } = useContext(NativeShellContext);
   const {
     beginAuthTransition,
     cancelAuthTransition,
@@ -1262,6 +1352,10 @@ function SignInGate({ onWebViewLoadEnd, webViewRef }) {
   const handleMessage = (event) => {
     try {
       const message = JSON.parse(event.nativeEvent.data);
+      if (message?.type === 'gcc-language' && ['en', 'es'].includes(message.language)) {
+        setLanguage(message.language);
+        return;
+      }
       if (message && typeof message.type === 'string' && message.type.indexOf('native-media-') === 0) {
         const mediaMessageTypes = new Set([
           'native-media-request',
@@ -1457,7 +1551,7 @@ function SignInGate({ onWebViewLoadEnd, webViewRef }) {
         <View pointerEvents="none" style={styles.loadingOverlay}>
           <ActivityIndicator color={colors.blue} size="large" />
           <Text style={styles.loadingText}>
-            {isAuthenticated ? 'Loading Grand Coast...' : 'Loading sign in...'}
+            {nativeText(language, isAuthenticated ? 'Loading Grand Coast...' : 'Loading sign in...')}
           </Text>
         </View>
       ) : null}
@@ -1465,19 +1559,19 @@ function SignInGate({ onWebViewLoadEnd, webViewRef }) {
       {isRefreshActive ? (
         <View pointerEvents="none" style={styles.refreshOverlay}>
           <ActivityIndicator color={colors.blue} size="small" />
-          <Text style={styles.refreshText}>Refreshing Grand Coast...</Text>
+          <Text style={styles.refreshText}>{nativeText(language, "Refreshing Grand Coast...")}</Text>
         </View>
       ) : null}
 
       {hasError ? (
         <View style={styles.errorOverlay}>
           <Ionicons color={colors.blue} name="cloud-offline-outline" size={42} />
-          <Text style={styles.errorTitle}>Unable to reach Grand Coast</Text>
+          <Text style={styles.errorTitle}>{nativeText(language, "Unable to reach Grand Coast")}</Text>
           <Text style={styles.errorText}>
-            Check that the Django server is running and that the app is using the right local network address.
+            {nativeText(language, "Check that the Django server is running and that the app is using the right local network address.")}
           </Text>
           <Pressable onPress={() => webViewRef.current?.reload()} style={styles.retryButton}>
-            <Text style={styles.retryButtonText}>Try again</Text>
+            <Text style={styles.retryButtonText}>{nativeText(language, "Try again")}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -1487,6 +1581,7 @@ function SignInGate({ onWebViewLoadEnd, webViewRef }) {
 }
 
 function EmployeeMoreItem({ page, onPress }) {
+  const { language } = useContext(NativeShellContext);
   return (
     <Pressable
       accessibilityRole="button"
@@ -1494,7 +1589,7 @@ function EmployeeMoreItem({ page, onPress }) {
       style={styles.moreItem}
     >
       <Ionicons color={page.danger ? colors.danger : colors.blue} name={page.icon} size={23} />
-      <Text style={[styles.moreItemLabel, page.danger && styles.moreItemDanger]}>{page.label}</Text>
+      <Text style={[styles.moreItemLabel, page.danger && styles.moreItemDanger]}>{nativeText(language, page.label)}</Text>
       <Ionicons color={page.danger ? colors.danger : colors.muted} name="chevron-forward-outline" size={19} />
     </Pressable>
   );
@@ -1502,6 +1597,7 @@ function EmployeeMoreItem({ page, onPress }) {
 
 function NativeLegalScreen({ pageKey, onBack }) {
   const document = LEGAL_DOCUMENTS[pageKey];
+  const { language } = useContext(NativeShellContext);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -1518,13 +1614,13 @@ function NativeLegalScreen({ pageKey, onBack }) {
         showsVerticalScrollIndicator
       >
         <Pressable
-          accessibilityLabel="Back to More"
+          accessibilityLabel={nativeText(language, "Back to More")}
           accessibilityRole="button"
           onPress={onBack}
           style={styles.nativeLegalBack}
         >
           <Ionicons color={colors.blue} name="arrow-back-outline" size={20} />
-          <Text style={styles.nativeLegalBackLabel}>More</Text>
+          <Text style={styles.nativeLegalBackLabel}>{nativeText(language, "More")}</Text>
         </Pressable>
 
         <Text style={styles.nativeLegalKicker}>Grand Coast Construction Inc.</Text>
@@ -1561,16 +1657,17 @@ function NativeContactField({
   testID,
   value,
 }) {
+  const { language } = useContext(NativeShellContext);
   return (
     <View style={styles.nativeContactField}>
-      <Text style={styles.nativeContactFieldLabel}>{label}</Text>
+      <Text style={styles.nativeContactFieldLabel}>{nativeText(language, label)}</Text>
       <TextInput
         autoCapitalize={autoCapitalize}
         autoCorrect={false}
         keyboardType={keyboardType}
         multiline={multiline}
         onChangeText={onChangeText}
-        placeholder={placeholder}
+        placeholder={nativeText(language, placeholder)}
         placeholderTextColor="#94A3B8"
         style={[styles.nativeContactInput, multiline && styles.nativeContactMessageInput]}
         testID={testID}
@@ -1581,6 +1678,7 @@ function NativeContactField({
 }
 
 function EmployeeContactScreen({ onBack }) {
+  const { language } = useContext(NativeShellContext);
   const [form, setForm] = useState(() => ({ ...EMPTY_NATIVE_CONTACT_FORM }));
   const [status, setStatus] = useState('idle');
   const [submitError, setSubmitError] = useState('');
@@ -1595,7 +1693,7 @@ function EmployeeContactScreen({ onBack }) {
     const validationError = validateNativeContactForm(form);
     if (validationError) {
       setStatus('idle');
-      setSubmitError(validationError);
+      setSubmitError(nativeText(language, validationError));
       return;
     }
 
@@ -1607,9 +1705,9 @@ function EmployeeContactScreen({ onBack }) {
       setStatus('success');
     } catch {
       setStatus('idle');
-      setSubmitError("We couldn't send your message. Check your connection and try again.");
+      setSubmitError(nativeText(language, "We couldn\u2019t send your message. Check your connection and try again."));
     }
-  }, [form]);
+  }, [form, language]);
 
   const isSubmitting = status === 'submitting';
 
@@ -1625,34 +1723,34 @@ function EmployeeContactScreen({ onBack }) {
           showsVerticalScrollIndicator={false}
         >
           <Pressable
-            accessibilityLabel="Back to More"
+            accessibilityLabel={nativeText(language, "Back to More")}
             accessibilityRole="button"
             onPress={onBack}
             style={styles.nativeContactBack}
             testID="employee-contact-back"
           >
             <Ionicons color={colors.blue} name="arrow-back-outline" size={20} />
-            <Text style={styles.nativeContactBackLabel}>More</Text>
+            <Text style={styles.nativeContactBackLabel}>{nativeText(language, "More")}</Text>
           </Pressable>
 
-          <Text style={styles.nativeContactKicker}>Employee support</Text>
-          <Text style={styles.nativeContactTitle}>Contact Grand Coast</Text>
+          <Text style={styles.nativeContactKicker}>{nativeText(language, "Employee support")}</Text>
+          <Text style={styles.nativeContactTitle}>{nativeText(language, "Contact Grand Coast")}</Text>
           <Text style={styles.nativeContactIntro}>
-            Send a message directly to the Grand Coast team.
+            {nativeText(language, "Send a message directly to the Grand Coast team.")}
           </Text>
 
           {status === 'success' ? (
             <View accessibilityLiveRegion="polite" style={[styles.nativeContactNotice, styles.nativeContactSuccess]}>
-              <Text style={styles.nativeContactNoticeTitle}>Message sent</Text>
+              <Text style={styles.nativeContactNoticeTitle}>{nativeText(language, "Message sent")}</Text>
               <Text style={styles.nativeContactNoticeBody}>
-                Thanks for reaching out. We will be in touch soon.
+                {nativeText(language, "Thanks for reaching out. We will be in touch soon.")}
               </Text>
             </View>
           ) : null}
 
           {submitError ? (
             <View accessibilityLiveRegion="polite" style={[styles.nativeContactNotice, styles.nativeContactError]}>
-              <Text style={styles.nativeContactNoticeTitle}>Unable to send</Text>
+              <Text style={styles.nativeContactNoticeTitle}>{nativeText(language, "Unable to send")}</Text>
               <Text style={styles.nativeContactNoticeBody}>{submitError}</Text>
             </View>
           ) : null}
@@ -1721,7 +1819,7 @@ function EmployeeContactScreen({ onBack }) {
               {isSubmitting ? (
                 <ActivityIndicator color={colors.white} />
               ) : (
-                <Text style={styles.nativeContactSubmitText}>Send message</Text>
+                <Text style={styles.nativeContactSubmitText}>{nativeText(language, "Send message")}</Text>
               )}
             </Pressable>
           </View>
@@ -1733,6 +1831,7 @@ function EmployeeContactScreen({ onBack }) {
 
 function EmployeeMoreScreen({ onNavigate }) {
   const [showContactForm, setShowContactForm] = useState(false);
+  const { language } = useContext(NativeShellContext);
   const [legalPage, setLegalPage] = useState(null);
   const { requestLogout } = useContext(SharedWebViewContext);
   const { setActiveTab, setActiveWebPath } = useContext(NativeShellContext);
@@ -1769,7 +1868,7 @@ function EmployeeMoreScreen({ onNavigate }) {
   return (
     <View style={styles.moreScreen}>
       <ScrollView contentContainerStyle={styles.moreContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.moreSectionLabel}>Account & support</Text>
+        <Text style={styles.moreSectionLabel}>{nativeText(language, "Account & support")}</Text>
         {employeeMorePages.slice(0, 2).map((page) => (
           <EmployeeMoreItem
             key={page.path}
@@ -1779,7 +1878,7 @@ function EmployeeMoreScreen({ onNavigate }) {
         ))}
         <EmployeeMoreItem page={employeeMoreContactPage} onPress={openContactForm} />
 
-        <Text style={[styles.moreSectionLabel, styles.moreSectionLabelSpaced]}>Session</Text>
+        <Text style={[styles.moreSectionLabel, styles.moreSectionLabelSpaced]}>{nativeText(language, "Session")}</Text>
         {employeeMorePages.slice(2).map((page) => (
           <EmployeeMoreItem
             key={page.path}
@@ -1794,6 +1893,7 @@ function EmployeeMoreScreen({ onNavigate }) {
 
 function AdminMoreScreen({ onNavigate }) {
   const [legalPage, setLegalPage] = useState(null);
+  const { language } = useContext(NativeShellContext);
   const { requestLogout } = useContext(SharedWebViewContext);
   const { setActiveTab, setActiveWebPath } = useContext(NativeShellContext);
   const openPage = useCallback((page) => {
@@ -1819,7 +1919,7 @@ function AdminMoreScreen({ onNavigate }) {
   return (
     <View style={styles.moreScreen}>
       <ScrollView contentContainerStyle={styles.moreContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.moreSectionLabel}>Account & support</Text>
+        <Text style={styles.moreSectionLabel}>{nativeText(language, "Account & support")}</Text>
         {adminMorePages.slice(0, 2).map((page) => (
           <EmployeeMoreItem
             key={page.path}
@@ -1828,7 +1928,7 @@ function AdminMoreScreen({ onNavigate }) {
           />
         ))}
 
-        <Text style={[styles.moreSectionLabel, styles.moreSectionLabelSpaced]}>Session</Text>
+        <Text style={[styles.moreSectionLabel, styles.moreSectionLabelSpaced]}>{nativeText(language, "Session")}</Text>
         <EmployeeMoreItem page={adminDrawerLogout} onPress={() => openPage(adminDrawerLogout)} />
       </ScrollView>
     </View>
@@ -1837,6 +1937,7 @@ function AdminMoreScreen({ onNavigate }) {
 
 function ClientMoreScreen({ onNavigate }) {
   const [legalPage, setLegalPage] = useState(null);
+  const { language } = useContext(NativeShellContext);
   const { requestLogout } = useContext(SharedWebViewContext);
   const { setActiveTab, setActiveWebPath } = useContext(NativeShellContext);
   const openPage = useCallback((page) => {
@@ -1862,7 +1963,7 @@ function ClientMoreScreen({ onNavigate }) {
   return (
     <View style={styles.moreScreen}>
       <ScrollView contentContainerStyle={styles.moreContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.moreSectionLabel}>Account & support</Text>
+        <Text style={styles.moreSectionLabel}>{nativeText(language, "Account & support")}</Text>
         {clientMorePages.slice(0, 2).map((page) => (
           <EmployeeMoreItem
             key={page.path}
@@ -1871,7 +1972,7 @@ function ClientMoreScreen({ onNavigate }) {
           />
         ))}
 
-        <Text style={[styles.moreSectionLabel, styles.moreSectionLabelSpaced]}>Session</Text>
+        <Text style={[styles.moreSectionLabel, styles.moreSectionLabelSpaced]}>{nativeText(language, "Session")}</Text>
         {clientMorePages.slice(2).map((page) => (
           <EmployeeMoreItem
             key={page.path}
@@ -1885,6 +1986,7 @@ function ClientMoreScreen({ onNavigate }) {
 }
 
 function NativeTabBar({ activeTab, insets, isEmployee, onSelect }) {
+  const { language } = useContext(NativeShellContext);
   const icons = isEmployee ? employeeTabIcons : clientTabIcons;
   const tabs = isEmployee ? employeeBottomTabs : clientBottomTabs;
 
@@ -1913,7 +2015,7 @@ function NativeTabBar({ activeTab, insets, isEmployee, onSelect }) {
               size={25}
             />
             <Text style={[styles.tabBarLabel, { color: focused ? colors.gold : colors.muted }]}>
-              {tab.label}
+              {nativeText(language, tab.label)}
             </Text>
           </Pressable>
         );
@@ -2050,7 +2152,7 @@ function MainTabs() {
   );
 }
 
-function AppShell() {
+function AppShell({ language, setLanguage }) {
   const { isAuthenticated, workspaceKind } = useSession();
   const isAdmin = workspaceKind === 'admin';
   const isEmployee = workspaceKind === 'employee';
@@ -2072,10 +2174,12 @@ function AppShell() {
     () => ({
       activeTab: selectedTab,
       activeWebPath,
+      language,
       setActiveTab,
       setActiveWebPath,
+      setLanguage,
     }),
-    [activeWebPath, selectedTab],
+    [activeWebPath, language, selectedTab],
   );
 
   return (
@@ -2118,6 +2222,7 @@ export default function App() {
   const authTransitionOpacity = useRef(new Animated.Value(0)).current;
   const [launchSplashVisible, setLaunchSplashVisible] = useState(true);
   const [authTransitionVisible, setAuthTransitionVisible] = useState(false);
+  const [language, setLanguage] = useState('en');
   const [session, setSession] = useState({
     isAuthenticated: false,
     navigationCounts: {},
@@ -2395,7 +2500,7 @@ export default function App() {
       <SessionContext.Provider value={sessionValue}>
         <SharedWebViewContext.Provider value={sharedWebViewValue}>
           <View style={styles.mobileRoot}>
-            <AppShell />
+            <AppShell language={language} setLanguage={setLanguage} />
             {launchSplashVisible ? (
               <Animated.View
                 pointerEvents="none"
@@ -2410,7 +2515,7 @@ export default function App() {
                 style={[styles.authTransition, { opacity: authTransitionOpacity }]}
               >
                 <ActivityIndicator color={colors.blue} size="large" />
-                <Text style={styles.loadingText}>Opening workspace...</Text>
+                <Text style={styles.loadingText}>{nativeText(language, "Opening workspace...")}</Text>
               </Animated.View>
             ) : null}
           </View>
@@ -2465,6 +2570,21 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 2,
   },
+  nativeLanguageSwitch: {
+    alignItems: 'center', borderColor: '#D8E0EA', borderRadius: 12, borderWidth: 1,
+    flexDirection: 'row', justifyContent: 'space-between', marginTop: 18, paddingHorizontal: 14, paddingVertical: 10,
+  },
+  nativeLanguageSwitchEmployee: { borderColor: 'rgba(255,255,255,0.24)', marginHorizontal: 14 },
+  nativeLanguageLabel: { color: colors.ink, fontSize: 14, fontWeight: '700' },
+  nativeLanguageLabelEmployee: { color: colors.white },
+  nativeLanguageOptions: { flexDirection: 'row', gap: 5 },
+  nativeLanguageOption: { alignItems: 'center', borderRadius: 8, minWidth: 38, paddingHorizontal: 9, paddingVertical: 7 },
+  nativeLanguageOptionSelected: { backgroundColor: colors.blue },
+  nativeLanguageOptionEmployee: { borderColor: 'rgba(255,255,255,0.25)', borderWidth: 1 },
+  nativeLanguageOptionSelectedEmployee: { backgroundColor: colors.gold, borderColor: colors.gold },
+  nativeLanguageOptionText: { color: colors.navy, fontSize: 12, fontWeight: '800' },
+  nativeLanguageOptionTextSelected: { color: colors.white },
+  nativeLanguageOptionTextEmployee: { color: colors.white },
   drawer: {
     backgroundColor: colors.white,
     width: 306,
