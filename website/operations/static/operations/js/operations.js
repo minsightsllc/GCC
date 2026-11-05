@@ -226,7 +226,7 @@
         var direction = targetIndex > fromIndex ? 1 : -1;
         var distance = 34 * direction;
         var duration = 320;
-        var timing = {duration: duration, easing: "cubic-bezier(.22,.68,0,1)", fill: "both"};
+        var timing = { duration: duration, easing: "cubic-bezier(.22,.68,0,1)", fill: "both" };
         var transition = {
             stage: stage,
             fromPanel: fromPanel,
@@ -238,16 +238,16 @@
         try {
             transition.animations = [
                 fromPanel.animate([
-                    {transform: "translateX(0)"},
-                    {transform: "translateX(" + (-distance) + "px)"}
+                    { transform: "translateX(0)" },
+                    { transform: "translateX(" + (-distance) + "px)" }
                 ], timing),
                 targetPanel.animate([
-                    {transform: "translateX(" + distance + "px)"},
-                    {transform: "translateX(0)"}
+                    { transform: "translateX(" + distance + "px)" },
+                    { transform: "translateX(0)" }
                 ], timing),
                 stage.animate([
-                    {height: startHeight + "px"},
-                    {height: endHeight + "px"}
+                    { height: startHeight + "px" },
+                    { height: endHeight + "px" }
                 ], timing)
             ];
             var remaining = transition.animations.length;
@@ -278,7 +278,7 @@
             || (queryTarget && stage.contains(queryTarget) ? queryTarget : null)
             || stage._activeContentPagePanel
             || panels[0];
-        showContentPage(nav, stage, target, {animate: true, align: true});
+        showContentPage(nav, stage, target, { animate: true, align: true });
     }
 
     function initContentPageNavigation(options) {
@@ -326,7 +326,7 @@
                     if (nextUrl.href !== window.location.href) {
                         window.history.pushState(window.history.state, "", nextUrl.pathname + nextUrl.search + nextUrl.hash);
                     }
-                    showContentPage(nav, stage, targetPanel, {animate: true, align: true});
+                    showContentPage(nav, stage, targetPanel, { animate: true, align: true });
                 });
             });
         }
@@ -931,7 +931,7 @@
 
     function calendarDateLabel(value) {
         var date = parseCalendarDate(value);
-        return date ? date.toLocaleDateString("en-US", {month: "short", day: "2-digit", year: "numeric"}) : "Choose a date";
+        return date ? date.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }) : "Choose a date";
     }
 
     function parseCalendarTime(value) {
@@ -968,7 +968,7 @@
         ["input", "change"].forEach(function (eventName) {
             var event;
             if (typeof Event === "function") {
-                event = new Event(eventName, {bubbles: true});
+                event = new Event(eventName, { bubbles: true });
             } else {
                 event = document.createEvent("Event");
                 event.initEvent(eventName, true, true);
@@ -1118,7 +1118,7 @@
         trigger.setAttribute("aria-expanded", "false");
         document.body.appendChild(popover);
 
-        var picker = {input: input, shell: shell, trigger: trigger, value: value, popover: popover};
+        var picker = { input: input, shell: shell, trigger: trigger, value: value, popover: popover };
         shell._calendarPicker = picker;
         bindCalendarPickerDocumentEvents();
         return picker;
@@ -1139,7 +1139,7 @@
             return;
         }
 
-        var state = {year: new Date().getFullYear(), month: new Date().getMonth()};
+        var state = { year: new Date().getFullYear(), month: new Date().getMonth() };
 
         function syncTrigger() {
             var hasValue = Boolean(parseCalendarDate(input.value));
@@ -1165,7 +1165,7 @@
             header.className = "calendar-picker-date-header";
             var title = document.createElement("strong");
             title.className = "calendar-picker-title";
-            title.textContent = makeCalendarDate(state.year, state.month, 1).toLocaleDateString("en-US", {month: "long", year: "numeric"});
+            title.textContent = makeCalendarDate(state.year, state.month, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
             var navigation = document.createElement("div");
             navigation.className = "calendar-picker-navigation";
             var previous = createCalendarPickerButton("", "calendar-picker-nav is-previous", "Previous month");
@@ -1212,7 +1212,7 @@
             for (var index = 0; index < 42; index += 1) {
                 var date = makeCalendarDate(state.year, state.month, index - firstDay + 1);
                 var dateValue = calendarDateValue(date);
-                var day = createCalendarPickerButton(String(date.getDate()), "calendar-picker-day", date.toLocaleDateString("en-US", {month: "long", day: "numeric", year: "numeric"}));
+                var day = createCalendarPickerButton(String(date.getDate()), "calendar-picker-day", date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
                 day.dataset.date = dateValue;
                 day.setAttribute("role", "gridcell");
                 if (date.getMonth() !== state.month || date.getFullYear() !== state.year) {
@@ -1280,7 +1280,7 @@
             return;
         }
 
-        var state = {hour: 9, minute: 0, period: "AM"};
+        var state = { hour: 9, minute: 0, period: "AM" };
         var columns = document.createElement("div");
         columns.className = "calendar-time-columns";
         picker.popover.appendChild(columns);
@@ -1312,9 +1312,9 @@
                 columns.removeChild(columns.firstChild);
             }
             [
-                {key: "hour", label: "Hour", values: Array.from({length: 12}, function (_, index) { return index + 1; })},
-                {key: "minute", label: "Minute", values: Array.from({length: 60}, function (_, index) { return index; })},
-                {key: "period", label: "", values: ["AM", "PM"]},
+                { key: "hour", label: "Hour", values: Array.from({ length: 12 }, function (_, index) { return index + 1; }) },
+                { key: "minute", label: "Minute", values: Array.from({ length: 60 }, function (_, index) { return index; }) },
+                { key: "period", label: "", values: ["AM", "PM"] },
             ].forEach(function (definition) {
                 var column = document.createElement("div");
                 column.className = "calendar-time-column";
@@ -1358,7 +1358,7 @@
                 closeCalendarPicker(picker);
                 return;
             }
-            state = parseCalendarTime(input.value) || {hour: 9, minute: 0, period: "AM"};
+            state = parseCalendarTime(input.value) || { hour: 9, minute: 0, period: "AM" };
             renderOptions();
             openCalendarPicker(picker);
         });
@@ -1745,7 +1745,7 @@
                         button.disabled = false;
                     });
                 }
-                document.dispatchEvent(new CustomEvent("grand-coast-native-media-uploaded", {detail: message}));
+                document.dispatchEvent(new CustomEvent("grand-coast-native-media-uploaded", { detail: message }));
                 return;
             }
             if (message.type === "native-media-canceled") {
@@ -1795,7 +1795,7 @@
             });
         });
 
-        post({type: "native-media-page-ready"});
+        post({ type: "native-media-page-ready" });
     }
 
     function initProjectUpdateDrafts() {
@@ -2102,7 +2102,7 @@
                 fetch(form.getAttribute("action") || window.location.href, {
                     method: "POST",
                     credentials: "same-origin",
-                    headers: {"X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest"},
+                    headers: { "X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest" },
                 }).then(function (response) {
                     if (!response.ok) {
                         throw new Error("Unable to mark notification read");
@@ -2125,7 +2125,7 @@
                 fetch(form.getAttribute("action") || window.location.href, {
                     method: "POST",
                     credentials: "same-origin",
-                    headers: {"X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest"},
+                    headers: { "X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest" },
                 }).then(function (response) {
                     if (!response.ok) {
                         throw new Error("Unable to clear notification");
@@ -2147,7 +2147,7 @@
                 fetch(form.getAttribute("action") || window.location.href, {
                     method: "POST",
                     credentials: "same-origin",
-                    headers: {"X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest"},
+                    headers: { "X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest" },
                 }).then(function (response) {
                     if (!response.ok) {
                         throw new Error("Unable to clear notifications");
@@ -2169,7 +2169,7 @@
                 fetch(form.getAttribute("action") || window.location.href, {
                     method: "POST",
                     credentials: "same-origin",
-                    headers: {"X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest"},
+                    headers: { "X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest" },
                 }).then(function (response) {
                     if (!response.ok) {
                         throw new Error("Unable to mark notifications read");
@@ -2244,7 +2244,7 @@
 
             var options = {
                 credentials: "same-origin",
-                headers: {"X-Requested-With": "XMLHttpRequest", "Accept": "text/html"},
+                headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "text/html" },
             };
             if (activeRequest) {
                 options.signal = activeRequest.signal;
@@ -2315,7 +2315,7 @@
 
                     setSelectedDay(url.searchParams.get("day") || "");
                     if (updateHistory && url.href !== window.location.href) {
-                        window.history.pushState({calendarSelection: true}, "", url.href);
+                        window.history.pushState({ calendarSelection: true }, "", url.href);
                     }
                     calendar.removeAttribute("aria-busy");
                     setStatus("");
@@ -2728,7 +2728,7 @@
             var name = input.name || input.id || "";
             var index = counts[name] || 0;
             counts[name] = index + 1;
-            return {name: name, index: index, files: Array.from(input.files || [])};
+            return { name: name, index: index, files: Array.from(input.files || []) };
         }).filter(function (item) { return item.files.length > 0; });
     }
 
@@ -2746,7 +2746,7 @@
                 var transfer = new DataTransfer();
                 snapshot.files.forEach(function (file) { transfer.items.add(file); });
                 input.files = transfer.files;
-                input.dispatchEvent(new Event("change", {bubbles: true}));
+                input.dispatchEvent(new Event("change", { bubbles: true }));
             } catch (error) {
                 // Browsers that disallow restoring a FileList still retain the server's field errors.
             }
@@ -2755,7 +2755,7 @@
 
     function initAdminWorkspaceContent() {
         initNavigation();
-        initContentPageNavigation({skipAutoFocus: true});
+        initContentPageNavigation({ skipAutoFocus: true });
         initTaskSearch();
         initTaskFilterDropdowns();
         initTaskAssociationSelectors();
@@ -2865,7 +2865,7 @@
                         method: "POST",
                         body: payload,
                         credentials: "same-origin",
-                        headers: {"X-Requested-With": "XMLHttpRequest", "Accept": "text/html"}
+                        headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "text/html" }
                     });
                     var finalUrl = new URL(response.url || requestUrl.href, window.location.href);
                     if (response.status === 403 || finalUrl.pathname.indexOf("/accounts/login") === 0) {
@@ -2898,7 +2898,7 @@
                                     .filter(Boolean)
                                     .join(" ") || "One-time setup link created.";
                                 if (handoffUrl && handoffUrl.origin === window.location.origin) {
-                                    responseAction = {href: handoffUrl.href, label: "Open one-time link"};
+                                    responseAction = { href: handoffUrl.href, label: "Open one-time link" };
                                 }
                             }
                         }
@@ -2925,7 +2925,7 @@
 
                 showAdminToast(responseMessage, !success, responseAction && responseAction.href, responseAction && responseAction.label);
                 form.dispatchEvent(new CustomEvent("admin:submission-complete", {
-                    detail: {success: success, message: responseMessage, submitter: submitter}
+                    detail: { success: success, message: responseMessage, submitter: submitter }
                 }));
 
                 delete form.dataset.adminAsyncPending;
@@ -3202,7 +3202,7 @@
                     });
                     const control = saved.type === "checkbox" || saved.type === "radio"
                         ? namedControls.find(function (candidate) { return candidate.value === saved.value; })
-                            || namedControls[saved.index]
+                        || namedControls[saved.index]
                         : namedControls[saved.index];
                     if (!control) return;
                     if (saved.type === "checkbox" || saved.type === "radio") {
@@ -3426,8 +3426,8 @@
             setWebsiteStatus(
                 action === "delete" ? "Deleting project post draft…"
                     : action === "remove_asset" ? "Removing file from Publish Content…"
-                            : hasFiles ? "Uploading post media…"
-                                : action === "publish" ? "Publishing project post…" : "Saving project post…",
+                        : hasFiles ? "Uploading post media…"
+                            : action === "publish" ? "Publishing project post…" : "Saving project post…",
                 false
             );
             try {
@@ -3674,7 +3674,7 @@
         let hoverPaused = false;
         let touchPaused = false;
         let manuallyPaused = false;
-        let motionEnabled = !(reduceQuery && reduceQuery.matches);
+        let motionEnabled = !(reduceQuery && reduceQuery.matches) && !(touchQuery && touchQuery.matches);
 
         const syncPauseState = function () {
             kiosk.classList.toggle("is-paused", hoverPaused || touchPaused || manuallyPaused || document.hidden);
@@ -3750,7 +3750,7 @@
         };
 
         const applyMotionPreference = function () {
-            motionEnabled = !(reduceQuery && reduceQuery.matches);
+            motionEnabled = !(reduceQuery && reduceQuery.matches) && !(touchQuery && touchQuery.matches);
             if (motionEnabled) createTrack();
             else {
                 removeTrack();
@@ -3791,9 +3791,7 @@
         document.addEventListener("visibilitychange", syncPauseState);
         if (reduceQuery && reduceQuery.addEventListener) reduceQuery.addEventListener("change", applyMotionPreference);
         if (touchQuery && touchQuery.addEventListener) {
-            touchQuery.addEventListener("change", function () {
-                if (toggle) toggle.hidden = !motionEnabled || !touchQuery.matches;
-            });
+            touchQuery.addEventListener("change", applyMotionPreference);
         }
         applyMotionPreference();
     }
