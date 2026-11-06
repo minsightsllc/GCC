@@ -14025,7 +14025,9 @@ body.public-site.public-motion-ready main h1.public-heading-reveal.is-visible {
     }
 
     .process-kiosk .process-rail-group .process-step {
-        flex-basis: min(88vw, 280px);
+        flex: 0 0 calc(100vw - 32px);
+        width: calc(100vw - 32px);
+        max-width: 280px;
     }
 }
 
