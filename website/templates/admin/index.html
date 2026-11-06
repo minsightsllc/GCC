@@ -61,6 +61,40 @@
             <p class='gcc-admin-storage-updated'>Last checked {{ storage_usage.checked_at|date:'M j, Y, g:i a T' }}</p>
         </section>
 
+        <section class='gcc-admin-storage gcc-admin-translation-usage' aria-label='Message translation usage'>
+            <div class='gcc-admin-storage-heading'>
+                <div>
+                    <span class='gcc-admin-kicker'>Monthly usage</span>
+                    <h2>Message translation</h2>
+                </div>
+                <p>{{ message_translation_usage.month_label }} | Resets {{ message_translation_usage.reset_date|date:'M j' }}</p>
+            </div>
+            <div class='gcc-admin-storage-grid gcc-admin-translation-grid'>
+                <article class='gcc-admin-storage-card gcc-admin-translation-card{% if message_translation_usage.status == "unavailable" %} is-unavailable{% elif message_translation_usage.status != "ready" %} is-warning{% endif %}'>
+                    <div class='gcc-admin-storage-card-heading'>
+                        <h3>Google Translation API</h3>
+                        <span class='gcc-admin-storage-state{% if message_translation_usage.status != "ready" %} is-warning{% endif %}'>
+                            {% if message_translation_usage.status == 'ready' %}Available{% elif message_translation_usage.status == 'limit_reached' %}Monthly cap reached{% elif message_translation_usage.status == 'not_configured' %}API key needed{% else %}Usage unavailable{% endif %}
+                        </span>
+                    </div>
+                    {% if message_translation_usage.status != 'unavailable' %}
+                        <p class='gcc-admin-storage-reading'><strong>{{ message_translation_usage.used_display }}</strong><span> of {{ message_translation_usage.limit_display }} characters this month</span></p>
+                        <div class='gcc-admin-storage-track' role='progressbar' aria-label='Message translation monthly character limit used' aria-valuemin='0' aria-valuemax='100' aria-valuenow='{{ message_translation_usage.percent|floatformat:1 }}' aria-valuetext='{{ message_translation_usage.used_display }} characters counted of {{ message_translation_usage.limit_display }}'>
+                            <span style='width: {{ message_translation_usage.percent|floatformat:1 }}%'></span>
+                        </div>
+                        <div class='gcc-admin-storage-details'><span>{{ message_translation_usage.remaining_display }} characters remaining</span><span>{{ message_translation_usage.percent|floatformat:1 }}% used</span></div>
+                        {% if message_translation_usage.status == 'not_configured' %}
+                            <p class='gcc-admin-storage-note'>Add <code>GCC_GOOGLE_TRANSLATE_API_KEY</code> to the server environment to enable message translation.</p>
+                        {% else %}
+                            <p class='gcc-admin-storage-note'>Counts this app's translation requests. Cached translations are not counted again; other Google Cloud Translation usage is not included.</p>
+                        {% endif %}
+                    {% else %}
+                        <p class='gcc-admin-storage-message'>Message translation usage is unavailable. Apply the database migrations and reload this page.</p>
+                    {% endif %}
+                </article>
+            </div>
+        </section>
+
         <div class='gcc-admin-launch-grid' aria-label='Administration destinations'>
             <a class='gcc-admin-launch-card gcc-admin-launch-card-primary' href='{% url "operations:dashboard" %}'>
                 <span class='gcc-admin-stat-label'>Daily work</span>

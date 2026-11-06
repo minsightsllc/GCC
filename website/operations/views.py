@@ -139,6 +139,7 @@ from .models import (
     sanitize_uploaded_name,
 )
 from .turnstile import get_turnstile_site_key, is_mobile_owner_login, is_mobile_webview
+from .message_translations import apply_message_translations
 from .publishing import (
     client_is_live,
     media_presentation,
@@ -2278,6 +2279,8 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
             ClientMessage.objects.filter(project=selected_project)
             .select_related("client", "sent_by", "sent_by__employee_profile")[:25]
         )
+    if team_mode and section == "projects":
+        apply_message_translations(selected_project_messages, translation.get_language())
     selected_client_portal_pending = bool(
         selected_client
         and not selected_client.user_id
@@ -6688,6 +6691,8 @@ def portal(request, section="overview"):
         ).order_by("-created_at")[:30]
     )
     portal_messages.sort(key=lambda message: message.created_at)
+    if section == "messages":
+        apply_message_translations(portal_messages, translation.get_language())
     visible_client_notifications = client.notifications.filter(dismissed_at__isnull=True).select_related(
         "project",
         "message",

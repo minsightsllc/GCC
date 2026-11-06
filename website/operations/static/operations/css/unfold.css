@@ -336,6 +336,22 @@ body.gcc-admin-records-page #content {
     margin-top: 18px;
 }
 
+.gcc-admin-translation-grid {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.gcc-admin-translation-card {
+    grid-column: 1 / -1;
+}
+
+.gcc-admin-storage-card.is-warning {
+    border-top-color: var(--gcc-gold);
+}
+
+.gcc-admin-storage-state.is-warning {
+    color: #8a6112;
+}
+
 .gcc-admin-storage-card {
     min-width: 0;
     padding: 18px 20px 16px;

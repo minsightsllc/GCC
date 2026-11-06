@@ -56,6 +56,8 @@ GCC_MOBILE_OWNER_PUSH_ENABLED = _env_flag("GCC_MOBILE_OWNER_PUSH_ENABLED", False
 # public templates, browser JavaScript, mobile environment, or database.
 GCC_GOOGLE_PLACES_API_KEY = os.getenv("GCC_GOOGLE_PLACES_API_KEY", "").strip()
 GCC_GOOGLE_PLACE_ID = os.getenv("GCC_GOOGLE_PLACE_ID", "").strip()
+# Server-only key for translating message-log text with Cloud Translation.
+GCC_GOOGLE_TRANSLATE_API_KEY = os.getenv("GCC_GOOGLE_TRANSLATE_API_KEY", "").strip()
 GCC_GOOGLE_PLACES_TIMEOUT_SECONDS = int(os.getenv("GCC_GOOGLE_PLACES_TIMEOUT_SECONDS", "8"))
 # Admin-only capacity meters use a scoped, server-side Management API token.
 # Never expose the token in templates or browser code.

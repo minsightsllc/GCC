@@ -1039,6 +1039,36 @@ class ClientMessage(models.Model):
         ordering = ["-created_at"]
 
 
+class MessageTranslationCache(models.Model):
+    message = models.ForeignKey(
+        ClientMessage,
+        on_delete=models.CASCADE,
+        related_name="translation_cache",
+    )
+    target_language = models.CharField(
+        max_length=2,
+        choices=[("en", "English"), ("es", "Spanish")],
+    )
+    source_hash = models.CharField(max_length=64)
+    source_language = models.CharField(max_length=35, blank=True)
+    translated_body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["message", "target_language", "source_hash"],
+                name="ops_msg_translation_unique",
+            ),
+        ]
+
+
+class MessageTranslationUsage(models.Model):
+    month_start = models.DateField(primary_key=True)
+    characters_reserved = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class Activity(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     message = models.CharField(max_length=220)

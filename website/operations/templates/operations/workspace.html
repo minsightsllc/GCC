@@ -52,7 +52,7 @@
                         {% include "operations/conversation_message_author.html" with message=message client_name=selected_client.name %}
                         <time datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|date:'M j, Y' }} &middot; {{ message.created_at|date:'g:i A' }}</time>
                     </div>
-                    <p>{{ message.body }}</p>
+                    <p>{{ message.display_body|default:message.body }}</p>
                     {% if not message.is_read and not message.sent_by.is_staff %}
                         <form class="conversation-chat-message-action" method="post" action="/dashboard/messages/{{ message.pk }}/read/">
                             {% csrf_token %}

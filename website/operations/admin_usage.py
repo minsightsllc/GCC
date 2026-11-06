@@ -48,6 +48,53 @@ def get_admin_storage_usage() -> dict:
     return result
 
 
+def get_admin_translation_usage() -> dict:
+    """Return this app's current-month Google message-translation counter."""
+    from django.db import DatabaseError
+
+    from .message_translations import MONTHLY_CHARACTER_LIMIT
+    from .models import MessageTranslationUsage
+
+    month_start = timezone.localdate().replace(day=1)
+    next_month = month_start + timedelta(days=32)
+    reset_date = next_month.replace(day=1)
+    month_label = month_start.strftime("%B %Y")
+    try:
+        usage = MessageTranslationUsage.objects.filter(
+            month_start=month_start
+        ).first()
+    except DatabaseError:
+        return {
+            "status": "unavailable",
+            "month_label": month_label,
+            "reset_date": reset_date,
+        }
+
+    used = max(int(usage.characters_reserved if usage else 0), 0)
+    remaining = max(MONTHLY_CHARACTER_LIMIT - used, 0)
+    percent = min(used / MONTHLY_CHARACTER_LIMIT * 100, 100)
+    if not getattr(settings, "GCC_GOOGLE_TRANSLATE_API_KEY", ""):
+        status = "not_configured"
+    elif used >= MONTHLY_CHARACTER_LIMIT:
+        status = "limit_reached"
+    else:
+        status = "ready"
+
+    return {
+        "status": status,
+        "used": used,
+        "used_display": f"{used:,}",
+        "limit": MONTHLY_CHARACTER_LIMIT,
+        "limit_display": f"{MONTHLY_CHARACTER_LIMIT:,}",
+        "remaining": remaining,
+        "remaining_display": f"{remaining:,}",
+        "percent": percent,
+        "month_label": month_label,
+        "reset_date": reset_date,
+        "updated_at": usage.updated_at if usage else None,
+    }
+
+
 def _cache_key() -> str:
     """Separate cached values when an environment's resource configuration changes."""
     options = getattr(settings, "SUPABASE_STORAGE_OPTIONS", {}) or {}
