@@ -27,7 +27,7 @@
             <button class="button button-primary full-width" type="submit">{% translate 'Sign in →' %}</button>
         </form>
         <a class="auth-recovery-link" href="{% url 'operations:password-reset' %}">{% translate 'Forgot your password?' %}</a>
-        <a class="text-link" href="{% url 'operations:home' %}">{% translate '← Return to public site' %}</a>
+        <a class="text-link auth-public-link" href="{% url 'operations:home' %}">{% translate '← Return to public site' %}</a>
     </div>
 </main>
 {% endblock %}

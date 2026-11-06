@@ -1055,6 +1055,13 @@ class GrandCoastLoginView(LoginView):
 class GrandCoastLogoutView(LogoutView):
     next_page = reverse_lazy("operations:login")
 
+    def post(self, request, *args, **kwargs):
+        is_admin = request.user.is_authenticated and request.user.is_superuser
+        response = super().post(request, *args, **kwargs)
+        if is_admin and response.has_header("Location"):
+            response["Location"] = reverse("operations:home")
+        return response
+
     def get_success_url(self):
         # Django clears the session during logout, including the marker that
         # selects the mobile owner login flow. Re-seed that flow on the next

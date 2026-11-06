@@ -6171,15 +6171,24 @@ body.public-site main {
 }
 
 .auth-recovery-link {
-    display: inline-block;
-    margin-bottom: 18px;
+    display: block;
+    width: fit-content;
+    margin: 0 auto 28px;
     color: var(--brand-blue);
     font-size: .66rem;
     font-weight: 800;
+    text-align: center;
 }
 
 .auth-recovery-link:hover {
     color: var(--brand-gold);
+}
+
+.auth-public-link {
+    display: inline-flex;
+    width: fit-content;
+    font-size: .62rem;
+    line-height: 1.4;
 }
 
 .auth-footnote {

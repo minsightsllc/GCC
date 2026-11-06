@@ -393,7 +393,7 @@ class GrandCoastAdminSite(UnfoldAdminSite):
         clear_mobile_owner_session(request)
         logout(request)
         clear_admin_challenges(request)
-        return redirect(self._access_url())
+        return redirect("operations:home")
 
     def records(self, request):
         return self._render_admin_page(
