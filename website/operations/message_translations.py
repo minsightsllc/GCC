@@ -91,13 +91,14 @@ def _reserve_monthly_characters(candidates):
     return [(message, source_hash) for message, source_hash, _count in selected]
 
 
-def _request_translation_batch(items, target_language):
+def _request_translation_batch(items, target_language, source_language):
     api_key = settings.GCC_GOOGLE_TRANSLATE_API_KEY
     if not api_key or not items:
         return None
 
     form_data = [
         ("target", target_language),
+        ("source", source_language),
         ("format", "text"),
     ]
     form_data.extend(("q", message.body) for message, _source_hash in items)
@@ -128,7 +129,7 @@ def _request_translation_batch(items, target_language):
     return translations
 
 
-def _request_translations(items, target_language):
+def _request_translations(items, target_language, source_language):
     results = []
     batch = []
     batch_characters = 0
@@ -139,7 +140,11 @@ def _request_translations(items, target_language):
             len(batch) >= 128
             or batch_characters + characters > MAX_TEXT_CHARACTERS_PER_REQUEST
         ):
-            batch_results = _request_translation_batch(batch, target_language)
+            batch_results = _request_translation_batch(
+                batch,
+                target_language,
+                source_language,
+            )
             results.extend(
                 batch_results if batch_results is not None else [None] * len(batch)
             )
@@ -149,7 +154,11 @@ def _request_translations(items, target_language):
         batch_characters += characters
 
     if batch:
-        batch_results = _request_translation_batch(batch, target_language)
+        batch_results = _request_translation_batch(
+            batch,
+            target_language,
+            source_language,
+        )
         results.extend(
             batch_results if batch_results is not None else [None] * len(batch)
         )
@@ -158,7 +167,7 @@ def _request_translations(items, target_language):
 
 
 def apply_message_translations(messages, display_language):
-    """Attach cached/provider-translated text without changing original messages."""
+    """Translate only known messages whose source differs from the display language."""
     messages = list(messages or [])
     for message in messages:
         message.display_body = message.body
@@ -176,12 +185,22 @@ def apply_message_translations(messages, display_language):
     pending = [
         (message, hashes[message.pk])
         for message in messages
-        if message.pk not in cached and message.body
+        if (
+            message.pk not in cached
+            and message.body
+            and _language_code(message.source_language) in {"en", "es"}
+            and _language_code(message.source_language) != target_language
+        )
     ]
     reserved = _reserve_monthly_characters(pending)
 
     if reserved:
-        translations = _request_translations(reserved, target_language)
+        source_language = _language_code(reserved[0][0].source_language)
+        translations = _request_translations(
+            reserved,
+            target_language,
+            source_language,
+        )
         cache_rows = []
         for (message, source_hash), result in zip(reserved, translations):
             if not isinstance(result, dict):
@@ -194,8 +213,9 @@ def apply_message_translations(messages, display_language):
                     message=message,
                     target_language=target_language,
                     source_hash=source_hash,
-                    source_language=_language_code(
-                        result.get("detectedSourceLanguage")
+                    source_language=(
+                        _language_code(message.source_language)
+                        or _language_code(result.get("detectedSourceLanguage"))
                     )[:35],
                     translated_body=html.unescape(translated_body),
                 )

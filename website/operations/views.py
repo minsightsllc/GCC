@@ -4006,6 +4006,7 @@ def staff_message_reply(request, client_pk):
         client_message.client = client
         client_message.project = project
         client_message.sent_by = request.user
+        client_message.source_language = "es" if translation.get_language() == "es" else "en"
         client_message.is_read = False
         client_message.save()
         record_activity("Staff message sent", client.name, actor=request.user, project=project)
@@ -6940,6 +6941,7 @@ def portal_send_message(request):
         client_message.client = client
         client_message.project = project
         client_message.sent_by = request.user
+        client_message.source_language = "es" if translation.get_language() == "es" else "en"
         client_message.save()
         record_activity("New client message", client.name, actor=request.user, project=project)
         _notify_client_message_recipients(client, project, client_message, actor=request.user)

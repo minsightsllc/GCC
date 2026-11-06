@@ -1021,10 +1021,18 @@ class LeadAttachment(models.Model):
 
 
 class ClientMessage(models.Model):
+    LANGUAGE_CHOICES = [("en", "English"), ("es", "Spanish")]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="messages")
     project = models.ForeignKey(Project, null=True, blank=True, on_delete=models.SET_NULL, related_name="messages")
     body = models.TextField()
+    source_language = models.CharField(
+        max_length=2,
+        choices=LANGUAGE_CHOICES,
+        blank=True,
+        default="",
+    )
     sent_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
