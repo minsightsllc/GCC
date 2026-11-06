@@ -59,5 +59,7 @@
             </div>
         </section>
     {% endif %}
-    {% include "operations/language_switch.html" %}
+    {% if operations_nav_role != "admin" %}
+        {% include "operations/language_switch.html" %}
+    {% endif %}
 </nav>
