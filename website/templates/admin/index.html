@@ -92,12 +92,11 @@
                         <div class='gcc-admin-storage-details'><span>{{ message_translation_usage.remaining_display }} characters remaining</span><span>{{ message_translation_usage.percent|floatformat:1 }}% used</span></div>
                         {% if message_translation_usage.status == 'not_configured' %}
                             <p class='gcc-admin-storage-note'>Add <code>GCC_GOOGLE_TRANSLATE_API_KEY</code> to the server environment to enable message translation.</p>
-                        {% else %}
-                            <p class='gcc-admin-storage-note'>Counts this app's translation requests. Cached translations are not counted again; other Google Cloud Translation usage is not included.</p>
                         {% endif %}
                     {% else %}
                         <p class='gcc-admin-storage-message'>Message translation usage is unavailable. Apply the database migrations and reload this page.</p>
                     {% endif %}
+                    <p class='gcc-admin-storage-note'>This applies only to translation requests for message logs between administrators, employees, and clients. Cached translations are not counted again; other Google Cloud Translation usage is not included.</p>
                 </article>
             </div>
         </section>
