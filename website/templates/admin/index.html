@@ -55,9 +55,12 @@
                             <p class='gcc-admin-storage-message'>Static file storage is unavailable.</p>
                             <a class='gcc-admin-button gcc-admin-button-primary gcc-admin-storage-action' href='{% url "admin:storage-retention" %}'>Manage Files &amp; Trash <span aria-hidden='true'>&rarr;</span></a>
                         {% elif meter.status == 'not_configured' %}
-                            <p class='gcc-admin-storage-message'>Set <code>RENDER_API_KEY</code> and <code>RENDER_POSTGRES_ID</code> to show usage.</p>
+                            <p class='gcc-admin-storage-message'>Complete the Database Disk Storage connection settings to show usage.</p>
                         {% else %}
                             <p class='gcc-admin-storage-message'>Usage is temporarily unavailable. Check the service configuration and server logs.</p>
+                        {% endif %}
+                        {% if meter.source == 'render' %}
+                            <a class='gcc-admin-button gcc-admin-button-primary gcc-admin-storage-action' href='{% url "admin:database-capacity" %}'>Manage Database Capacity <span aria-hidden='true'>&rarr;</span></a>
                         {% endif %}
                     </article>
                 {% endfor %}

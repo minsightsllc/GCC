@@ -224,6 +224,22 @@ body.gcc-storage-admin-body #content {
     padding: 8px;
 }
 
+.gcc-storage-search > a[hidden] {
+    display: none;
+}
+
+.gcc-storage-request-error {
+    background: #fff4f2;
+    border-left: 3px solid #ba3e3b;
+    color: #8f302d;
+    margin: 0 22px 14px;
+    padding: 10px 13px;
+}
+
+.gcc-storage-request-error[hidden] {
+    display: none;
+}
+
 .gcc-storage-table-wrap {
     overflow-x: auto;
     width: 100%;
@@ -325,6 +341,50 @@ body.gcc-storage-admin-body #content {
     font-weight: 800;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+}
+
+.gcc-storage-sort-heading {
+    align-items: center;
+    display: inline-flex;
+    gap: 5px;
+    white-space: nowrap;
+}
+
+.gcc-storage-sort-arrows {
+    align-items: center;
+    display: inline-flex;
+    gap: 2px;
+}
+
+.gcc-storage-sort-arrow {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: #4969a2;
+    cursor: pointer;
+    display: inline-flex;
+    font: 700 10px/1 Arial, sans-serif;
+    justify-content: center;
+    min-height: 24px;
+    min-width: 13px;
+    opacity: .58;
+    padding: 2px 0;
+}
+
+.gcc-storage-sort-arrow:hover,
+.gcc-storage-sort-arrow.is-active {
+    color: #203454;
+    opacity: 1;
+}
+
+.gcc-storage-sort-arrow:focus-visible {
+    border-radius: 3px;
+    outline: 2px solid #4969a2;
+    outline-offset: 3px;
+}
+
+.gcc-storage-inventory[aria-busy="true"] .gcc-storage-table {
+    cursor: progress;
 }
 
 .gcc-storage-table td {
@@ -529,7 +589,7 @@ body.gcc-storage-admin-body #content {
     color: #203454;
     margin: auto;
     max-height: min(82vh, 760px);
-    max-width: min(620px, calc(100vw - 32px));
+    max-width: min(900px, calc(100vw - 32px));
     overflow: auto;
     padding: 24px;
     width: 100%;
@@ -556,35 +616,60 @@ body.gcc-storage-admin-body #content {
 .gcc-storage-delete-list {
     border: 1px solid #e1e7f0;
     border-radius: 6px;
-    list-style: none;
     margin: 18px 0;
-    max-height: 38vh;
+    max-height: 42vh;
     overflow: auto;
-    padding: 0;
 }
 
-.gcc-storage-delete-list li {
-    align-items: center;
+.gcc-storage-delete-table {
+    border-collapse: collapse;
+    min-width: 680px;
+    width: 100%;
+}
+
+.gcc-storage-delete-table th,
+.gcc-storage-delete-table td {
     border-bottom: 1px solid #e1e7f0;
-    display: flex;
-    gap: 14px;
-    justify-content: space-between;
-    padding: 11px 13px;
+    padding: 11px 14px;
+    text-align: left;
+    vertical-align: middle;
 }
 
-.gcc-storage-delete-list li:last-child {
-    border-bottom: 0;
+.gcc-storage-delete-table th {
+    background: #f4f6f9;
+    color: #354b6a;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .06em;
+    position: sticky;
+    text-transform: uppercase;
+    top: 0;
+    z-index: 1;
 }
 
-.gcc-storage-delete-list strong {
+.gcc-storage-delete-table td {
+    color: #354b6a;
+    font-size: 12px;
+}
+
+.gcc-storage-delete-table td strong,
+.gcc-storage-delete-table td small {
+    display: block;
+}
+
+.gcc-storage-delete-table td strong {
     color: #203454;
     overflow-wrap: anywhere;
 }
 
-.gcc-storage-delete-list span {
+.gcc-storage-delete-table td small {
     color: #697482;
-    flex: 0 0 auto;
-    font-size: 12px;
+    font-size: 10px;
+    margin-top: 3px;
+}
+
+.gcc-storage-delete-table td:nth-child(2) {
+    white-space: nowrap;
 }
 
 .gcc-storage-delete-dialog-actions {

@@ -1,0 +1,169 @@
+{% extends 'unfold/layouts/base_simple.html' %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+{% block bodyclass %}{{ block.super }} gcc-storage-admin-body{% endblock %}
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'operations/css/admin-storage.css' %}?v=20261107-db-capacity">
+    <link rel="stylesheet" href="{% static 'operations/css/admin-database-capacity.css' %}?v=20261107-db-capacity">
+{% endblock %}
+{% block extrahead %}
+    {{ block.super }}
+    <script defer src="{% static 'operations/js/database-capacity.js' %}?v=20261107-db-capacity"></script>
+{% endblock %}
+
+{% block content %}
+<main class="gcc-storage-page gcc-db-capacity-page" aria-labelledby="gcc-db-capacity-title">
+    <header class="gcc-storage-heading">
+        <div>
+            <span class="gcc-admin-kicker">Private administration</span>
+            <h1 id="gcc-db-capacity-title">Database Capacity Tool</h1>
+            <p>Review database growth and retain or remove old audit records deliberately.</p>
+        </div>
+        <nav class="gcc-db-capacity-nav" aria-label="Database capacity actions">
+            <a class="gcc-admin-button gcc-admin-button-outline" href="{% url 'admin:database-capacity-trash' %}">Database Trash <span class="gcc-db-count">{{ audit_trash_count }}</span></a>
+            <a class="gcc-admin-button gcc-admin-button-outline" href="{% url 'admin:index' %}">Back to administration <span aria-hidden="true">&rarr;</span></a>
+        </nav>
+    </header>
+
+    {% include 'unfold/helpers/messages.html' %}
+
+    <section class="gcc-db-panel gcc-db-host-panel" aria-labelledby="gcc-db-host-title">
+        <div class="gcc-db-panel-heading">
+            <div><span class="gcc-admin-kicker">Capacity</span><h2 id="gcc-db-host-title">Database Disk Storage</h2></div>
+            {% if database_metrics.current.status == 'ready' %}<span class="gcc-db-state">Available</span>{% endif %}
+        </div>
+        {% if database_metrics.current.status == 'ready' %}
+            <p class="gcc-db-reading"><strong>{{ database_metrics.current.used_gb|floatformat:2 }} GB</strong><span> of {{ database_metrics.current.capacity_gb|floatformat:2 }} GB</span></p>
+        {% elif database_metrics.current.status == 'not_configured' %}
+            <p class="gcc-db-unavailable">Database Disk Storage usage is not configured.</p>
+        {% else %}
+            <p class="gcc-db-unavailable">Database Disk Storage usage is temporarily unavailable.</p>
+        {% endif %}
+        {% if database_metrics.history.status == 'ready' %}
+            <figure class="gcc-db-chart">
+                <svg viewBox="0 0 800 190" role="img" aria-labelledby="gcc-db-chart-title gcc-db-chart-description" preserveAspectRatio="none">
+                    <title id="gcc-db-chart-title">Database Disk Storage usage over the last seven days</title>
+                    <desc id="gcc-db-chart-description">Hourly Database Disk Storage usage in decimal gigabytes, separate from database table size estimates.</desc>
+                    <line x1="24" y1="38" x2="776" y2="38" class="gcc-db-chart-grid"></line>
+                    <line x1="24" y1="94" x2="776" y2="94" class="gcc-db-chart-grid"></line>
+                    <line x1="24" y1="150" x2="776" y2="150" class="gcc-db-chart-grid"></line>
+                    <polyline points="{{ database_metrics.history.chart_polyline }}" class="gcc-db-chart-line"></polyline>
+                    {% for point in database_metrics.history.chart_points %}
+                        <circle cx="{{ point.x }}" cy="{{ point.y }}" r="2.2" class="gcc-db-chart-point"><title>{{ point.timestamp|date:'M j, g:i a' }} — {{ point.used_gb|floatformat:3 }} GB</title></circle>
+                    {% endfor %}
+                </svg>
+                <figcaption><span>{{ database_metrics.history.chart_start|date:'M j, g:i a' }}</span><span>{{ database_metrics.history.chart_end|date:'M j, g:i a' }}</span></figcaption>
+            </figure>
+            <div class="gcc-db-chart-scale"><span>{{ database_metrics.history.min_gb|floatformat:3 }} GB</span><span>Hourly samples · last 7 days</span><span>{{ database_metrics.history.max_gb|floatformat:3 }} GB</span></div>
+        {% else %}
+            <div class="gcc-db-chart-empty" role="status">The seven-day Database Disk Storage trend is unavailable.</div>
+        {% endif %}
+        <p class="gcc-db-note">This shows total Database Disk Storage usage, not just database table data. Deleting rows can make space reusable inside the database without immediately reducing this meter. This tool does not compact or rebuild the database.</p>
+    </section>
+
+    <section class="gcc-db-panel" aria-labelledby="gcc-db-breakdown-title">
+        <div class="gcc-db-panel-heading">
+            <div><span class="gcc-admin-kicker">Database catalog estimates</span><h2 id="gcc-db-breakdown-title">Table and index sizes</h2></div>
+            {% if table_estimates.status == 'ready' %}<span class="gcc-db-total">{{ table_estimates.total_bytes|filesizeformat }} total</span>{% endif %}
+        </div>
+        {% if table_estimates.status == 'ready' %}
+            <p class="gcc-db-note">The database reports table and index sizes with estimated live row counts. Estimates may lag recent writes and do not predict how much disk space a cleanup will release.</p>
+            <div class="gcc-db-table-wrap">
+                <table class="gcc-db-table">
+                    <thead><tr><th scope="col">Data category</th><th scope="col">Total size</th><th scope="col">Table data</th><th scope="col">Indexes</th><th scope="col">Estimated rows</th><th scope="col">Tables</th></tr></thead>
+                    <tbody>
+                    {% for category in table_estimates.categories %}
+                        <tr><th scope="row">{{ category.name }}</th><td>{{ category.bytes|filesizeformat }}</td><td>{{ category.table_bytes|filesizeformat }}</td><td>{{ category.index_bytes|filesizeformat }}</td><td>{{ category.estimated_rows }}</td><td>{{ category.table_count }}</td></tr>
+                    {% empty %}<tr><td colspan="6">No user tables were reported.</td></tr>{% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <h3 class="gcc-db-subheading">Largest tables</h3>
+            <div class="gcc-db-table-wrap">
+                <table class="gcc-db-table">
+                    <thead><tr><th scope="col">Table</th><th scope="col">Data category</th><th scope="col">Total size</th><th scope="col">Indexes</th><th scope="col">Estimated rows</th></tr></thead>
+                    <tbody>
+                    {% for table in table_estimates.largest_tables %}
+                        <tr><th scope="row"><code>{{ table.name }}</code></th><td>{{ table.category }}</td><td>{{ table.bytes|filesizeformat }}</td><td>{{ table.index_bytes|filesizeformat }}</td><td>{{ table.estimated_rows }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="gcc-db-updated">Estimated {{ table_estimates.estimated_rows }} rows across {{ table_estimates.categories|length }} categories. Refreshed every 15 minutes.</p>
+        {% else %}
+            <p class="gcc-db-unavailable">Table and index estimates are available when the application is connected to its production database.</p>
+        {% endif %}
+    </section>
+
+    <section class="gcc-db-panel" aria-labelledby="gcc-db-cleanup-title">
+        <div class="gcc-db-panel-heading"><div><span class="gcc-admin-kicker">Manual retention</span><h2 id="gcc-db-cleanup-title">Clean up audit records</h2></div></div>
+        <p class="gcc-db-note">Choose a cutoff date to review older Activity history and admin security events. Records moved to Database Trash remain in Database Disk Storage and can be restored; trash has no automatic expiry. Permanent deletion removes selected audit rows, but may not immediately reduce this meter.</p>
+        <form class="gcc-db-cutoff-form" method="get" action="{% url 'admin:database-capacity' %}">
+            <label for="gcc-db-cutoff-date">Show records older than</label>
+            <input id="gcc-db-cutoff-date" name="cutoff" type="date" value="{{ cutoff_raw }}" required>
+            <button class="gcc-admin-button gcc-admin-button-primary" type="submit">Preview records</button>
+        </form>
+        {% if cutoff_error %}<p class="gcc-db-error" role="alert">Choose a valid cutoff date.</p>{% endif %}
+
+        {% if cutoff_date %}
+            <div class="gcc-db-preview-summary" role="status">
+                <strong>{{ preview_total }} matching record{{ preview_total|pluralize }}</strong>
+                <span>{{ preview_counts.activity }} Activity · {{ preview_counts.security }} security events before {{ cutoff_date|date:'M j, Y' }}</span>
+            </div>
+            <p class="gcc-db-note">The preview shows up to 150 newest matching records. Both actions below apply to every matching record, across all preview pages.</p>
+            <div class="gcc-db-table-wrap">
+                <table class="gcc-db-table">
+                    <thead><tr><th scope="col">Type</th><th scope="col">Record</th><th scope="col">Detail</th><th scope="col">Actor</th><th scope="col">Created</th></tr></thead>
+                    <tbody>
+                    {% for record in preview_page %}
+                        <tr><td>{{ record.kind }}</td><th scope="row">{{ record.summary }}</th><td>{{ record.detail|default:'—' }}</td><td>{{ record.actor }}</td><td>{{ record.created_at|date:'M j, Y, g:i a' }}</td></tr>
+                    {% empty %}<tr><td colspan="5">No records match this cutoff.</td></tr>{% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if preview_page.paginator.num_pages > 1 %}
+                <nav class="gcc-db-pagination" aria-label="Audit record preview pages">
+                    <span>Page {{ preview_page.number }} of {{ preview_page.paginator.num_pages }}</span>
+                    {% if preview_page.has_previous %}<a href="?cutoff={{ cutoff_date|date:'Y-m-d' }}&amp;preview_page={{ preview_page.previous_page_number }}">Previous</a>{% endif %}
+                    {% if preview_page.has_next %}<a href="?cutoff={{ cutoff_date|date:'Y-m-d' }}&amp;preview_page={{ preview_page.next_page_number }}">Next</a>{% endif %}
+                </nav>
+            {% endif %}
+            {% if preview_total %}
+                <div class="gcc-db-cleanup-actions">
+                    <form method="post" action="{% url 'admin:database-capacity-cutoff' %}">
+                        {% csrf_token %}<input type="hidden" name="cutoff_date" value="{{ cutoff_date|date:'Y-m-d' }}">
+                        <button class="gcc-admin-button gcc-admin-button-primary" type="submit" name="action" value="trash">Move to Database Trash</button>
+                    </form>
+                    <form method="post" action="{% url 'admin:database-capacity-cutoff' %}" data-db-confirm-form data-confirm-title="Permanently delete these audit records?" data-confirm-detail="This cannot be undone. The action applies to every matching record before {{ cutoff_date|date:'M j, Y' }}." data-confirm-activity="{{ preview_counts.activity }}" data-confirm-security="{{ preview_counts.security }}">
+                        {% csrf_token %}<input type="hidden" name="cutoff_date" value="{{ cutoff_date|date:'Y-m-d' }}">
+                        <button class="gcc-admin-button gcc-admin-button-danger" type="submit" name="action" value="purge" data-db-confirm-trigger>Permanently delete</button>
+                    </form>
+                </div>
+            {% endif %}
+        {% endif %}
+    </section>
+
+    <section class="gcc-db-panel" aria-labelledby="gcc-db-other-cleanup-title">
+        <div class="gcc-db-panel-heading"><div><span class="gcc-admin-kicker">Existing retention tools</span><h2 id="gcc-db-other-cleanup-title">Other database cleanup</h2></div></div>
+        <p class="gcc-db-note">These records have dedicated review and deletion flows. This tool does not add age-based message deletion or arbitrary database record removal.</p>
+        <div class="gcc-db-links">
+            <a class="gcc-admin-button gcc-admin-button-outline" href="{{ project_archive_url }}">Completed-project archive <span aria-hidden="true">&rarr;</span></a>
+            <a class="gcc-admin-button gcc-admin-button-outline" href="{{ lead_trash_url }}">Lead trash <span aria-hidden="true">&rarr;</span></a>
+            <a class="gcc-admin-button gcc-admin-button-outline" href="{{ client_messages_url }}">Client message administration <span aria-hidden="true">&rarr;</span></a>
+        </div>
+    </section>
+</main>
+
+<dialog class="gcc-db-confirm-dialog" data-db-confirm-dialog aria-labelledby="gcc-db-confirm-title" aria-describedby="gcc-db-confirm-detail">
+    <span class="gcc-admin-kicker">Permanent deletion</span>
+    <h2 id="gcc-db-confirm-title">Permanently delete these audit records?</h2>
+    <p id="gcc-db-confirm-detail"></p>
+    <ul class="gcc-db-confirm-counts" data-db-confirm-counts></ul>
+    <div class="gcc-db-confirm-actions">
+        <button class="gcc-admin-button gcc-admin-button-outline" type="button" data-db-confirm-cancel>Cancel</button>
+        <button class="gcc-admin-button gcc-admin-button-danger" type="button" data-db-confirm-accept>Delete permanently</button>
+    </div>
+</dialog>
+{% endblock %}

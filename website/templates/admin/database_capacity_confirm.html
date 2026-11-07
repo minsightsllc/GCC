@@ -1,0 +1,31 @@
+{% extends 'unfold/layouts/base_simple.html' %}
+{% load i18n static %}
+
+{% block title %}Confirm deletion | {{ site_title }}{% endblock %}
+{% block bodyclass %}{{ block.super }} gcc-storage-admin-body{% endblock %}
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'operations/css/admin-storage.css' %}?v=20261107-db-capacity">
+    <link rel="stylesheet" href="{% static 'operations/css/admin-database-capacity.css' %}?v=20261107-db-capacity">
+{% endblock %}
+{% block content %}
+<main class="gcc-storage-page gcc-db-capacity-page" aria-labelledby="gcc-db-confirm-page-title">
+    <section class="gcc-db-confirm-fallback">
+        <span class="gcc-admin-kicker">Permanent deletion</span>
+        <h1 id="gcc-db-confirm-page-title">{{ title }}</h1>
+        <p>{{ detail }}</p>
+        <ul>
+            {% for label, count in record_counts %}<li><strong>{{ label }}:</strong> {{ count }}</li>{% endfor %}
+        </ul>
+        <div class="gcc-db-confirm-actions">
+            <a class="gcc-admin-button gcc-admin-button-outline" href="{{ return_url }}">Cancel</a>
+            <form method="post" action="{{ form_action }}">
+                {% csrf_token %}
+                {% for name, value in hidden_fields.items %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+                <input type="hidden" name="confirmed" value="1">
+                <button class="gcc-admin-button gcc-admin-button-danger" type="submit">Delete permanently</button>
+            </form>
+        </div>
+    </section>
+</main>
+{% endblock %}

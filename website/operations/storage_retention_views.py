@@ -12,7 +12,8 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db.models import FileField
 from django.http import FileResponse, Http404
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
+from django.urls import reverse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from .models import StorageTrash
@@ -29,8 +30,57 @@ from .storage_retention import (
 )
 
 
+STORAGE_SORT_FIELDS = {"file", "size", "record", "sharing", "status"}
+STORAGE_SORT_DIRECTIONS = {"asc", "desc"}
+STORAGE_STATUS_FIRST = {"in-use", "trash", "recovered"}
+
+
+def _sort_storage_rows(rows, sort_field, direction, status_first):
+    if sort_field == "status":
+        status_rankings = {
+            "in-use": {"active": 0, "trashed": 1, "purge_failed": 1, "recovered": 2},
+            "trash": {"trashed": 0, "purge_failed": 0, "active": 1, "recovered": 2},
+            "recovered": {"recovered": 0, "active": 1, "trashed": 2, "purge_failed": 2},
+        }
+        ranks = status_rankings[status_first]
+        rows.sort(key=lambda row: (ranks.get(row["status"], 3), row["original_name"].casefold()))
+        return rows
+
+    if sort_field == "size":
+        available = [row for row in rows if row.get("size_bytes") is not None]
+        unavailable = [row for row in rows if row.get("size_bytes") is None]
+        available.sort(
+            key=lambda row: (row["size_bytes"], row["original_name"].casefold()),
+            reverse=direction == "desc",
+        )
+        return available + unavailable
+
+    value_fields = {
+        "file": "original_name",
+        "record": "record_title",
+        "sharing": "sharing_status",
+    }
+    field = value_fields[sort_field]
+
+    def text_key(row):
+        value = str(row.get(field) or "")
+        if sort_field == "record" and row.get("project_title"):
+            value = f"{value} {row['project_title']}"
+        if sort_field == "sharing" and not value:
+            value = "Private"
+        return value.casefold(), row["original_name"].casefold()
+
+    rows.sort(key=text_key, reverse=direction == "desc")
+    return rows
+
+
 def storage_retention_context(request):
     rows = storage_file_rows()
+    trash_modal_rows = list(
+        StorageTrash.objects.filter(
+            status__in=[StorageTrash.Status.TRASHED, StorageTrash.Status.PURGE_FAILED]
+        ).order_by("original_name", "moved_at")
+    )
     counts = {
         "all": len(rows),
         "active": sum(1 for row in rows if row["status"] == "active"),
@@ -63,7 +113,26 @@ def storage_retention_context(request):
                 for key in ("original_name", "record_title", "record_type", "project_title", "sharing_status", "content_type")
             )
         ]
-    rows.sort(key=lambda row: (row["status"] != "active", row["original_name"].casefold()))
+    default_sort = "status" if selected_status == "all" else "file"
+    sort_field = request.GET.get("sort", default_sort)
+    if sort_field not in STORAGE_SORT_FIELDS:
+        sort_field = default_sort
+    direction = request.GET.get("direction", "desc" if sort_field == "size" else "asc")
+    if direction not in STORAGE_SORT_DIRECTIONS:
+        direction = "asc"
+    status_first = request.GET.get("status_first", "in-use")
+    if status_first not in STORAGE_STATUS_FIRST:
+        status_first = "in-use"
+    rows = _sort_storage_rows(rows, sort_field, direction, status_first)
+
+    return_params = request.GET.copy()
+    storage_return_to = reverse("admin:storage-retention")
+    if return_params:
+        storage_return_to = f"{storage_return_to}?{return_params.urlencode()}"
+    storage_trash_return_to = (
+        f"{reverse('admin:storage-retention')}?status=trash&sort={sort_field}"
+        f"&direction={direction}&status_first={status_first}"
+    )
     page = Paginator(rows, 50).get_page(request.GET.get("page"))
 
     from .admin_usage import get_admin_storage_usage
@@ -77,6 +146,12 @@ def storage_retention_context(request):
         "storage_counts": counts,
         "storage_status": selected_status,
         "storage_query": query,
+        "storage_sort": sort_field,
+        "storage_sort_direction": direction,
+        "storage_status_first": status_first,
+        "storage_return_to": storage_return_to,
+        "storage_trash_return_to": storage_trash_return_to,
+        "storage_trash_modal_rows": trash_modal_rows,
         "trash_item_count": StorageTrash.objects.filter(
             status__in=[StorageTrash.Status.TRASHED, StorageTrash.Status.PURGE_FAILED]
         ).count(),
@@ -107,14 +182,6 @@ def _check_owner(request):
         from django.core.exceptions import PermissionDenied
 
         raise PermissionDenied
-
-
-def _render_admin_template(request, template, context, *, status=200):
-    from .admin_site import grand_coast_admin_site
-
-    page_context = grand_coast_admin_site.each_context(request)
-    page_context.update(context)
-    return render(request, template, page_context, status=status)
 
 
 @login_required
@@ -330,34 +397,23 @@ def storage_recovered_download(request, item_id):
 @require_http_methods(["GET", "POST"])
 def storage_empty_trash(request):
     _check_owner(request)
-    items = list(
-        StorageTrash.objects.filter(
-            status__in=[StorageTrash.Status.TRASHED, StorageTrash.Status.PURGE_FAILED]
-        ).order_by("original_name", "moved_at")
-    )
-    errors = []
-    if request.method == "POST":
-        if request.POST.get("confirm_empty") != "yes":
-            errors.append("Confirm that you want to permanently delete the listed files from configured storage.")
-        if not items:
-            errors.append("Trash is already empty.")
-        if errors:
-            return _render_admin_template(
-                request,
-                "admin/storage_empty_trash_confirm.html",
-                {"title": "Empty Storage Trash", "items": items, "errors": errors},
-                status=400,
-            )
-        result = empty_storage_trash(actor=request.user)
-        if result["deleted"]:
-            messages.success(request, f"Permanently deleted {result['deleted']} file(s) from storage.")
-        if result["retained"]:
-            messages.info(request, f"Removed {result['retained']} Trash item(s), but kept the stored object because another record still references it.")
-        if result["failed"]:
-            messages.error(request, f"Could not delete {result['failed']} file(s). They remain in Trash for retry.")
-        return redirect("admin:storage-retention")
-    return _render_admin_template(
-        request,
-        "admin/storage_empty_trash_confirm.html",
-        {"title": "Empty Storage Trash", "items": items, "errors": errors},
-    )
+    if request.method == "GET":
+        return redirect(f"{reverse('admin:storage-retention')}?status=trash")
+    if request.POST.get("confirm_empty") != "yes":
+        messages.error(request, "Confirm permanent deletion in the dialog before emptying Trash.")
+        return _action_redirect(request)
+    has_trash_items = StorageTrash.objects.filter(
+        status__in=[StorageTrash.Status.TRASHED, StorageTrash.Status.PURGE_FAILED]
+    ).exists()
+    if not has_trash_items:
+        messages.info(request, "Trash is already empty.")
+        return _action_redirect(request)
+
+    result = empty_storage_trash(actor=request.user)
+    if result["deleted"]:
+        messages.success(request, f"Permanently deleted {result['deleted']} file(s) from storage.")
+    if result["retained"]:
+        messages.info(request, f"Removed {result['retained']} Trash item(s), but kept the stored object because another record still references it.")
+    if result["failed"]:
+        messages.error(request, f"Could not delete {result['failed']} file(s). They remain in Trash for retry.")
+    return _action_redirect(request)

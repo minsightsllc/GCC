@@ -53,6 +53,139 @@ def invalidate_admin_storage_usage_cache() -> None:
     cache.delete(_cache_key())
 
 
+def invalidate_database_capacity_cache() -> None:
+    """Refresh Render disk metrics and PostgreSQL catalog estimates."""
+    cache.delete(_render_history_cache_key())
+    cache.delete(_render_usage_cache_key())
+    cache.delete("gcc_database_table_sizes_v1")
+    invalidate_admin_storage_usage_cache()
+
+
+def get_database_capacity_metrics() -> dict:
+    """Return Render PostgreSQL's current disk reading and seven-day trend."""
+    return {
+        "current": _format_meter(_get_render_postgres_usage()),
+        "history": get_render_database_disk_history(),
+    }
+
+
+def get_render_database_disk_history() -> dict:
+    """Fetch up to seven days of hourly disk-usage samples from Render."""
+    cache_key = _render_history_cache_key()
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    api_key = getattr(settings, "RENDER_API_KEY", "")
+    postgres_id = getattr(settings, "RENDER_POSTGRES_ID", "")
+    if not api_key or not postgres_id:
+        result = {"status": "not_configured", "points": []}
+        cache.set(cache_key, result, 60)
+        return result
+
+    end_time = timezone.now()
+    start_time = end_time - timedelta(days=7)
+    params = urlencode(
+        {
+            "startTime": start_time.isoformat().replace("+00:00", "Z"),
+            "endTime": end_time.isoformat().replace("+00:00", "Z"),
+            "resolutionSeconds": 3600,
+            "resource": postgres_id,
+        }
+    )
+    request = Request(
+        f"https://api.render.com/v1/metrics/disk-usage?{params}",
+        headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+    )
+    try:
+        with urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        points = _render_metric_points(payload)
+        if not points:
+            raise ValueError("Render returned no disk history points")
+        result = {
+            "status": "ready",
+            "points": points,
+            "start_time": start_time,
+            "end_time": end_time,
+        }
+        cache.set(cache_key, result, _CACHE_TIMEOUT_SECONDS)
+    except HTTPError as exc:
+        logger.warning("Render Postgres history returned HTTP %s.", exc.code)
+        result = {"status": "unavailable", "points": []}
+        cache.set(cache_key, result, 60)
+    except Exception as exc:
+        logger.warning("Render Postgres history refresh failed (%s).", type(exc).__name__)
+        result = {"status": "unavailable", "points": []}
+        cache.set(cache_key, result, 60)
+    return result
+
+
+def _render_history_cache_key() -> str:
+    resource_id = str(getattr(settings, "RENDER_POSTGRES_ID", ""))
+    resource_hash = hashlib.sha256(resource_id.encode("utf-8")).hexdigest()[:16]
+    return f"gcc_render_disk_history_v1_{resource_hash}"
+
+
+def _render_usage_cache_key() -> str:
+    resource_id = str(getattr(settings, "RENDER_POSTGRES_ID", ""))
+    resource_hash = hashlib.sha256(resource_id.encode("utf-8")).hexdigest()[:16]
+    return f"gcc_render_disk_usage_v1_{resource_hash}"
+
+
+def _render_metric_points(payload) -> list[dict]:
+    """Normalize Render's nested metric response to timestamped byte samples."""
+    from datetime import datetime, timezone as datetime_timezone
+
+    from django.utils.dateparse import parse_datetime
+
+    raw_points = []
+
+    def visit(value, inherited_unit=""):
+        if isinstance(value, dict):
+            unit = value.get("unit") or inherited_unit
+            samples = value.get("values")
+            if isinstance(samples, list):
+                for sample in samples:
+                    if isinstance(sample, dict) and "value" in sample:
+                        raw_points.append((sample.get("timestamp"), sample["value"], unit))
+                    elif isinstance(sample, (list, tuple)) and len(sample) >= 2:
+                        raw_points.append((sample[0], sample[1], unit))
+            for key, child in value.items():
+                if key != "values":
+                    visit(child, unit)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child, inherited_unit)
+
+    visit(payload)
+    points = []
+    for timestamp, value, unit in raw_points:
+        try:
+            number = float(value)
+            if isinstance(timestamp, (int, float)):
+                epoch = float(timestamp)
+                if epoch > 10_000_000_000:
+                    epoch /= 1000
+                sample_time = datetime.fromtimestamp(epoch, tz=datetime_timezone.utc)
+            else:
+                sample_time = parse_datetime(str(timestamp or ""))
+            if sample_time is None or not math.isfinite(number) or not unit:
+                continue
+            if timezone.is_naive(sample_time):
+                sample_time = timezone.make_aware(sample_time, datetime_timezone.utc)
+            points.append(
+                {
+                    "timestamp": sample_time,
+                    "used_bytes": _to_bytes(number, str(unit)),
+                }
+            )
+        except (TypeError, ValueError, OverflowError, OSError):
+            continue
+    points.sort(key=lambda point: point["timestamp"])
+    return points
+
+
 def get_admin_translation_usage() -> dict:
     """Return this app's current-month Google message-translation counter."""
     from django.db import DatabaseError
@@ -208,6 +341,20 @@ def _get_supabase_plan_quota() -> tuple[float | None, str]:
 
 
 def _get_render_postgres_usage() -> dict:
+    cache_key = _render_usage_cache_key()
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    result = _fetch_render_postgres_usage()
+    cache.set(
+        cache_key,
+        result,
+        60 if result.get("status") in {"unavailable", "not_configured"} else _CACHE_TIMEOUT_SECONDS,
+    )
+    return result
+
+
+def _fetch_render_postgres_usage() -> dict:
     api_key = getattr(settings, "RENDER_API_KEY", "")
     postgres_id = getattr(settings, "RENDER_POSTGRES_ID", "")
     if not api_key or not postgres_id:

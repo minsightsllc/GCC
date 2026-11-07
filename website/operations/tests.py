@@ -3,12 +3,14 @@ from __future__ import annotations
 import hashlib
 import shutil
 import tempfile
+from unittest.mock import patch
 from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -441,6 +443,176 @@ class OperationsWorkflowTests(TestCase):
             content_response,
             reverse('operations:dashboard-section', kwargs={'section': 'content'}),
         )
+
+    def test_admin_search_ranks_exact_phrase_coverage_and_word_starts(self):
+        from .ranked_search import admin_search
+        from django.test import RequestFactory
+
+        Service.objects.create(
+            slug="search-exact-match",
+            title="Maya Harbor",
+            description="Exact title match.",
+        )
+        Service.objects.create(
+            slug="search-phrase-prefix",
+            title="Maya Harbor renovation",
+            description="Phrase prefix match.",
+        )
+        Service.objects.create(
+            slug="search-two-words",
+            title="Harbor homes for Maya",
+            description="Both query words match without a phrase prefix.",
+        )
+        Service.objects.create(
+            slug="search-one-word",
+            title="Maya remodel",
+            description="Only one query word matches.",
+        )
+
+        request = RequestFactory().get("/", {"s": "Maya Harbor"})
+        request.user = self.staff
+        results = admin_search(request, "Maya Harbor")
+        titles = [result.title for result in results]
+
+        self.assertLess(titles.index("Maya Harbor"), titles.index("Maya Harbor renovation"))
+        self.assertLess(titles.index("Maya Harbor renovation"), titles.index("Harbor homes for Maya"))
+        self.assertLess(titles.index("Harbor homes for Maya"), titles.index("Maya remodel"))
+
+        Service.objects.create(
+            slug="search-word-start",
+            title="Rex xylophone",
+            description="Token starts at a word boundary.",
+        )
+        Service.objects.create(
+            slug="search-interior-substring",
+            title="Rexxylophone",
+            description="Token appears inside a word.",
+        )
+        word_start_results = admin_search(request, "xylo")
+        word_start_titles = [result.title for result in word_start_results]
+        self.assertLess(
+            word_start_titles.index("Rex xylophone"),
+            word_start_titles.index("Rexxylophone"),
+        )
+
+    def test_admin_search_matches_any_word_and_one_character_queries(self):
+        from .ranked_search import admin_search
+        from django.test import RequestFactory
+
+        Service.objects.create(
+            slug="search-single-word",
+            title="Masonry work",
+            description="A searchable service.",
+        )
+        Service.objects.create(
+            slug="search-single-character",
+            title="x",
+            description="A one-character title.",
+        )
+        request = RequestFactory().get("/")
+        request.user = self.staff
+
+        any_word_results = admin_search(request, "unmatched Masonry")
+        self.assertIn("Masonry work", [result.title for result in any_word_results])
+
+        short_results = admin_search(request, "x")
+        self.assertIn("x", [result.title for result in short_results])
+
+    def test_admin_search_applies_rank_before_the_operations_category_cap(self):
+        from .ranked_search import admin_search
+        from django.test import RequestFactory
+
+        for index in range(20):
+            Service.objects.create(
+                slug=f"search-cap-match-{index}",
+                title=f"Other service {index}",
+                description="needle phrase appears in the description",
+                sort_order=index,
+            )
+        Service.objects.create(
+            slug="search-cap-exact",
+            title="needle phrase",
+            description="This is the exact primary-field match.",
+            sort_order=100,
+        )
+
+        request = RequestFactory().get("/")
+        request.user = self.staff
+        results = admin_search(request, "needle phrase")
+        service_results = [
+            result for result in results if result.description.endswith("Service")
+        ]
+
+        self.assertEqual(len(service_results), 20)
+        self.assertEqual(service_results[0].title, "needle phrase")
+
+    def test_admin_search_combines_auth_and_operations_without_client_user_results(self):
+        from .ranked_search import admin_search
+        from django.test import RequestFactory
+
+        User = get_user_model()
+        searchable_user = User.objects.create_user(
+            username="maya",
+            password="test-pass",
+        )
+        searchable_group = Group.objects.create(name="maya")
+        request = RequestFactory().get("/")
+        request.user = self.staff
+
+        results = admin_search(request, "maya")
+        links = [str(result.link) for result in results]
+        user_link = reverse("admin:auth_user_change", args=(searchable_user.pk,))
+        group_link = reverse("admin:auth_group_change", args=(searchable_group.pk,))
+        client_link = reverse(
+            "operations:dashboard-section", kwargs={"section": "clients"}
+        ) + f"?client={self.client_record.pk}"
+
+        self.assertIn(user_link, links)
+        self.assertIn(group_link, links)
+        self.assertIn(client_link, links)
+        self.assertLess(links.index(user_link), links.index(client_link))
+        self.assertLess(links.index(group_link), links.index(client_link))
+        self.assertEqual(links.count(user_link), 1)
+
+        email_results = admin_search(request, "maya@example.com")
+        email_links = [str(result.link) for result in email_results]
+        client_user_link = reverse("admin:auth_user_change", args=(self.client_user.pk,))
+        self.assertNotIn(client_user_link, email_links)
+        self.assertIn(client_link, email_links)
+
+    def test_admin_search_uses_versioned_thirty_second_cache(self):
+        self.login_staff()
+        with (
+            patch("operations.admin_site.cache.get", return_value=None),
+            patch("operations.admin_site.cache.set") as cache_set,
+        ):
+            response = self.browser.get(reverse("admin:search"), {"s": "cache-probe"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["HX-Trigger"], "search")
+        self.assertTrue(response.context["command_show_history"])
+        args, kwargs = cache_set.call_args
+        self.assertTrue(args[0].startswith("gcc_unfold_search_v2_"))
+        self.assertEqual(kwargs["timeout"], 30)
+
+    def test_admin_search_preserves_pagination_for_large_auth_result_sets(self):
+        self.login_staff()
+        User = get_user_model()
+        User.objects.bulk_create(
+            [
+                User(username=f"pagequery-{index:03d}")
+                for index in range(101)
+            ]
+        )
+
+        response = self.browser.get(
+            reverse("admin:search"),
+            {"s": "pagequery", "page": "2"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["results"].number, 2)
+        self.assertEqual(response.context["page_counter"], 100)
 
     def test_admin_search_is_staff_only(self):
         anonymous_response = self.browser.get(reverse('admin:search'), {'s': 'Maya'})

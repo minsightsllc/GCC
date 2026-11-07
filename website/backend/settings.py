@@ -559,7 +559,7 @@ UNFOLD = {
         },
     },
     'COMMAND': {
-        'search_models': ['auth.user', 'auth.group'],
+        'search_models': False,
         'show_history': True,
         'search_callback': 'operations.search.admin_search',
     },

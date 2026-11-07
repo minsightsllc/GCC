@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import logging
+import time
 from functools import update_wrapper
 from urllib.parse import urlencode
 from datetime import timedelta
@@ -10,7 +12,9 @@ from django.contrib.auth import get_user_model, login, logout
 from django.contrib import messages
 from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.contrib.auth.hashers import make_password
+from django.core.cache import cache
 from django.core.paginator import Paginator
+from django.core.validators import EMPTY_VALUES
 from django.contrib.auth.views import (
     LoginView,
     PasswordResetCompleteView,
@@ -20,9 +24,11 @@ from django.contrib.auth.views import (
 )
 from django.db import transaction
 from django.db.models import Q
-from django.http import HttpResponseForbidden, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.response import TemplateResponse
 from django.urls import path, reverse, reverse_lazy
+from django.utils.encoding import force_bytes
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
@@ -343,14 +349,54 @@ class GrandCoastAdminSite(UnfoldAdminSite):
         return update_wrapper(inner, view)
 
     def search(self, request, extra_context=None):
-        # Unfold 0.66 only invokes the configured callback and system-model
-        # searchers for extended requests. The navigation search is a normal
-        # request, so promote it here to keep Operations and User results
-        # available from the existing search box.
-        if request.GET.get("s") and "extended" not in request.GET:
-            request.GET = request.GET.copy()
-            request.GET["extended"] = "1"
-        return super().search(request, extra_context=extra_context)
+        start_time = time.time()
+        per_page = 100
+        search_term = request.GET.get("s")
+        app_list = super().get_app_list(request)
+
+        if search_term in EMPTY_VALUES:
+            return HttpResponse()
+
+        search_term = search_term.strip().casefold()
+        if not search_term:
+            return HttpResponse()
+
+        cache_key_base = f"{request.user.pk}_{search_term}"
+        cache_key = (
+            "gcc_unfold_search_v2_"
+            f"{hashlib.sha256(force_bytes(cache_key_base)).hexdigest()}"
+        )
+        cached_results = cache.get(cache_key)
+        if cached_results is not None:
+            results = cached_results
+        else:
+            # Preserve Unfold's app/model navigation shortcuts at the top.
+            results = self._search_apps(app_list, search_term)
+            search_callback = self._get_config("COMMAND", request).get(
+                "search_callback"
+            )
+            if search_callback:
+                results.extend(self._get_value(search_callback, request, search_term))
+            cache.set(cache_key, results, timeout=30)
+
+        paginator = Paginator(results, per_page)
+        show_history = self._get_value(
+            self._get_config("COMMAND", request).get("show_history"), request
+        )
+        page_number = request.GET.get("page", 1)
+        return TemplateResponse(
+            request,
+            template="unfold/helpers/command_results.html",
+            context={
+                "search_term": search_term,
+                "page_obj": paginator,
+                "results": paginator.page(page_number),
+                "page_counter": (int(page_number) - 1) * per_page,
+                "execution_time": time.time() - start_time,
+                "command_show_history": show_history,
+            },
+            headers={"HX-Trigger": "search"},
+        )
 
     def login(self, request, extra_context=None):
         if is_mobile_webview(request) and is_mobile_owner_session(request):
@@ -419,8 +465,22 @@ class GrandCoastAdminSite(UnfoldAdminSite):
             storage_retention_context(request),
         )
 
+    def database_capacity(self, request):
+        from .database_capacity_views import database_capacity_page
+
+        return database_capacity_page(self, request)
+
+    def database_capacity_trash(self, request):
+        from .database_capacity_views import database_capacity_trash_page
+
+        return database_capacity_trash_page(self, request)
+
     def get_urls(self):
         from .storage_retention_views import storage_bulk_action, storage_empty_trash
+        from .database_capacity_views import (
+            database_capacity_cutoff_action,
+            database_capacity_trash_action,
+        )
 
         custom_urls = [
             path("access/", self.access, name="access"),
@@ -466,6 +526,26 @@ class GrandCoastAdminSite(UnfoldAdminSite):
                 "storage/bulk/",
                 self.admin_view(storage_bulk_action),
                 name="storage-bulk-action",
+            ),
+            path(
+                "database-capacity/",
+                self.admin_view(self.database_capacity),
+                name="database-capacity",
+            ),
+            path(
+                "database-capacity/cutoff/",
+                self.admin_view(database_capacity_cutoff_action),
+                name="database-capacity-cutoff",
+            ),
+            path(
+                "database-capacity/trash/",
+                self.admin_view(self.database_capacity_trash),
+                name="database-capacity-trash",
+            ),
+            path(
+                "database-capacity/trash/<uuid:batch_id>/",
+                self.admin_view(database_capacity_trash_action),
+                name="database-capacity-trash-action",
             ),
             path(
                 "security/",
@@ -941,7 +1021,7 @@ class GrandCoastAdminSite(UnfoldAdminSite):
     @staticmethod
     def _filtered_security_events(params):
         security_filter_form = AdminSecurityEventFilterForm(params or None)
-        security_events_queryset = AdminSecurityEvent.objects.all()
+        security_events_queryset = AdminSecurityEvent.objects.filter(trashed_at__isnull=True)
         if security_filter_form.is_valid():
             cleaned = security_filter_form.cleaned_data
             query = cleaned.get("q")
@@ -994,6 +1074,7 @@ class GrandCoastAdminSite(UnfoldAdminSite):
             event = get_object_or_404(
                 AdminSecurityEvent.objects.select_for_update(),
                 pk=pk,
+                trashed_at__isnull=True,
             )
             event_detail = f"{event.get_event_type_display()}"
             if event.ip_address:
@@ -1004,6 +1085,9 @@ class GrandCoastAdminSite(UnfoldAdminSite):
                 event_detail,
                 actor=request.user,
             )
+        from .admin_usage import invalidate_database_capacity_cache
+
+        invalidate_database_capacity_cache()
         messages.success(request, "Security event deleted.")
         return redirect(self._security_events_return_url(request))
 
@@ -1026,6 +1110,9 @@ class GrandCoastAdminSite(UnfoldAdminSite):
                     actor=request.user,
                 )
         if deleted_count:
+            from .admin_usage import invalidate_database_capacity_cache
+
+            invalidate_database_capacity_cache()
             messages.success(request, f"Cleared {deleted_count} security event(s).")
         else:
             messages.info(request, "No security events matched the current filters.")
@@ -1038,6 +1125,7 @@ class GrandCoastAdminSite(UnfoldAdminSite):
             event = get_object_or_404(
                 AdminSecurityEvent.objects.select_for_update(),
                 pk=pk,
+                trashed_at__isnull=True,
             )
             if event.reviewed_at is None:
                 event.reviewed_at = timezone.now()
@@ -1130,6 +1218,7 @@ class GrandCoastAdminSite(UnfoldAdminSite):
         recent_failures = AdminSecurityEvent.objects.filter(
             outcome=AdminSecurityEvent.Outcome.FAILURE,
             created_at__gte=recent_since,
+            trashed_at__isnull=True,
         )
         security_metrics = {
             "recent_failures": recent_failures.count(),
@@ -1138,10 +1227,12 @@ class GrandCoastAdminSite(UnfoldAdminSite):
             .distinct()
             .count(),
             "unreviewed": AdminSecurityEvent.objects.filter(
-                reviewed_at__isnull=True
+                reviewed_at__isnull=True,
+                trashed_at__isnull=True,
             ).count(),
             "email_failures": AdminSecurityEvent.objects.filter(
                 outcome=AdminSecurityEvent.Outcome.FAILURE,
+                trashed_at__isnull=True,
                 email_status__in=[
                     AdminSecurityEvent.EmailStatus.FAILED,
                     AdminSecurityEvent.EmailStatus.NO_RECIPIENT,

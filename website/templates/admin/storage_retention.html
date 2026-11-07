@@ -5,16 +5,16 @@
 {% block bodyclass %}{{ block.super }} gcc-storage-admin-body{% endblock %}
 {% block extrastyle %}
     {{ block.super }}
-    <link rel="stylesheet" href="{% static 'operations/css/admin-storage.css' %}?v=20261106-danger-red">
+    <link rel="stylesheet" href="{% static 'operations/css/admin-storage.css' %}?v=20261107-live-search-fix2">
 {% endblock %}
 
 {% block extrahead %}
     {{ block.super }}
-    <script defer src="{% static 'operations/js/storage-retention.js' %}?v=20261106-trash-modal"></script>
+    <script defer src="{% static 'operations/js/storage-retention.js' %}?v=20261107-live-search-fix2"></script>
 {% endblock %}
 
 {% block content %}
-<main class="gcc-storage-page" aria-labelledby="gcc-storage-title">
+<main class="gcc-storage-page" aria-labelledby="gcc-storage-title" data-storage-current-sort="{{ storage_sort }}" data-storage-current-direction="{{ storage_sort_direction }}" data-storage-current-status-first="{{ storage_status_first }}">
     <header class="gcc-storage-heading">
         <div>
             <span class="gcc-admin-kicker">Private administration</span>
@@ -28,8 +28,8 @@
 
     <section class="gcc-storage-guidance" aria-label="How storage retention works">
         <h2>What counts toward storage</h2>
-        <p>Moving a file to Trash hides it from employee, client, and public views, but it stays in Supabase and continues using storage until deletion succeeds. Trash has no automatic expiry.</p>
-        <p>The Supabase meter is project-wide and may include objects in other buckets. This inventory lists only uploads managed by GCC in its configured storage. Render database usage is separate; Activity history and other records use PostgreSQL.</p>
+        <p>Moving a file to Trash hides it from employee, client, and public views, but it remains in Static File Storage and continues using space until deletion succeeds. Trash has no automatic expiry.</p>
+        <p>The Static File Storage meter is project-wide and may include objects in other buckets. This inventory lists only uploads managed by GCC in its configured storage. Database Disk Storage is separate; Activity history and other records use it.</p>
         <p>Restored files stay in Recovered until you reattach them. Reattaching to an already public record may make the file visible immediately, so review that record's sharing and publishing settings first. Signed agreements and cost receipts can only be removed when their archived project is permanently deleted.</p>
     </section>
 
@@ -39,7 +39,7 @@
             <div><strong>{% if meter.source == 'supabase' %}Static File Storage{% else %}Database Disk Storage{% endif %}</strong><span>{{ meter.status|title }}</span></div>
             {% if meter.status == 'ready' %}
                 <p><b>{{ meter.used_gb|floatformat:2 }} GB</b> of {{ meter.capacity_gb|floatformat:2 }} GB</p>
-                <div class="gcc-storage-meter-track" role="progressbar" aria-label="{{ meter.source }} storage used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ meter.percent|floatformat:1 }}"><span style="width: {{ meter.percent|floatformat:1 }}%"></span></div>
+                <div class="gcc-storage-meter-track" role="progressbar" aria-label="{% if meter.source == 'supabase' %}Static File Storage{% else %}Database Disk Storage{% endif %} used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ meter.percent|floatformat:1 }}"><span style="width: {{ meter.percent|floatformat:1 }}%"></span></div>
                 <small>{{ meter.remaining_gb|floatformat:2 }} GB left · {{ meter.percent|floatformat:1 }}% used</small>
             {% elif meter.source == 'supabase' and meter.used_gb != None %}
                 <p><b>{{ meter.used_gb|floatformat:2 }} GB</b> currently in use</p><small>Quota is unavailable.</small>
@@ -54,28 +54,33 @@
     <section class="gcc-storage-inventory" aria-labelledby="gcc-storage-inventory-title">
         <div class="gcc-storage-inventory-heading">
             <div><span class="gcc-admin-kicker">Managed uploads</span><h2 id="gcc-storage-inventory-title">File inventory</h2></div>
-            {% if trash_item_count %}<a class="gcc-admin-button gcc-admin-button-danger" href="{% url 'admin:storage-empty-trash' %}">Empty Trash <span>({{ trash_item_count }})</span></a>{% endif %}
+            {% if trash_item_count %}<button class="gcc-admin-button gcc-admin-button-danger" type="button" data-storage-delete-open-all>Empty Trash <span>({{ trash_item_count }})</span></button>{% endif %}
         </div>
 
         <nav class="gcc-storage-filters" aria-label="Storage inventory views">
-            <a href="{% url 'admin:storage-retention' %}?status=all{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}"{% if storage_status == 'all' %} aria-current="page"{% endif %}>All files <span>{{ storage_counts.all }}</span></a>
-            <a href="{% url 'admin:storage-retention' %}?status=active{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}"{% if storage_status == 'active' %} aria-current="page"{% endif %}>In use <span>{{ storage_counts.active }}</span></a>
-            <a href="{% url 'admin:storage-retention' %}?status=trash{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}"{% if storage_status == 'trash' %} aria-current="page"{% endif %}>Trash <span>{{ storage_counts.trash }}</span></a>
-            <a href="{% url 'admin:storage-retention' %}?status=recovered{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}"{% if storage_status == 'recovered' %} aria-current="page"{% endif %}>Recovered <span>{{ storage_counts.recovered }}</span></a>
+            <a href="{% url 'admin:storage-retention' %}?status=all{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}&amp;sort={{ storage_sort }}&amp;direction={{ storage_sort_direction }}&amp;status_first={{ storage_status_first }}"{% if storage_status == 'all' %} aria-current="page"{% endif %}>All files <span>{{ storage_counts.all }}</span></a>
+            <a href="{% url 'admin:storage-retention' %}?status=active{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}&amp;sort={{ storage_sort }}&amp;direction={{ storage_sort_direction }}&amp;status_first={{ storage_status_first }}"{% if storage_status == 'active' %} aria-current="page"{% endif %}>In use <span>{{ storage_counts.active }}</span></a>
+            <a href="{% url 'admin:storage-retention' %}?status=trash{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}&amp;sort={{ storage_sort }}&amp;direction={{ storage_sort_direction }}&amp;status_first={{ storage_status_first }}"{% if storage_status == 'trash' %} aria-current="page"{% endif %}>Trash <span>{{ storage_counts.trash }}</span></a>
+            <a href="{% url 'admin:storage-retention' %}?status=recovered{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}&amp;sort={{ storage_sort }}&amp;direction={{ storage_sort_direction }}&amp;status_first={{ storage_status_first }}"{% if storage_status == 'recovered' %} aria-current="page"{% endif %}>Recovered <span>{{ storage_counts.recovered }}</span></a>
         </nav>
 
         <form class="gcc-storage-search" method="get" action="{% url 'admin:storage-retention' %}">
             <input type="hidden" name="status" value="{{ storage_status }}">
+            <input type="hidden" name="sort" value="{{ storage_sort }}">
+            <input type="hidden" name="direction" value="{{ storage_sort_direction }}">
+            <input type="hidden" name="status_first" value="{{ storage_status_first }}">
             <label for="gcc-storage-search">Search files</label>
             <input id="gcc-storage-search" type="search" name="q" value="{{ storage_query }}" placeholder="File, record, project, or sharing status">
             <button class="gcc-admin-button gcc-admin-button-outline" type="submit">Search</button>
-            {% if storage_query %}<a href="{% url 'admin:storage-retention' %}?status={{ storage_status }}">Clear</a>{% endif %}
+            <a href="{% url 'admin:storage-retention' %}?status={{ storage_status }}&amp;sort={{ storage_sort }}&amp;direction={{ storage_sort_direction }}&amp;status_first={{ storage_status_first }}" data-storage-search-clear{% if not storage_query %} hidden{% endif %}>Clear</a>
         </form>
+        <p class="gcc-storage-request-error" data-storage-request-error role="status" hidden></p>
+        <span class="visually-hidden" data-storage-sort-status aria-live="polite"></span>
 
         {% if storage_rows %}
         <form id="gcc-storage-bulk-form" class="gcc-storage-bulk-actions" method="post" action="{% url 'admin:storage-bulk-action' %}">
             {% csrf_token %}
-            <input type="hidden" name="return_to" value="{{ request.get_full_path }}">
+            <input type="hidden" name="return_to" value="{{ storage_return_to }}">
             <input id="gcc-storage-confirm-delete" type="hidden" name="confirm_delete" value="">
             <span class="gcc-storage-bulk-label">Selected files</span>
             {% if storage_status == 'trash' %}
@@ -103,7 +108,37 @@
                                 {% if storage_status == 'all' or storage_status == 'recovered' %}<label><input type="checkbox" form="gcc-storage-bulk-form" data-storage-select-all-status="recovered" aria-label="Select all recovered files on this page"><span>Select all recovered</span></label>{% endif %}
                             </div>
                         </th>
-                        <th scope="col">File</th><th scope="col">Size</th><th scope="col">Record / project</th><th scope="col">Sharing</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">Actions</span></th>
+                        <th scope="col"{% if storage_sort == 'file' %} aria-sort="{% if storage_sort_direction == 'asc' %}ascending{% else %}descending{% endif %}"{% else %} aria-sort="none"{% endif %}>
+                            <span class="gcc-storage-sort-heading">File<span class="gcc-storage-sort-arrows">
+                                <button class="gcc-storage-sort-arrow{% if storage_sort == 'file' and storage_sort_direction == 'asc' %} is-active{% endif %}" type="button" data-storage-sort-field="file" data-storage-sort-direction="asc" aria-pressed="{% if storage_sort == 'file' and storage_sort_direction == 'asc' %}true{% else %}false{% endif %}" aria-label="{% if storage_sort == 'file' and storage_sort_direction == 'asc' %}File names are sorted A to Z{% else %}Sort file names A to Z{% endif %}" title="Sort A to Z"><span aria-hidden="true">▲</span></button>
+                                <button class="gcc-storage-sort-arrow{% if storage_sort == 'file' and storage_sort_direction == 'desc' %} is-active{% endif %}" type="button" data-storage-sort-field="file" data-storage-sort-direction="desc" aria-pressed="{% if storage_sort == 'file' and storage_sort_direction == 'desc' %}true{% else %}false{% endif %}" aria-label="{% if storage_sort == 'file' and storage_sort_direction == 'desc' %}File names are sorted Z to A{% else %}Sort file names Z to A{% endif %}" title="Sort Z to A"><span aria-hidden="true">▼</span></button>
+                            </span></span>
+                        </th>
+                        <th scope="col"{% if storage_sort == 'size' %} aria-sort="{% if storage_sort_direction == 'asc' %}ascending{% else %}descending{% endif %}"{% else %} aria-sort="none"{% endif %}>
+                            <span class="gcc-storage-sort-heading">Size<span class="gcc-storage-sort-arrows">
+                                <button class="gcc-storage-sort-arrow{% if storage_sort == 'size' and storage_sort_direction == 'asc' %} is-active{% endif %}" type="button" data-storage-sort-field="size" data-storage-sort-direction="asc" aria-pressed="{% if storage_sort == 'size' and storage_sort_direction == 'asc' %}true{% else %}false{% endif %}" aria-label="{% if storage_sort == 'size' and storage_sort_direction == 'asc' %}Sizes are sorted smallest to biggest{% else %}Sort sizes smallest to biggest{% endif %}" title="Smallest to biggest"><span aria-hidden="true">▲</span></button>
+                                <button class="gcc-storage-sort-arrow{% if storage_sort == 'size' and storage_sort_direction == 'desc' %} is-active{% endif %}" type="button" data-storage-sort-field="size" data-storage-sort-direction="desc" aria-pressed="{% if storage_sort == 'size' and storage_sort_direction == 'desc' %}true{% else %}false{% endif %}" aria-label="{% if storage_sort == 'size' and storage_sort_direction == 'desc' %}Sizes are sorted biggest to smallest{% else %}Sort sizes biggest to smallest{% endif %}" title="Biggest to smallest"><span aria-hidden="true">▼</span></button>
+                            </span></span>
+                        </th>
+                        <th scope="col"{% if storage_sort == 'record' %} aria-sort="{% if storage_sort_direction == 'asc' %}ascending{% else %}descending{% endif %}"{% else %} aria-sort="none"{% endif %}>
+                            <span class="gcc-storage-sort-heading">Record / project<span class="gcc-storage-sort-arrows">
+                                <button class="gcc-storage-sort-arrow{% if storage_sort == 'record' and storage_sort_direction == 'asc' %} is-active{% endif %}" type="button" data-storage-sort-field="record" data-storage-sort-direction="asc" aria-pressed="{% if storage_sort == 'record' and storage_sort_direction == 'asc' %}true{% else %}false{% endif %}" aria-label="{% if storage_sort == 'record' and storage_sort_direction == 'asc' %}Records and projects are sorted A to Z{% else %}Sort records and projects A to Z{% endif %}" title="Sort A to Z"><span aria-hidden="true">▲</span></button>
+                                <button class="gcc-storage-sort-arrow{% if storage_sort == 'record' and storage_sort_direction == 'desc' %} is-active{% endif %}" type="button" data-storage-sort-field="record" data-storage-sort-direction="desc" aria-pressed="{% if storage_sort == 'record' and storage_sort_direction == 'desc' %}true{% else %}false{% endif %}" aria-label="{% if storage_sort == 'record' and storage_sort_direction == 'desc' %}Records and projects are sorted Z to A{% else %}Sort records and projects Z to A{% endif %}" title="Sort Z to A"><span aria-hidden="true">▼</span></button>
+                            </span></span>
+                        </th>
+                        <th scope="col"{% if storage_sort == 'sharing' %} aria-sort="{% if storage_sort_direction == 'asc' %}ascending{% else %}descending{% endif %}"{% else %} aria-sort="none"{% endif %}>
+                            <span class="gcc-storage-sort-heading">Sharing<span class="gcc-storage-sort-arrows">
+                                <button class="gcc-storage-sort-arrow{% if storage_sort == 'sharing' and storage_sort_direction == 'asc' %} is-active{% endif %}" type="button" data-storage-sort-field="sharing" data-storage-sort-direction="asc" aria-pressed="{% if storage_sort == 'sharing' and storage_sort_direction == 'asc' %}true{% else %}false{% endif %}" aria-label="{% if storage_sort == 'sharing' and storage_sort_direction == 'asc' %}Sharing is sorted A to Z{% else %}Sort sharing A to Z{% endif %}" title="Sort A to Z"><span aria-hidden="true">▲</span></button>
+                                <button class="gcc-storage-sort-arrow{% if storage_sort == 'sharing' and storage_sort_direction == 'desc' %} is-active{% endif %}" type="button" data-storage-sort-field="sharing" data-storage-sort-direction="desc" aria-pressed="{% if storage_sort == 'sharing' and storage_sort_direction == 'desc' %}true{% else %}false{% endif %}" aria-label="{% if storage_sort == 'sharing' and storage_sort_direction == 'desc' %}Sharing is sorted Z to A{% else %}Sort sharing Z to A{% endif %}" title="Sort Z to A"><span aria-hidden="true">▼</span></button>
+                            </span></span>
+                        </th>
+                        <th scope="col"{% if storage_sort == 'status' %} aria-sort="other"{% else %} aria-sort="none"{% endif %}>
+                            <span class="gcc-storage-sort-heading">Status<span class="gcc-storage-sort-arrows">
+                                <button class="gcc-storage-sort-arrow" type="button" data-storage-sort-field="status" data-storage-status-step="previous" aria-label="{% if storage_status_first == 'in-use' %}Sort status with Recovered first{% elif storage_status_first == 'trash' %}Sort status with In use first{% else %}Sort status with In Trash first{% endif %}" title="Previous status priority"><span aria-hidden="true">▲</span></button>
+                                <button class="gcc-storage-sort-arrow" type="button" data-storage-sort-field="status" data-storage-status-step="next" aria-label="{% if storage_status_first == 'in-use' %}Sort status with In Trash first{% elif storage_status_first == 'trash' %}Sort status with Recovered first{% else %}Sort status with In use first{% endif %}" title="Next status priority"><span aria-hidden="true">▼</span></button>
+                            </span></span>
+                        </th>
+                        <th scope="col"><span class="visually-hidden">Actions</span></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -113,9 +148,9 @@
                             {% if row.status == 'active' and row.protected %}
                                 <input type="checkbox" data-storage-select-file data-storage-status="in-use" data-storage-select-protected="true" data-storage-file-name="{{ row.original_name }}" data-storage-file-size="{% if row.size_bytes != None %}{{ row.size_bytes|filesizeformat }}{% else %}Size unavailable{% endif %}" disabled aria-label="{{ row.original_name }} is protected from being moved to Trash">
                             {% elif row.status == 'active' %}
-                                <input id="gcc-storage-select-{{ forloop.counter }}" type="checkbox" form="gcc-storage-bulk-form" name="selected_files" value="source:{{ row.source_model }}:{{ row.source_id }}:{{ row.source_field }}" data-storage-select-file data-storage-status="in-use" data-storage-file-name="{{ row.original_name }}" data-storage-file-size="{% if row.size_bytes != None %}{{ row.size_bytes|filesizeformat }}{% else %}Size unavailable{% endif %}" aria-label="Select {{ row.original_name }}">
+                                <input id="gcc-storage-select-{{ forloop.counter }}" type="checkbox" form="gcc-storage-bulk-form" name="selected_files" value="source:{{ row.source_model }}:{{ row.source_id }}:{{ row.source_field }}" data-storage-select-file data-storage-status="in-use" data-storage-file-name="{{ row.original_name }}" data-storage-file-size="{% if row.size_bytes != None %}{{ row.size_bytes|filesizeformat }}{% else %}Size unavailable{% endif %}" data-storage-file-type="{{ row.content_type }}" data-storage-record-title="{{ row.record_title }}" data-storage-project-title="{{ row.project_title }}" data-storage-file-status-label="In use" data-storage-file-status-class="is-active" aria-label="Select {{ row.original_name }}">
                             {% else %}
-                                <input id="gcc-storage-select-{{ forloop.counter }}" type="checkbox" form="gcc-storage-bulk-form" name="selected_files" value="trash:{{ row.id }}" data-storage-select-file data-storage-status="{% if row.status == 'recovered' %}recovered{% else %}trash{% endif %}" data-storage-file-name="{{ row.original_name }}" data-storage-file-size="{% if row.size_bytes != None %}{{ row.size_bytes|filesizeformat }}{% else %}Size unavailable{% endif %}" aria-label="Select {{ row.original_name }}">
+                                <input id="gcc-storage-select-{{ forloop.counter }}" type="checkbox" form="gcc-storage-bulk-form" name="selected_files" value="trash:{{ row.id }}" data-storage-select-file data-storage-status="{% if row.status == 'recovered' %}recovered{% else %}trash{% endif %}" data-storage-file-name="{{ row.original_name }}" data-storage-file-size="{% if row.size_bytes != None %}{{ row.size_bytes|filesizeformat }}{% else %}Size unavailable{% endif %}" data-storage-file-type="{{ row.content_type }}" data-storage-record-title="{{ row.record_title }}" data-storage-project-title="{{ row.project_title }}" data-storage-file-status-label="{% if row.status == 'recovered' %}Recovered{% elif row.status == 'purge_failed' %}Deletion failed{% else %}In Trash{% endif %}" data-storage-file-status-class="is-{{ row.status }}" aria-label="Select {{ row.original_name }}">
                             {% endif %}
                         </td>
                         <td><strong>{{ row.original_name }}</strong><small>{{ row.type_label }} · {{ row.record_type }}{% if row.references|length > 1 %} · {{ row.references|length }} records{% endif %}</small></td>
@@ -126,14 +161,14 @@
                         <td class="gcc-storage-actions">
                             {% if row.status == 'active' %}
                                 {% if row.protected %}<span class="gcc-storage-muted">Archive project deletion only</span>{% else %}
-                                <form method="post" action="{% url 'operations:storage-file-trash' %}">{% csrf_token %}<input type="hidden" name="source_model" value="{{ row.source_model }}"><input type="hidden" name="source_id" value="{{ row.source_id }}"><input type="hidden" name="source_field" value="{{ row.source_field }}"><input type="hidden" name="return_to" value="{% url 'admin:storage-retention' %}?status={{ storage_status }}"><button class="gcc-admin-button gcc-admin-button-danger" type="submit">Move to Trash</button></form>
+                                <form method="post" action="{% url 'operations:storage-file-trash' %}">{% csrf_token %}<input type="hidden" name="source_model" value="{{ row.source_model }}"><input type="hidden" name="source_id" value="{{ row.source_id }}"><input type="hidden" name="source_field" value="{{ row.source_field }}"><input type="hidden" name="return_to" value="{{ storage_return_to }}"><button class="gcc-admin-button gcc-admin-button-danger" type="submit">Move to Trash</button></form>
                                 {% endif %}
                             {% elif row.status == 'recovered' %}
                                 <a class="gcc-admin-button gcc-admin-button-outline" href="{% url 'operations:storage-file-recovered-download' item_id=row.id %}">Download</a>
-                                {% if row.can_reattach %}<form method="post" action="{% url 'operations:storage-file-reattach' item_id=row.id %}">{% csrf_token %}<input type="hidden" name="return_to" value="{% url 'admin:storage-retention' %}?status=recovered"><button class="gcc-admin-button gcc-admin-button-outline" type="submit">Reattach to original record</button></form>{% endif %}
-                                <form method="post" action="{% url 'operations:storage-file-recovered-to-trash' item_id=row.id %}">{% csrf_token %}<input type="hidden" name="return_to" value="{% url 'admin:storage-retention' %}?status=recovered"><button class="gcc-admin-button gcc-admin-button-danger" type="submit">Move to Trash</button></form>
+                                {% if row.can_reattach %}<form method="post" action="{% url 'operations:storage-file-reattach' item_id=row.id %}">{% csrf_token %}<input type="hidden" name="return_to" value="{{ storage_return_to }}"><button class="gcc-admin-button gcc-admin-button-outline" type="submit">Reattach to original record</button></form>{% endif %}
+                                <form method="post" action="{% url 'operations:storage-file-recovered-to-trash' item_id=row.id %}">{% csrf_token %}<input type="hidden" name="return_to" value="{{ storage_return_to }}"><button class="gcc-admin-button gcc-admin-button-danger" type="submit">Move to Trash</button></form>
                             {% else %}
-                                <form method="post" action="{% url 'operations:storage-file-restore' item_id=row.id %}">{% csrf_token %}<input type="hidden" name="return_to" value="{% url 'admin:storage-retention' %}?status=trash"><button class="gcc-admin-button gcc-admin-button-outline" type="submit">Restore privately</button></form>
+                                <form method="post" action="{% url 'operations:storage-file-restore' item_id=row.id %}">{% csrf_token %}<input type="hidden" name="return_to" value="{{ storage_return_to }}"><button class="gcc-admin-button gcc-admin-button-outline" type="submit">Restore privately</button></form>
                             {% endif %}
                         </td>
                     </tr>
@@ -146,19 +181,36 @@
         {% if storage_page.paginator.num_pages > 1 %}
         <nav class="gcc-storage-pagination" aria-label="File inventory pages">
             <span>Page {{ storage_page.number }} of {{ storage_page.paginator.num_pages }}</span>
-            {% if storage_page.has_previous %}<a href="?status={{ storage_status }}{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}&amp;page={{ storage_page.previous_page_number }}">Previous</a>{% endif %}
-            {% if storage_page.has_next %}<a href="?status={{ storage_status }}{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}&amp;page={{ storage_page.next_page_number }}">Next</a>{% endif %}
+            {% if storage_page.has_previous %}<a href="?status={{ storage_status }}{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}&amp;sort={{ storage_sort }}&amp;direction={{ storage_sort_direction }}&amp;status_first={{ storage_status_first }}&amp;page={{ storage_page.previous_page_number }}">Previous</a>{% endif %}
+            {% if storage_page.has_next %}<a href="?status={{ storage_status }}{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}&amp;sort={{ storage_sort }}&amp;direction={{ storage_sort_direction }}&amp;status_first={{ storage_status_first }}&amp;page={{ storage_page.next_page_number }}">Next</a>{% endif %}
         </nav>
         {% endif %}
 
+        <template data-storage-trash-modal-items>
+            {% for row in storage_trash_modal_rows %}
+            <span data-storage-trash-item data-file-name="{{ row.original_name }}" data-file-size="{% if row.size_bytes != None %}{{ row.size_bytes|filesizeformat }}{% else %}Size unavailable{% endif %}" data-file-type="{{ row.content_type|default:'File' }}" data-record-title="{{ row.record_title }}" data-project-title="{{ row.project_title_snapshot }}" data-file-status-label="{% if row.status == 'purge_failed' %}Deletion failed{% else %}In Trash{% endif %}" data-file-status-class="{% if row.status == 'purge_failed' %}is-purge_failed{% else %}is-trashed{% endif %}"></span>
+            {% endfor %}
+        </template>
+
         <dialog class="gcc-storage-delete-dialog" data-storage-delete-dialog aria-labelledby="gcc-storage-delete-title" aria-describedby="gcc-storage-delete-description">
+            <form id="gcc-storage-empty-trash-form" method="post" action="{% url 'admin:storage-empty-trash' %}" hidden>
+                {% csrf_token %}
+                <input type="hidden" name="confirm_empty" value="yes">
+                <input type="hidden" name="return_to" value="{{ storage_trash_return_to }}">
+            </form>
             <span class="gcc-admin-kicker">Permanent deletion</span>
-            <h2 id="gcc-storage-delete-title">Are you sure you want to permanently delete the following files?</h2>
+            <h2 id="gcc-storage-delete-title" data-storage-delete-title>Are you sure you want to permanently delete the following files?</h2>
             <p id="gcc-storage-delete-description">This cannot be undone. If another record still references a stored object, that object will be kept.</p>
-            <ul class="gcc-storage-delete-list" data-storage-delete-list></ul>
+            <div class="gcc-storage-delete-list">
+                <table class="gcc-storage-delete-table">
+                    <thead><tr><th scope="col">File</th><th scope="col">Size</th><th scope="col">Record / project</th><th scope="col">Status</th></tr></thead>
+                    <tbody data-storage-delete-list></tbody>
+                </table>
+            </div>
             <div class="gcc-storage-delete-dialog-actions">
                 <button class="gcc-admin-button gcc-admin-button-outline" type="button" data-storage-delete-cancel>Cancel</button>
                 <button class="gcc-admin-button gcc-admin-button-danger" type="submit" form="gcc-storage-bulk-form" name="bulk_action" value="delete" data-storage-delete-confirm>Delete permanently</button>
+                <button class="gcc-admin-button gcc-admin-button-danger" type="submit" form="gcc-storage-empty-trash-form" data-storage-empty-confirm hidden>Delete permanently</button>
             </div>
         </dialog>
     </section>

@@ -1,0 +1,81 @@
+{% extends 'unfold/layouts/base_simple.html' %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+{% block bodyclass %}{{ block.super }} gcc-storage-admin-body{% endblock %}
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'operations/css/admin-storage.css' %}?v=20261107-db-capacity">
+    <link rel="stylesheet" href="{% static 'operations/css/admin-database-capacity.css' %}?v=20261107-db-capacity">
+{% endblock %}
+{% block extrahead %}
+    {{ block.super }}
+    <script defer src="{% static 'operations/js/database-capacity.js' %}?v=20261107-db-capacity"></script>
+{% endblock %}
+
+{% block content %}
+<main class="gcc-storage-page gcc-db-capacity-page" aria-labelledby="gcc-db-trash-title">
+    <header class="gcc-storage-heading">
+        <div>
+            <span class="gcc-admin-kicker">Recoverable database records</span>
+            <h1 id="gcc-db-trash-title">Database Trash</h1>
+            <p>{{ database_trash_total }} audit record{{ database_trash_total|pluralize }} in trash. Nothing expires automatically.</p>
+        </div>
+        <a class="gcc-admin-button gcc-admin-button-outline" href="{% url 'admin:database-capacity' %}">Back to Database Capacity <span aria-hidden="true">&rarr;</span></a>
+    </header>
+    {% include 'unfold/helpers/messages.html' %}
+
+    <section class="gcc-db-panel gcc-db-trash-guidance" aria-label="About Database Trash">
+        <h2>Restore or permanently delete a batch</h2>
+        <p>Moving records to Database Trash hides them from the normal Activity and security-event screens, but they still use Database Disk Storage. Restoring returns them to those screens. Permanent deletion removes the selected audit records; the Database Disk Storage meter may not drop immediately.</p>
+    </section>
+
+    <section class="gcc-db-panel" aria-labelledby="gcc-db-trash-batches-title">
+        <div class="gcc-db-panel-heading"><div><span class="gcc-admin-kicker">Manual retention</span><h2 id="gcc-db-trash-batches-title">Trash batches</h2></div></div>
+        {% if database_trash_page.object_list %}
+            <div class="gcc-db-table-wrap">
+                <table class="gcc-db-table gcc-db-trash-table">
+                    <thead><tr><th scope="col">Moved to trash</th><th scope="col">Activity records</th><th scope="col">Security events</th><th scope="col">Moved by</th><th scope="col">Actions</th></tr></thead>
+                    <tbody>
+                    {% for batch in database_trash_page %}
+                        <tr>
+                            <th scope="row">{{ batch.first_trashed|date:'M j, Y, g:i a' }}</th>
+                            <td>{{ batch.activity_count }}</td>
+                            <td>{{ batch.security_count }}</td>
+                            <td>{{ batch.trashed_by }}</td>
+                            <td>
+                                <form class="gcc-db-batch-actions" method="post" action="{% url 'admin:database-capacity-trash-action' batch_id=batch.id %}" data-db-confirm-form data-confirm-title="Permanently delete this Database Trash batch?" data-confirm-detail="This action cannot be undone." data-confirm-activity="{{ batch.activity_count }}" data-confirm-security="{{ batch.security_count }}">
+                                    {% csrf_token %}
+                                    <button class="gcc-admin-button gcc-admin-button-primary" type="submit" name="action" value="restore">Restore batch</button>
+                                    <button class="gcc-admin-button gcc-admin-button-danger" type="submit" name="action" value="purge" data-db-confirm-trigger>Permanently delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if database_trash_page.paginator.num_pages > 1 %}
+                <nav class="gcc-db-pagination" aria-label="Database Trash pages">
+                    <span>Page {{ database_trash_page.number }} of {{ database_trash_page.paginator.num_pages }}</span>
+                    {% if database_trash_page.has_previous %}<a href="?page={{ database_trash_page.previous_page_number }}">Previous</a>{% endif %}
+                    {% if database_trash_page.has_next %}<a href="?page={{ database_trash_page.next_page_number }}">Next</a>{% endif %}
+                </nav>
+            {% endif %}
+        {% else %}
+            <p class="gcc-db-empty">Database Trash is empty.</p>
+        {% endif %}
+    </section>
+</main>
+
+<dialog class="gcc-db-confirm-dialog" data-db-confirm-dialog aria-labelledby="gcc-db-confirm-title" aria-describedby="gcc-db-confirm-detail">
+    <span class="gcc-admin-kicker">Permanent deletion</span>
+    <h2 id="gcc-db-confirm-title">Permanently delete this batch?</h2>
+    <p id="gcc-db-confirm-detail"></p>
+    <ul class="gcc-db-confirm-counts" data-db-confirm-counts></ul>
+    <div class="gcc-db-confirm-actions">
+        <button class="gcc-admin-button gcc-admin-button-outline" type="button" data-db-confirm-cancel>Cancel</button>
+        <button class="gcc-admin-button gcc-admin-button-danger" type="button" data-db-confirm-accept>Delete permanently</button>
+    </div>
+</dialog>
+{% endblock %}

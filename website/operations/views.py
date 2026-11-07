@@ -1480,7 +1480,9 @@ def _dashboard_context(request, section, form_overrides=None):
         sent_by__is_staff=False,
     ).count()
     upcoming_events_count = ScheduleEvent.objects.filter(start_at__gte=timezone.now()).count()
-    activities = list(Activity.objects.select_related("actor").all()[:8])
+    activities = list(
+        Activity.objects.filter(trashed_at__isnull=True).select_related("actor")[:8]
+    )
     for activity in activities:
         activity.when = activity.created_at.strftime("%b %d · %I:%M %p") if activity.created_at else ""
 
@@ -4585,7 +4587,7 @@ def lead_permanent_delete(request):
         messages.info(
             request,
             f"{retained_attachment_count} uploaded lead file(s) moved to Storage Trash. "
-            "Empty Trash to free the Supabase storage they use.",
+            "Empty Trash to free the Static File Storage they use.",
         )
     if deleted_count == 1:
         messages.success(request, "Lead permanently deleted.")

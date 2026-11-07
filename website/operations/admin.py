@@ -378,6 +378,9 @@ class ActivityAdmin(GrandCoastModelAdmin):
     search_fields = ("message", "detail")
     readonly_fields = tuple(field.name for field in Activity._meta.fields)
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(trashed_at__isnull=True)
+
     def has_add_permission(self, request):
         return False
 
@@ -409,6 +412,9 @@ class AdminSecurityEventAdmin(GrandCoastModelAdmin):
         "path",
         "detail",
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(trashed_at__isnull=True)
     readonly_fields = (
         "id",
         "event_type",

@@ -15,7 +15,7 @@
                 <li>{{ document_count }} {% translate 'project documents' %}; {{ media_count }} {% translate 'media records' %}; {{ file_count }} {% translate 'stored files' %}</li>
                 <li>{{ task_count }} {% translate 'project tasks' %}; {{ warranty_count }} {% translate 'warranty records' %}</li>
                 <li>{% if published_publicly %}{% translate 'The published project gallery will be removed from the public website.' %}{% else %}{% translate 'There is no published public gallery for this project.' %}{% endif %}</li>
-                <li>{% translate 'Files are deleted from Supabase only when no remaining record refers to them.' %}</li>
+                <li>{% translate 'Files are deleted from Static File Storage only when no remaining record refers to them.' %}</li>
             </ul>
         </div>
         {% if estimate_history_count %}

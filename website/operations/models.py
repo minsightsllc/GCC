@@ -1118,9 +1118,21 @@ class Activity(models.Model):
     estimate = models.ForeignKey(Estimate, null=True, blank=True, on_delete=models.CASCADE, related_name="activities")
     project = models.ForeignKey(Project, null=True, blank=True, on_delete=models.CASCADE, related_name="activities")
     created_at = models.DateTimeField(auto_now_add=True)
+    retention_batch_id = models.UUIDField(null=True, blank=True, db_index=True)
+    trashed_at = models.DateTimeField(null=True, blank=True)
+    trashed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trashed_operations_activity",
+    )
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["trashed_at", "created_at"], name="ops_activity_trash_time_idx"),
+        ]
 
 
 class UserLanguagePreference(models.Model):
@@ -2106,6 +2118,15 @@ class AdminSecurityEvent(models.Model):
     email_sent_at = models.DateTimeField(null=True, blank=True)
     email_error = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    retention_batch_id = models.UUIDField(null=True, blank=True, db_index=True)
+    trashed_at = models.DateTimeField(null=True, blank=True)
+    trashed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="trashed_admin_security_events",
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -2114,6 +2135,7 @@ class AdminSecurityEvent(models.Model):
             models.Index(fields=["event_type", "created_at"], name="admin_sec_event_type_time"),
             models.Index(fields=["outcome", "created_at"], name="admin_sec_event_outcome_time"),
             models.Index(fields=["reviewed_at", "created_at"], name="admin_sec_event_review_time"),
+            models.Index(fields=["trashed_at", "created_at"], name="admin_sec_event_trash_time"),
         ]
 
     def __str__(self):

@@ -3593,8 +3593,8 @@ msgstr "La galería publicada de este proyecto se quitará del sitio web públic
 msgid "There is no published public gallery for this project."
 msgstr "Este proyecto no tiene una galería pública publicada."
 
-msgid "Files are deleted from Supabase only when no remaining record refers to them."
-msgstr "Los archivos de Supabase solo se eliminan cuando ningún otro registro los utiliza."
+msgid "Files are deleted from Static File Storage only when no remaining record refers to them."
+msgstr "Los archivos del almacenamiento estático solo se eliminan cuando ningún otro registro los utiliza."
 
 msgid "Linked client estimate history"
 msgstr "Historial de presupuestos del cliente vinculado"
