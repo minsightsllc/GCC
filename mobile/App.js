@@ -704,6 +704,29 @@ function AppHeader({ navigation }) {
   );
 }
 
+const NATIVE_NAV_COUNT_LABELS = {
+  overview: { en: ['open action', 'open actions'], es: ['acci\u00f3n pendiente', 'acciones pendientes'] },
+  projects: { en: ['active project', 'active projects'], es: ['proyecto activo', 'proyectos activos'] },
+  tasks: { en: ['open task', 'open tasks'], es: ['tarea abierta', 'tareas abiertas'] },
+  calendar: { en: ['upcoming calendar item', 'upcoming calendar items'], es: ['evento pr\u00f3ximo del calendario', 'eventos pr\u00f3ximos del calendario'] },
+  time: { en: ['active time entry', 'active time entries'], es: ['registro de tiempo activo', 'registros de tiempo activos'] },
+  leads: { en: ['open lead needing follow-up', 'open leads needing follow-up'], es: ['prospecto abierto pendiente de seguimiento', 'prospectos abiertos pendientes de seguimiento'] },
+  estimates: { en: ['pending estimate', 'pending estimates'], es: ['presupuesto pendiente', 'presupuestos pendientes'] },
+  media: { en: ['client media draft awaiting sharing', 'client media drafts awaiting sharing'], es: ['borrador multimedia del cliente pendiente de compartir', 'borradores multimedia del cliente pendientes de compartir'] },
+  messages: { en: ['unread message', 'unread messages'], es: ['mensaje sin leer', 'mensajes sin leer'] },
+  notifications: { en: ['unread notification', 'unread notifications'], es: ['notificaci\u00f3n sin leer', 'notificaciones sin leer'] },
+};
+
+function nativeNavigationCountLabel(count, page, language) {
+  const labels = NATIVE_NAV_COUNT_LABELS[page?.countKey];
+  if (!labels) {
+    return `${nativeText(language, page?.label || 'Navigation item')}, ${count}`;
+  }
+
+  const languageLabels = labels[language === 'es' ? 'es' : 'en'];
+  return `${count} ${languageLabels[count === 1 ? 0 : 1]}`;
+}
+
 function NativeNotificationBadge({ count, page, lightSurface = false }) {
   const { language } = useContext(NativeShellContext);
   const numericCount = Number.isFinite(Number(count)) ? Math.max(0, Math.floor(Number(count))) : 0;
@@ -715,7 +738,7 @@ function NativeNotificationBadge({ count, page, lightSurface = false }) {
   const displayedCount = numericCount > 99 ? '99+' : String(numericCount);
   const accessibilityLabel = typeof page?.countAccessibilityLabel === 'function'
     ? page.countAccessibilityLabel(numericCount, language)
-    : `${nativeText(language, page?.label || 'Navigation item')}, ${numericCount}`;
+    : nativeNavigationCountLabel(numericCount, page, language);
 
   return (
     <View
