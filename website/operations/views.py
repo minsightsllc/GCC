@@ -470,14 +470,27 @@ def _visible_clients_for_user(user):
     ).distinct()
 
 
-def _operations_navigation_counts(user, *, team_mode=False):
-    """Return the counts shown beside operations navigation categories.
+def _client_media_base_queryset():
+    shared_asset_ids = MediaPublication.objects.filter(
+        destination=MediaPublication.Destination.CLIENT,
+        published_at__isnull=False,
+        shared_client__isnull=False,
+        shared_client=F("asset__project__client"),
+    ).values("asset_id")
+    assets = MediaAsset.objects.filter(
+        publications__destination=MediaPublication.Destination.CLIENT,
+    ).distinct()
+    return assets, shared_asset_ids
 
-    Counts are calculated from the same visibility querysets used by the
-    workspace itself so employee badges cannot disclose records outside their
-    assignments.  ``team_mode`` controls whether a superuser is rendering the
-    employee-style workspace or the full admin operations workspace.
-    """
+
+def _client_media_draft_queryset():
+    assets, shared_asset_ids = _client_media_base_queryset()
+    return assets.exclude(pk__in=shared_asset_ids)
+
+
+def _operations_navigation_counts(user, *, team_mode=False, section_counts=None):
+    """Return role-scoped counts for work that is still awaiting action."""
+    section_counts = section_counts or {}
     now = timezone.now()
     is_admin_workspace = _can_access_dashboard(user) and not team_mode
     projects_qs = _visible_projects_for_user(user)
@@ -494,8 +507,6 @@ def _operations_navigation_counts(user, *, team_mode=False):
     upcoming_events_count = schedule_qs.filter(start_at__gte=now).count()
     active_time_count = _visible_time_for_user(user).filter(clock_out__isnull=True).count()
     active_projects_count = projects_qs.exclude(status=Project.Status.COMPLETE).count()
-    visible_documents_count = ProjectDocument.objects.filter(project__in=projects_qs).count()
-    visible_media_count = MediaAsset.objects.filter(project__in=projects_qs).count()
     unread_notifications_count = EmployeeNotification.objects.filter(
         employee=user,
         read_at__isnull=True,
@@ -510,46 +521,44 @@ def _operations_navigation_counts(user, *, team_mode=False):
         open_leads_count = Lead.objects.filter(deleted_at__isnull=True).exclude(
             status__in=[Lead.Status.WON, Lead.Status.LOST]
         ).count()
-        pending_estimates_count = Estimate.objects.filter(
+        pending_estimates_count = visible_estimates(user).filter(
             status__in=[Estimate.Status.DRAFT, Estimate.Status.SENT]
         ).count()
-        content_count = (
-            Service.objects.filter(is_active=True).count()
-            + ProcessStep.objects.count()
+        client_media_drafts_count = _client_media_draft_queryset().count()
+        overview_count = (
+            open_tasks_count
+            + upcoming_events_count
+            + unread_messages_count
+            + unread_notifications_count
         )
-        team_count = EmployeeProfile.objects.filter(
-            is_active=True,
-            user__is_active=True,
-            user__is_staff=True,
-        ).count()
-        clients_count = Client.objects.count()
-        overview_count = open_tasks_count + upcoming_events_count + unread_messages_count + unread_notifications_count
     else:
         unread_messages_count = 0
         open_leads_count = 0
         pending_estimates_count = 0
-        content_count = 0
-        team_count = 0
-        clients_count = 0
+        client_media_drafts_count = 0
         overview_count = open_tasks_count + upcoming_events_count + unread_notifications_count
 
-    return {
+    counts = {
         "overview": overview_count,
-        "clients": clients_count,
+        "clients": 0,
         "tasks": open_tasks_count,
         "calendar": upcoming_events_count,
         "time": active_time_count,
-        "documents": visible_documents_count,
+        "documents": 0,
         "leads": open_leads_count,
         "estimates": pending_estimates_count,
         "projects": active_projects_count,
-        "media": visible_media_count,
-        "content": content_count,
-        "team": team_count,
+        "media": client_media_drafts_count,
+        "content": 0,
+        "team": 0,
         "messages": unread_messages_count,
         "notifications": unread_notifications_count,
         "profile": 0,
     }
+    for category, count in section_counts.items():
+        if category in counts and category != "overview":
+            counts[category] = max(int(count or 0), 0)
+    return counts
 
 
 def _site_settings():
@@ -1441,10 +1450,27 @@ def _dashboard_context(request, section, form_overrides=None):
     for activity in activities:
         activity.when = activity.created_at.strftime("%b %d · %I:%M %p") if activity.created_at else ""
 
+    section_nav_counts = {}
+    if section == "leads":
+        section_nav_counts["leads"] = 0 if show_deleted_leads else sum(
+            lead.status not in {Lead.Status.WON, Lead.Status.LOST}
+            for lead in leads
+        )
+    elif section == "estimates":
+        section_nav_counts["estimates"] = len(pending_estimates)
+    elif section == "projects":
+        section_nav_counts["projects"] = len(active_projects)
+    elif section == "media":
+        section_nav_counts["media"] = media_context.get("media_action_count", 0)
+    operations_nav_counts = _operations_navigation_counts(
+        request.user,
+        section_counts=section_nav_counts,
+    )
+
     return {
         "active_section": section,
         "operations_nav_role": "admin",
-        "operations_nav_counts": _operations_navigation_counts(request.user),
+        "operations_nav_counts": operations_nav_counts,
         "leads": leads,
         "active_leads_count": active_leads_count,
         "show_deleted_leads": show_deleted_leads,
@@ -2147,11 +2173,20 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
 
     media_visibility = request.GET.get("media_visibility", "all")
     media_qs = MediaAsset.objects.select_related("project", "uploaded_by").filter(project__in=projects_qs)
+    if team_mode:
+        website_publication_asset_ids = MediaPublication.objects.filter(
+            destination=MediaPublication.Destination.WEBSITE,
+        ).values("asset_id")
+        media_qs = media_qs.exclude(pk__in=website_publication_asset_ids)
+    if team_mode and section == "media":
+        media_qs = media_qs.exclude(hidden_from_employee_workspace_by=request.user)
     if media_visibility in dict(MediaAsset.Visibility.choices):
         media_qs = media_qs.filter(visibility=media_visibility)
     media_assets = list(media_qs)
     for media in media_assets:
         media.display_url = reverse("operations:media-file", kwargs={"pk": media.pk})
+        if team_mode and section == "media":
+            media.can_remove_from_employee_workspace = True
 
     time_entries = list(_visible_time_for_user(request.user).select_related("employee", "project", "task")[:50])
     active_time_entry = TimeEntry.objects.filter(employee=request.user, clock_out__isnull=True).first()
@@ -2325,11 +2360,41 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
             notification.destination_url,
             workspace=notification_workspace,
         )
+    section_nav_counts = {}
+    if section == "projects":
+        section_nav_counts["projects"] = sum(
+            project.status != Project.Status.COMPLETE
+            for project in projects
+        )
+    elif section == "tasks":
+        actionable_task_statuses = {
+            Task.Status.OPEN,
+            Task.Status.IN_PROGRESS,
+            Task.Status.BLOCKED,
+        }
+        section_nav_counts["tasks"] = sum(
+            task.status in actionable_task_statuses
+            for task in tasks
+        )
+    elif section == "calendar":
+        month_events = {}
+        current_time = timezone.now()
+        for week in calendar_weeks:
+            for day in week:
+                for event in day["events"]:
+                    if event.start_at >= current_time:
+                        month_events[event.pk] = event
+        section_nav_counts["calendar"] = len(month_events)
+    operations_nav_counts = _operations_navigation_counts(
+        request.user,
+        team_mode=team_mode,
+        section_counts=section_nav_counts,
+    )
     return {
         "active_section": section,
         "team_mode": team_mode,
         "operations_nav_role": "employee" if team_mode else "admin",
-        "operations_nav_counts": _operations_navigation_counts(request.user, team_mode=team_mode),
+        "operations_nav_counts": operations_nav_counts,
         "projects": projects,
         "selected_project": selected_project,
         "tasks": tasks,
@@ -5088,30 +5153,20 @@ def _media_library_context(request, *, form_overrides=None):
     form_overrides = form_overrides or {}
     project_filter = request.GET.get("media_project", "all")
     state = request.GET.get("state", "all")
-    assets = (
-        MediaAsset.objects.select_related("project__client")
-        .prefetch_related("publications")
-        .filter(publications__destination=MediaPublication.Destination.CLIENT)
-        .distinct()
-    )
+    assets, currently_shared_ids = _client_media_base_queryset()
+    assets = assets.select_related("project__client").prefetch_related("publications")
     if project_filter != "all":
         try:
             assets = assets.filter(project_id=uuid.UUID(project_filter))
         except (ValueError, TypeError):
             project_filter = "all"
-    currently_shared = MediaPublication.objects.filter(
-        destination=MediaPublication.Destination.CLIENT,
-        published_at__isnull=False,
-        shared_client__isnull=False,
-        shared_client=F("asset__project__client"),
-    )
-    currently_shared_ids = currently_shared.values("asset_id")
     if state == "published":
         assets = assets.filter(pk__in=currently_shared_ids)
     elif state == "draft":
         assets = assets.exclude(pk__in=currently_shared_ids)
     else:
         state = "all"
+    media_action_count = assets.exclude(pk__in=currently_shared_ids).count()
     page = Paginator(assets, 12).get_page(request.GET.get("page"))
     rows = []
     for asset in page:
@@ -5127,6 +5182,7 @@ def _media_library_context(request, *, form_overrides=None):
     return {
         "media_rows": rows, "media_page": page, "media_destination": "client",
         "media_state": state, "media_project": project_filter,
+        "media_action_count": media_action_count,
         "client_sharing_projects": client_projects,
         "media_upload_form": form_overrides.get("media_upload_form") or MediaUploadForm(
             project_queryset=client_projects,
@@ -5429,6 +5485,29 @@ def media_edit(request, pk):
             {"media_edit_form": form},
             selections={"media_project": asset.project_id},
         )
+    return _workspace_redirect(request, "media", media_project=asset.project_id)
+
+
+@require_POST
+@team_required
+@transaction.atomic
+def team_media_dismiss(request, pk):
+    asset = get_object_or_404(
+        MediaAsset.objects.select_for_update().select_related("project"),
+        pk=pk,
+    )
+    if (
+        not asset.project_id
+        or not _visible_projects_for_user(request.user).filter(pk=asset.project_id).exists()
+    ):
+        raise PermissionDenied
+    asset.hidden_from_employee_workspace_by.add(request.user)
+    messages.success(
+        request,
+        translation.gettext(
+            "Media removed from your workspace. The project record, stored file, and client sharing are unchanged."
+        ),
+    )
     return _workspace_redirect(request, "media", media_project=asset.project_id)
 
 

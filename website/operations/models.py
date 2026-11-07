@@ -855,6 +855,11 @@ class MediaAsset(models.Model):
         on_delete=models.SET_NULL,
         related_name="uploaded_media",
     )
+    hidden_from_employee_workspace_by = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="hidden_employee_workspace_media",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

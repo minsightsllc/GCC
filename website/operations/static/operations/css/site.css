@@ -3611,6 +3611,10 @@ body.public-site main {
     gap: 7px;
 }
 
+.media-workspace-remove-form {
+    margin-top: 10px;
+}
+
 .media-controls input,
 .media-controls select {
     width: 100%;

@@ -24,6 +24,12 @@
                     <button class="button button-quiet" type="submit">{% translate 'Save note' %}</button>
                 </form>
                 {% endif %}
+                {% if team_mode and media.can_remove_from_employee_workspace %}
+                <form class="media-workspace-remove-form" method="post" action="{% url 'operations:team-media-dismiss' pk=media.pk %}" onsubmit="return window.confirm(&quot;{% translate 'Remove this file from your Media workspace? The project record, stored file, and any client share will remain unchanged.' %}&quot;);">
+                    {% csrf_token %}
+                    <button class="button button-danger" type="submit" aria-label="{% translate 'Remove from workspace' %}: {{ media.title }}">{% translate 'Remove from workspace' %}</button>
+                </form>
+                {% endif %}
             </div>
         </article>
         {% empty %}<div class="empty-detail">{% translate 'No project media is available to this role yet.' %}</div>{% endfor %}

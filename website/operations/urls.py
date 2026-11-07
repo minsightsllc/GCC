@@ -140,6 +140,7 @@ urlpatterns = [
     path("projects/posts/<uuid:pk>/posters/<uuid:asset_id>/", views.website_post_poster, name="website-post-poster"),
     path("team/media/upload/", views.media_upload, name="team-media-upload"),
     path("team/media/<uuid:pk>/update/", views.media_edit, name="team-media-update"),
+    path("team/media/<uuid:pk>/dismiss/", views.team_media_dismiss, name="team-media-dismiss"),
     path("team/projects/<uuid:pk>/update-note/", views.project_add_update, name="team-project-add-update"),
     path("dashboard/content/update/", views.content_update, name="content-update"),
     path("dashboard/content/services/add/", views.service_save, name="service-add"),
