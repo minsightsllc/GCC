@@ -6,13 +6,28 @@ navigation is never treated as an authorization boundary.
 """
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 
-from .models import EmployeeProfile, Estimate, Lead, Project, Subcontractor
+from .models import EmployeeProfile, Estimate, Lead, Project, Subcontractor, WarrantyItem
 
 
 STAFF_ROLES = {"Owner", "Manager", "Office", "Field", "Sales"}
+ASSIGNABLE_STAFF_GROUPS = frozenset({"Manager", "Office", "Field", "Sales"})
+
+
+def assignable_staff_users():
+    """Return active employee/admin accounts that can be assigned work."""
+    User = get_user_model()
+    return (
+        User.objects.filter(is_staff=True, is_active=True)
+        .filter(Q(is_superuser=True) | Q(groups__name__in=ASSIGNABLE_STAFF_GROUPS))
+        .filter(Q(employee_profile__isnull=True) | Q(employee_profile__is_active=True))
+        .filter(client_record__isnull=True, subcontractor_profile__isnull=True)
+        .order_by("first_name", "last_name", "username")
+        .distinct()
+    )
 
 
 def feature_enabled(name, default=True):
@@ -81,8 +96,11 @@ def can_access_operating_system(user):
 
 def can_view_media(user, media):
     from .publishing import client_is_live, website_is_live
+    from .storage_retention import is_source_file_restricted
 
     project = getattr(media, "project", None)
+    if is_source_file_restricted(media, "file"):
+        return False
     if is_owner(user) or website_is_live(media):
         return True
     # Public files are available to everyone; client feeds filter destinations separately.
@@ -111,13 +129,15 @@ def visible_projects(user):
         return operational_projects
     if is_manager(user) or is_office(user) or is_field(user):
         return operational_projects.filter(
-            Q(project_manager=user) | Q(assigned_staff=user)
+            (Q(project_manager=user) | Q(assigned_staff=user)),
+            archived_at__isnull=True,
         ).distinct()
     if is_client(user):
         return operational_projects.filter(client__user=user)
     if is_subcontractor(user):
         return operational_projects.filter(
-            subcontractor_assignments__subcontractor__portal_user=user
+            subcontractor_assignments__subcontractor__portal_user=user,
+            archived_at__isnull=True,
         ).distinct()
     return Project.objects.none()
 
@@ -125,7 +145,17 @@ def visible_projects(user):
 def can_view_project(user, project):
     if not getattr(project, "pk", None):
         return False
-    return visible_projects(user).filter(pk=project.pk).exists()
+    if visible_projects(user).filter(pk=project.pk).exists():
+        return True
+    return bool(
+        project.archived_at
+        and is_staff_user(user)
+        and WarrantyItem.objects.filter(
+            project=project,
+            assigned_to=user,
+            status__in=[WarrantyItem.Status.OPEN, WarrantyItem.Status.IN_PROGRESS],
+        ).exists()
+    )
 
 
 def require_project_access(user, project, *, mutate=False):
@@ -152,6 +182,8 @@ def can_view_financials(user, project):
 
 def can_mutate_project(user, project):
     if not can_view_project(user, project):
+        return False
+    if project.archived_at and not is_owner(user):
         return False
     if is_owner(user):
         return True
@@ -186,6 +218,8 @@ def can_manage_construction(user, project=None):
 def can_manage_project_operations(user, project=None):
     """Allow non-financial project execution work for authorized staff."""
     if project is not None and not can_view_project(user, project):
+        return False
+    if project is not None and project.archived_at and not is_owner(user):
         return False
     return bool(is_owner(user) or is_manager(user) or is_office(user))
 
@@ -277,7 +311,8 @@ def can_view_estimate(user, estimate):
 
 def can_submit_field_work(user, project):
     return bool(
-        can_view_project(user, project)
+        not project.archived_at
+        and can_view_project(user, project)
         and (is_owner(user) or is_manager(user) or is_office(user) or is_field(user) or is_subcontractor(user))
     )
 
@@ -288,6 +323,10 @@ def can_view_client_surface(user, project):
 
 def can_view_project_document(user, document):
     project = getattr(document, "project", None)
+    from .storage_retention import is_source_file_restricted
+
+    if is_source_file_restricted(document, "file"):
+        return False
     if project is None or not can_view_project(user, project):
         return False
     if is_client(user):

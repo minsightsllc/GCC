@@ -6,10 +6,13 @@
     </div>
     <div class="lead-attachment-list">
         {% for attachment in selected_lead.contact_attachments %}
+        <div class="lead-attachment-row">
         <a class="lead-attachment" href="{{ attachment.download_url }}">
             <span class="lead-attachment-icon" aria-hidden="true">↳</span>
             <span class="lead-attachment-copy"><strong>{{ attachment.original_name|default:"Uploaded file" }}</strong><small>Download securely · {{ attachment.created_at|date:"M j, Y g:i A" }}</small></span>
         </a>
+        {% if request.user.is_superuser %}<form class="storage-retention-inline-action" method="post" action="{% url 'operations:storage-file-trash' %}">{% csrf_token %}<input type="hidden" name="source_model" value="operations.leadattachment"><input type="hidden" name="source_id" value="{{ attachment.pk }}"><input type="hidden" name="source_field" value="file"><input type="hidden" name="return_to" value="{{ request.get_full_path }}"><button class="button button-danger" type="submit">Move file to Storage Trash</button></form>{% endif %}
+        </div>
         {% endfor %}
     </div>
 </section>

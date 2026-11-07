@@ -13,6 +13,7 @@ from django.db.models.signals import post_delete, post_save, pre_save
 logger = logging.getLogger(__name__)
 _OLD_FILES_ATTR = "_operations_old_storage_files"
 _OLD_POSTER_SNAPSHOT_ATTR = "_operations_old_poster_snapshot"
+_OLD_POSTER_DETAILS_ATTR = "_operations_old_poster_details"
 
 
 def _file_fields(model):
@@ -34,6 +35,16 @@ def _snapshot_poster_names(snapshot):
     }
 
 
+def _snapshot_poster_details(snapshot):
+    if not isinstance(snapshot, dict):
+        return {}
+    return {
+        slide["poster_image"]: str(slide.get("asset_id", ""))
+        for slide in snapshot.get("slides", [])
+        if isinstance(slide, dict) and slide.get("poster_image")
+    }
+
+
 def _has_live_poster_reference(name, using):
     post_model = apps.get_model("operations", "WebsiteGalleryPost")
     snapshots = post_model._base_manager.using(using).values_list("published_data", flat=True)
@@ -45,13 +56,14 @@ def _has_live_poster_reference(name, using):
 
 def _delete_file_if_unreferenced(storage, model, field_name, name, using):
     try:
-        if model._base_manager.using(using).filter(**{field_name: name}).exists():
+        from .storage_retention import (
+            has_active_storage_reference,
+            has_storage_retention_reference,
+        )
+
+        if has_active_storage_reference(name, using=using):
             return
-        if (
-            model._meta.label_lower == "operations.websitegallerypostitem"
-            and field_name == "poster_image"
-            and _has_live_poster_reference(name, using)
-        ):
+        if has_storage_retention_reference(name, using=using):
             return
         storage.delete(name)
     except Exception:
@@ -116,16 +128,37 @@ def _capture_published_posters(sender, instance, using, raw=False, **kwargs):
         "published_data", flat=True
     ).first()
     setattr(instance, _OLD_POSTER_SNAPSHOT_ATTR, _snapshot_poster_names(previous))
+    setattr(instance, _OLD_POSTER_DETAILS_ATTR, _snapshot_poster_details(previous))
 
 
 def _delete_removed_published_posters(sender, instance, using, raw=False, **kwargs):
     previous = getattr(instance, _OLD_POSTER_SNAPSHOT_ATTR, set())
-    for name in previous - _snapshot_poster_names(instance.published_data):
+    previous_details = getattr(instance, _OLD_POSTER_DETAILS_ATTR, {})
+    removed_names = previous - _snapshot_poster_names(instance.published_data)
+    for name in removed_names:
         item_model = apps.get_model("operations", "WebsiteGalleryPostItem")
         field = item_model._meta.get_field("poster_image")
+        asset_id = previous_details.get(name)
+        item = item_model._base_manager.using(using).filter(
+            post_id=instance.pk,
+            asset_id=asset_id,
+        ).first() if asset_id else None
+        if item is not None:
+            from .storage_retention import retain_replaced_upload
+
+            retained = retain_replaced_upload(
+                item,
+                field.name,
+                name,
+                actor=getattr(instance, "_storage_retention_actor", None),
+            )
+            if retained is not None:
+                continue
         _schedule_file_delete(field.storage, item_model, field.name, name, using)
     if hasattr(instance, _OLD_POSTER_SNAPSHOT_ATTR):
         delattr(instance, _OLD_POSTER_SNAPSHOT_ATTR)
+    if hasattr(instance, _OLD_POSTER_DETAILS_ATTR):
+        delattr(instance, _OLD_POSTER_DETAILS_ATTR)
 
 
 def _delete_post_snapshot_posters(sender, instance, using, **kwargs):

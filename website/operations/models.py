@@ -650,6 +650,7 @@ class Project(TimeStampedModel):
     location = models.CharField(max_length=160, blank=True)
     project_type = models.CharField(max_length=80, default="renovation")
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.PLANNING)
+    archived_at = models.DateTimeField(null=True, blank=True, db_index=True)
     admin_stage_note = models.CharField(
         max_length=30,
         choices=Status.choices,
@@ -714,6 +715,26 @@ class Project(TimeStampedModel):
 
     class Meta:
         ordering = ["-updated_at", "title"]
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        if self.pk and (update_fields is None or {"status", "archived_at"} & set(update_fields)):
+            persisted = type(self)._base_manager.filter(pk=self.pk).values(
+                "status",
+                "archived_at",
+            ).first()
+            if (
+                persisted
+                and persisted["status"] == self.Status.COMPLETE
+                and persisted["archived_at"] is not None
+                and (self.status != self.Status.COMPLETE or self.archived_at is None)
+            ):
+                raise ValidationError("Archived projects must remain Complete.")
+        if self.status == self.Status.COMPLETE and self.archived_at is None:
+            self.archived_at = timezone.now()
+            if update_fields is not None:
+                kwargs["update_fields"] = set(update_fields) | {"archived_at"}
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return self.title
@@ -3681,3 +3702,64 @@ def prevent_cross_project_problem_media(sender, instance, action, pk_set, **kwar
         pk__in=pk_set,
     ).exclude(project_id=instance.project_id).exists():
         raise ValidationError("Problem-report media must belong to the same project.")
+
+
+class StorageTrash(models.Model):
+    """A recoverable reference to a GCC upload removed from its live record."""
+
+    class Status(models.TextChoices):
+        TRASHED = "trashed", "In Trash"
+        RECOVERED = "recovered", "Recovered"
+        PURGE_FAILED = "purge_failed", "Deletion failed"
+
+    class StorageAlias(models.TextChoices):
+        DEFAULT = "default", "Default storage"
+        CONTACT = "contact_submissions", "Contact submissions storage"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    storage_name = models.CharField(max_length=1024)
+    storage_alias = models.CharField(
+        max_length=40,
+        choices=StorageAlias.choices,
+        default=StorageAlias.DEFAULT,
+    )
+    original_name = models.CharField(max_length=255)
+    size_bytes = models.PositiveBigIntegerField(null=True, blank=True)
+    content_type = models.CharField(max_length=160, blank=True)
+    source_model = models.CharField(max_length=100)
+    source_id = models.CharField(max_length=64)
+    source_field = models.CharField(max_length=100)
+    record_title = models.CharField(max_length=220, blank=True)
+    project_id_snapshot = models.CharField(max_length=36, blank=True)
+    project_title_snapshot = models.CharField(max_length=220, blank=True)
+    sharing_status = models.CharField(max_length=160, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.TRASHED)
+    moved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="storage_files_moved_to_trash",
+    )
+    moved_at = models.DateTimeField(default=timezone.now)
+    restored_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="storage_files_restored",
+    )
+    restored_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=500, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-moved_at", "original_name"]
+        indexes = [
+            models.Index(fields=["status", "moved_at"], name="ops_storage_status_time_idx"),
+            models.Index(fields=["storage_name"], name="ops_storage_name_idx"),
+            models.Index(fields=["source_model", "source_id", "source_field"], name="ops_storage_source_idx"),
+        ]
+
+    def __str__(self):
+        return self.record_title or self.original_name

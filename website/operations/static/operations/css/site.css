@@ -1898,6 +1898,12 @@ body.public-site main {
     margin-bottom: 0;
 }
 
+.project-archive-entry-button {
+    margin-top: 14px;
+    min-height: 46px;
+    font-size: .8rem;
+}
+
 .lead-heading-actions {
     display: flex;
     flex-wrap: wrap;
@@ -2883,6 +2889,17 @@ body.public-site main {
     display: grid;
     gap: 8px;
     margin-top: 11px;
+}
+
+.lead-attachment-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.lead-attachment-row > .lead-attachment {
+    flex: 1 1 220px;
 }
 
 .lead-attachment {
@@ -14098,3 +14115,169 @@ body.public-site.public-motion-ready main h1.public-heading-reveal.is-visible {
 .admin-nav > .language-switch { margin:18px 14px 12px; align-self:flex-start; }
 .portal-header .language-switch { margin-left:auto; }
 @media (max-width:760px) { .site-nav .language-switch { align-self:flex-start; margin:10px 0; } .portal-header .language-switch { margin:0; } }
+
+/* Completed project archive */
+.project-archive-list {
+    display: grid;
+    gap: 18px;
+}
+.project-archive-card,
+.project-archive-delete-panel {
+    border: 1px solid var(--line-blue);
+    border-top: 3px solid var(--brand-blue);
+    border-radius: var(--radius);
+    background: var(--white);
+    padding: 22px;
+    box-shadow: var(--shadow-soft);
+}
+.project-archive-card-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+}
+.project-archive-card-heading h3,
+.project-archive-delete-panel .detail-header h3 {
+    margin: 5px 0;
+    color: var(--brand-navy);
+}
+.project-archive-card-heading p {
+    margin: 0;
+    color: var(--muted);
+}
+.project-archive-summary {
+    max-width: 78ch;
+    color: var(--muted);
+}
+.project-archive-stats {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 20px;
+    padding: 14px 0;
+    border-top: 1px solid var(--line-blue);
+    color: var(--muted);
+    font-size: .82rem;
+}
+.project-archive-stats strong {
+    color: var(--brand-navy);
+}
+.project-archive-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+}
+.project-archive-total {
+    color: var(--muted);
+    font-size: .82rem;
+}
+.button-danger-outline {
+    color: var(--danger);
+    background: transparent;
+    border: 1px solid var(--danger);
+}
+.button-danger-outline:hover {
+    color: var(--white);
+    background: var(--danger);
+}
+.project-archive-delete-data,
+.project-archive-estimate-choice {
+    margin-top: 22px;
+    padding: 18px;
+    border: 1px solid var(--line-blue);
+    border-radius: var(--radius);
+    background: var(--soft);
+}
+.project-archive-delete-data h3,
+.project-archive-estimate-choice h3,
+.warranty-project-records h4 {
+    margin: 0 0 10px;
+    color: var(--brand-navy);
+    font-size: 1rem;
+}
+.project-archive-delete-data ul,
+.warranty-project-records ul {
+    margin: 0;
+    padding-left: 20px;
+}
+.project-archive-delete-data li + li,
+.warranty-project-records li + li {
+    margin-top: 7px;
+}
+.project-archive-delete-confirm {
+    display: grid;
+    gap: 20px;
+    margin-top: 22px;
+}
+.project-archive-delete-confirm .detail-actions {
+    justify-content: flex-end;
+}
+.warranty-task-list-heading {
+    margin-top: 24px;
+}
+.warranty-task-row {
+    border-left: 3px solid var(--brand-gold);
+}
+.warranty-task-row small {
+    display: block;
+    color: var(--muted);
+}
+.warranty-project-records {
+    margin: 22px 0;
+    padding: 18px;
+    border: 1px solid var(--line-blue);
+    border-radius: var(--radius);
+    background: var(--soft);
+}
+.warranty-project-records a {
+    color: var(--brand-deep);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.warranty-project-records li span {
+    color: var(--muted);
+    margin-left: 6px;
+}
+.warranty-resolution-form {
+    display: grid;
+    gap: 14px;
+}
+@media (max-width: 720px) {
+    .project-archive-card,
+    .project-archive-delete-panel {
+        padding: 16px;
+    }
+    .project-archive-card-heading {
+        flex-direction: column;
+        gap: 10px;
+    }
+    .project-archive-actions {
+        justify-content: stretch;
+    }
+    .project-archive-actions .button {
+        flex: 1 1 100%;
+    }
+    .project-archive-delete-confirm .detail-actions {
+        flex-direction: column-reverse;
+    }
+}
+.storage-retention-inline-action {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.storage-retention-inline-action .button {
+    min-height: 40px;
+}
+
+.project-document-row-wrap {
+    border-bottom: 1px solid var(--line, #d5dfef);
+    padding: 6px 0 10px;
+}
+
+.project-document-row-wrap .project-document-row {
+    border-bottom: 0;
+}

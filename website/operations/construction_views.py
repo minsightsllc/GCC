@@ -1415,8 +1415,17 @@ def project_closeout_action(request, pk):
 @login_required
 def project_warranty_resolution(request, pk):
     item = get_object_or_404(WarrantyItem.objects.select_related("project"), pk=pk)
-    project = _project_for_execution(request, item.project_id)
-    if not can_manage_project_operations(request.user, project):
+    assigned_archived_warranty = bool(
+        item.project.archived_at
+        and is_staff_user(request.user)
+        and item.assigned_to_id == request.user.pk
+        and item.status in {WarrantyItem.Status.OPEN, WarrantyItem.Status.IN_PROGRESS}
+    )
+    if assigned_archived_warranty:
+        project = item.project
+    else:
+        project = _project_for_execution(request, item.project_id)
+    if not can_manage_project_operations(request.user, project) and not assigned_archived_warranty:
         raise PermissionDenied
     form = WarrantyResolutionForm(request.POST)
     if not form.is_valid():
@@ -1428,6 +1437,10 @@ def project_warranty_resolution(request, pk):
         idempotency_key=_execution_idempotency_key(request, "warranty", item.pk, values.get("status")),
         **values,
     )
+    if project.archived_at and not existing_views._can_access_dashboard(request.user):
+        return redirect("operations:team-section", section="tasks")
+    if project.archived_at:
+        return redirect("operations:project-archive")
     return redirect("operations:project-operations", pk=project.pk)
 
 

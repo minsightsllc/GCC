@@ -87,23 +87,16 @@ class FullLifecycleSimulationTests(TestCase):
         owner_document.close()
 
         self._login("manager")
-        manager_project = self.http.get(project_url)
-        self.assertEqual(manager_project.status_code, 302)
-        self.assertIn("/projects/?project=", manager_project["Location"])
-        self.assertEqual(self.http.get(manager_project["Location"]).status_code, 200)
-        manager_summary = json.loads(self.http.get(summary_url).content)["project"]
-        self.assertIn("financials", manager_summary)
+        # The simulation resolves the warranty item. Non-owner staff therefore
+        # no longer see this archived project or its execution APIs.
+        self.assertEqual(self.http.get(project_url).status_code, 404)
+        self.assertEqual(self.http.get(summary_url).status_code, 404)
+        self.assertEqual(self.http.get(commitments_url).status_code, 404)
 
         self._login("field")
-        field_response = self.http.get(project_url)
-        self.assertEqual(field_response.status_code, 302)
-        self.assertIn("/team/projects/?project=", field_response["Location"])
-        field_project = self.http.get(field_response["Location"])
-        self.assertEqual(field_project.status_code, 200)
-        self.assertNotIn(b"Framing and supervision actuals", field_project.content)
-        field_summary = json.loads(self.http.get(summary_url).content)["project"]
-        self.assertNotIn("financials", field_summary)
-        self.assertEqual(self.http.get(commitments_url).status_code, 403)
+        self.assertEqual(self.http.get(project_url).status_code, 404)
+        self.assertEqual(self.http.get(summary_url).status_code, 404)
+        self.assertEqual(self.http.get(commitments_url).status_code, 404)
 
         self._login("client")
         client_summary = json.loads(self.http.get(summary_url).content)["project"]
@@ -161,7 +154,7 @@ class FullLifecycleSimulationTests(TestCase):
                 content_type="application/json",
                 HTTP_IDEMPOTENCY_KEY="simulation-material-replay",
             ).status_code,
-            403,
+            404,
         )
 
     def test_project_record_actions_are_in_context_and_retry_safe(self):
@@ -196,10 +189,7 @@ class FullLifecycleSimulationTests(TestCase):
 
         self._login("field")
         field_hub = self.http.get(reverse("operations:project-operations", kwargs={"pk": self.project.pk}))
-        self.assertEqual(field_hub.status_code, 302)
-        field_page = self.http.get(field_hub["Location"])
-        self.assertEqual(field_page.status_code, 200)
-        self.assertNotContains(field_page, update_data["body"])
+        self.assertEqual(field_hub.status_code, 404)
 
         self._login("owner")
         hub = self.http.get(reverse("operations:project-operations", kwargs={"pk": self.project.pk}))

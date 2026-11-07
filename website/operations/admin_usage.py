@@ -48,6 +48,11 @@ def get_admin_storage_usage() -> dict:
     return result
 
 
+def invalidate_admin_storage_usage_cache() -> None:
+    """Refresh the Supabase/PostgreSQL meter after a retention purge."""
+    cache.delete(_cache_key())
+
+
 def get_admin_translation_usage() -> dict:
     """Return this app's current-month Google message-translation counter."""
     from django.db import DatabaseError

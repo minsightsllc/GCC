@@ -27,6 +27,7 @@
         <div class="service-image-fields">
             <label class="service-image-label" for="{{ service_form.image.id_for_label }}">{{ service_form.image.label }}</label>
             {{ service_form.image }}{{ service_form.image.errors }}
+            {% if service and service.image %}<button class="button button-danger service-image-trash-button" type="submit" form="service-image-trash-{{ service.pk }}">Move service image to Storage Trash</button>{% endif %}
             {% if service_form.image.help_text %}<small class="service-field-help">{{ service_form.image.help_text }}</small>{% endif %}
         </div>
     </section>

@@ -46,6 +46,8 @@ def media_presentation(asset, destination, *, preview=False, publication=None, l
 
 def website_post_presentation(post, *, preview=False, language="en"):
     """Build public-safe copy and slide URLs from one post snapshot."""
+    from .storage_retention import is_source_file_restricted
+
     data = post.draft_data() if preview else (post.published_data or {})
     items = {
         str(item.asset_id): item.asset
@@ -56,7 +58,7 @@ def website_post_presentation(post, *, preview=False, language="en"):
     slides = []
     for slide in data.get("slides", []):
         asset = items.get(str(slide.get("asset_id", "")))
-        if not asset or not asset.file:
+        if not asset or not asset.file or is_source_file_restricted(asset, "file"):
             continue
         publication = publication_for(asset, MediaPublication.Destination.WEBSITE)
         if not preview and not (publication and publication.published_at):

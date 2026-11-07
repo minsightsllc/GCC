@@ -31,7 +31,7 @@ from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.core.files.storage import default_storage
 from django.db import IntegrityError, transaction
-from django.db.models import F, Max, Prefetch, Q
+from django.db.models import F, FileField, Max, Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.template.loader import render_to_string
 from django.shortcuts import get_object_or_404, redirect, render
@@ -134,6 +134,7 @@ from .models import (
     TimeEntry,
     MobilePushDevice,
     WorkflowEvent,
+    WarrantyItem,
     effective_employee_schedule,
     schedule_event_local_dates,
     sanitize_uploaded_name,
@@ -195,6 +196,8 @@ from .construction_services import (
     set_milestone_status,
 )
 from .construction_policies import (
+    ASSIGNABLE_STAFF_GROUPS,
+    assignable_staff_users,
     can_manage_external_estimate,
     can_view_agreement,
     can_view_lead,
@@ -206,7 +209,14 @@ from .construction_policies import (
     external_estimate_enabled_for,
     visible_estimates,
 )
-from .construction_forms import ExternalEstimateStatusForm, ExternalInvoiceStatusForm
+from .construction_forms import ExternalEstimateStatusForm, ExternalInvoiceStatusForm, WarrantyResolutionForm
+from .project_archives import (
+    estimate_history_delete_blocked,
+    estimate_history_family,
+    permanently_delete_project,
+    project_data_graph,
+    project_export_file,
+)
 from .notifications import queue_client_notifications, queue_employee_notifications
 from .email_delivery import (
     deliver_email_outbox,
@@ -219,7 +229,7 @@ from .email_delivery import (
 PUBLIC_PAGES = {"home", "services", "projects", "process", "contact"}
 DASHBOARD_SECTIONS = {"overview", "clients", "leads", "estimates", "projects", "tasks", "calendar", "time", "media", "documents", "team", "notifications", "content"}
 TEAM_SECTIONS = {"overview", "projects", "tasks", "calendar", "time", "media", "profile", "notifications"}
-EMPLOYEE_GROUPS = {"Manager", "Office", "Field", "Sales"}
+EMPLOYEE_GROUPS = ASSIGNABLE_STAFF_GROUPS
 LEADERSHIP_GROUPS = {"Owner", "Manager"}
 
 
@@ -313,14 +323,7 @@ def pwa_offline(request):
 
 
 def _staff_users():
-    return get_user_model().objects.filter(
-        is_staff=True,
-        is_active=True,
-    ).filter(
-        Q(is_superuser=True) | Q(groups__name__in=EMPLOYEE_GROUPS)
-    ).filter(
-        Q(employee_profile__isnull=True) | Q(employee_profile__is_active=True)
-    ).order_by("first_name", "last_name", "username").distinct()
+    return assignable_staff_users()
 
 
 def _group_names(user):
@@ -419,7 +422,7 @@ def _can_manage_messages(user):
 def _visible_projects_for_user(user):
     if _can_access_dashboard(user):
         return Project.objects.filter(is_portfolio_only=False)
-    return Project.objects.filter(is_portfolio_only=False).filter(
+    return Project.objects.filter(is_portfolio_only=False, archived_at__isnull=True).filter(
         Q(assigned_staff=user) | Q(project_manager=user)
     ).distinct()
 
@@ -429,6 +432,8 @@ def _visible_tasks_for_user(user):
     if _can_access_dashboard(user):
         return Task.objects.filter(visible_leads)
     return Task.objects.filter(visible_leads).filter(
+        Q(project__isnull=True) | Q(project__archived_at__isnull=True)
+    ).filter(
         Q(assigned_to=user)
         | Q(watchers=user)
         | Q(project__assigned_staff=user)
@@ -471,6 +476,8 @@ def _visible_clients_for_user(user):
 
 
 def _client_media_base_queryset():
+    from .storage_retention import hidden_source_ids
+
     shared_asset_ids = MediaPublication.objects.filter(
         destination=MediaPublication.Destination.CLIENT,
         published_at__isnull=False,
@@ -479,7 +486,7 @@ def _client_media_base_queryset():
     ).values("asset_id")
     assets = MediaAsset.objects.filter(
         publications__destination=MediaPublication.Destination.CLIENT,
-    ).distinct()
+    ).exclude(pk__in=hidden_source_ids(MediaAsset, "file")).distinct()
     return assets, shared_asset_ids
 
 
@@ -504,6 +511,12 @@ def _operations_navigation_counts(user, *, team_mode=False, section_counts=None)
     open_tasks_count = tasks_qs.filter(
         status__in=[Task.Status.OPEN, Task.Status.IN_PROGRESS, Task.Status.BLOCKED]
     ).count()
+    if not is_admin_workspace and getattr(user, "is_staff", False):
+        open_tasks_count += WarrantyItem.objects.filter(
+            assigned_to=user,
+            project__archived_at__isnull=False,
+            status__in=[WarrantyItem.Status.OPEN, WarrantyItem.Status.IN_PROGRESS],
+        ).count()
     upcoming_events_count = schedule_qs.filter(start_at__gte=now).count()
     active_time_count = _visible_time_for_user(user).filter(clock_out__isnull=True).count()
     active_projects_count = projects_qs.exclude(status=Project.Status.COMPLETE).count()
@@ -576,6 +589,10 @@ def _asset(path):
 
 def _project_image(project):
     if project and project.cover:
+        from .storage_retention import is_source_file_restricted
+
+        if is_source_file_restricted(project, "cover"):
+            return _asset(project.fallback_image)
         return reverse("operations:project-cover", kwargs={"pk": project.pk})
     return _asset(project.fallback_image) if project else ""
 
@@ -602,14 +619,24 @@ def _public_context(*, language="en", include_project_galleries=False):
     google_reviews = list(GoogleReview.objects.all()[:5])
     services = list(Service.objects.filter(is_active=True))
     process_steps = list(ProcessStep.objects.filter(is_active=True))
+    from .storage_retention import is_source_file_restricted
+
     for service in services:
         service.display_title = _localized_value(service, "title", language)
         service.display_description = _localized_value(service, "description", language)
-        service.display_image = reverse("operations:service-image", kwargs={"pk": service.pk}) if service.image else _asset(service.image_path)
+        service.display_image = (
+            reverse("operations:service-image", kwargs={"pk": service.pk})
+            if service.image and not is_source_file_restricted(service, "image")
+            else _asset(service.image_path)
+        )
     for step in process_steps:
         step.display_title = _localized_value(step, "title", language)
         step.display_description = _localized_value(step, "description", language)
-        step.display_image = reverse("operations:process-step-image", kwargs={"pk": step.pk}) if step.image else ""
+        step.display_image = (
+            reverse("operations:process-step-image", kwargs={"pk": step.pk})
+            if step.image and not is_source_file_restricted(step, "image")
+            else ""
+        )
     contact_service_areas = [
         area.strip()
         for area in site_settings.display_contact_service_areas.splitlines()
@@ -1292,6 +1319,9 @@ def _dashboard_context(request, section, form_overrides=None):
     media_visibility = request.GET.get("visibility", "all")
     media_project = request.GET.get("media_project", "all")
     media_qs = MediaAsset.objects.select_related("project__client").prefetch_related("publications").all()
+    from .storage_retention import hidden_source_ids
+
+    media_qs = media_qs.exclude(pk__in=hidden_source_ids(MediaAsset, "file"))
     if media_visibility in dict(MediaAsset.Visibility.choices):
         media_qs = media_qs.filter(visibility=media_visibility)
     if media_project != "all":
@@ -1316,7 +1346,11 @@ def _dashboard_context(request, section, form_overrides=None):
 
     if selected_lead:
         selected_lead.estimate = selected_lead.estimates.order_by("-created_at").first()
-        selected_lead.contact_attachments = list(selected_lead.attachments.all())
+        selected_lead.contact_attachments = list(
+            selected_lead.attachments.exclude(file="").exclude(
+                pk__in=hidden_source_ids(LeadAttachment, "file")
+            )
+        )
         for attachment in selected_lead.contact_attachments:
             attachment.download_url = reverse("operations:lead-attachment-file", kwargs={"pk": attachment.pk})
     if selected_estimate:
@@ -1547,6 +1581,119 @@ def dashboard(request, section="overview"):
     if section in {"clients", "tasks", "calendar", "time", "documents", "team", "notifications"}:
         return render(request, "operations/workspace.html", _workspace_context(request, section))
     return render(request, "operations/dashboard.html", _dashboard_context(request, section))
+
+
+@never_cache
+@staff_required
+def project_archive(request):
+    projects = list(
+        Project.objects.filter(archived_at__isnull=False)
+        .select_related("client", "estimate")
+        .order_by("-archived_at", "title")
+    )
+    for project in projects:
+        project.archive_message_count = project.messages.count()
+        project.archive_document_count = project.documents.count()
+        project.archive_media_count = project.media_assets.count()
+        project.archive_warranty_count = project.warranty_items.count()
+    return render(
+        request,
+        "operations/project_archive.html",
+        {
+            "projects": projects,
+            "active_section": "projects",
+            "operations_nav_role": "admin",
+            "operations_nav_counts": _operations_navigation_counts(request.user),
+        },
+    )
+
+
+@never_cache
+@staff_required
+def project_archive_export(request, pk):
+    project = get_object_or_404(
+        Project.objects.filter(archived_at__isnull=False),
+        pk=pk,
+    )
+    response = FileResponse(
+        project_export_file(project),
+        as_attachment=True,
+        filename=f"project-{project.pk}-archive.zip",
+        content_type="application/zip",
+    )
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+@never_cache
+@staff_required
+@require_http_methods(["GET", "POST"])
+def project_archive_delete(request, pk):
+    project = get_object_or_404(
+        Project.objects.filter(archived_at__isnull=False)
+        .select_related("client", "estimate"),
+        pk=pk,
+    )
+    graph = project_data_graph(project)
+    file_names = {
+        str(getattr(getattr(instance, field.name), "name", "") or "")
+        for instance in graph
+        for field in instance._meta.concrete_fields
+        if isinstance(field, FileField)
+        and getattr(instance, field.name)
+    }
+    from .models import StorageTrash
+
+    file_names.update(
+        StorageTrash.objects.filter(project_id_snapshot=str(project.pk))
+        .values_list("storage_name", flat=True)
+    )
+    file_count = len(file_names)
+    estimate = project.estimate
+    estimate_family = estimate_history_family(estimate) if estimate else Estimate.objects.none()
+    estimate_history_count = estimate_family.count()
+    estimate_history_blocked = bool(
+        estimate and estimate_history_delete_blocked(project, estimate)
+    )
+    errors = []
+    if request.method == "POST":
+        if request.POST.get("confirm_delete") != "yes":
+            errors.append("Confirm that you want to permanently delete this project and its linked data.")
+        delete_estimate_history = request.POST.get("delete_estimate_history") == "on"
+        if delete_estimate_history and estimate_history_blocked:
+            errors.append("This estimate history is referenced by another project or agreement and cannot be deleted here.")
+        if not errors:
+            title = project.title
+            try:
+                permanently_delete_project(
+                    project,
+                    delete_estimate_history=delete_estimate_history,
+                    actor=request.user,
+                )
+            except ValueError as exc:
+                errors.append(str(exc))
+            else:
+                messages.success(request, f"{title} and its project-linked data were permanently deleted.")
+                return redirect("operations:project-archive")
+    return render(
+        request,
+        "operations/project_archive_delete.html",
+        {
+            "project": project,
+            "linked_record_count": max(len(graph) - 1, 0),
+            "file_count": file_count,
+            "message_count": project.messages.count(),
+            "document_count": project.documents.count(),
+            "media_count": project.media_assets.count(),
+            "task_count": project.tasks.count(),
+            "warranty_count": project.warranty_items.count(),
+            "published_publicly": project.is_published,
+            "estimate_history_count": estimate_history_count,
+            "estimate_history_blocked": estimate_history_blocked,
+            "errors": errors,
+        },
+        status=400 if errors else 200,
+    )
 
 
 def _workspace_redirect(request, section, **params):
@@ -1913,6 +2060,39 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
     elif task_due == "upcoming":
         tasks_qs = tasks_qs.filter(due_date__gte=timezone.localdate()).exclude(status=Task.Status.COMPLETE)
     tasks = list(tasks_qs)
+    warranty_items = list(
+        WarrantyItem.objects.filter(
+            assigned_to=request.user,
+            project__archived_at__isnull=False,
+            status__in=[WarrantyItem.Status.OPEN, WarrantyItem.Status.IN_PROGRESS],
+        ).select_related("project", "project__client")
+        if team_mode and not _can_access_dashboard(request.user)
+        else WarrantyItem.objects.none()
+    )
+    selected_warranty_id = request.GET.get("warranty")
+    selected_warranty = next(
+        (item for item in warranty_items if str(item.pk) == selected_warranty_id),
+        None,
+    )
+    if warranty_items:
+        website_media_ids = MediaPublication.objects.filter(
+            destination=MediaPublication.Destination.WEBSITE
+        ).values("asset_id")
+        for warranty_item in warranty_items:
+            warranty_item.project_documents = [
+                document
+                for document in warranty_item.project.documents.all()
+                if can_view_project_document(request.user, document)
+            ]
+            warranty_item.project_media = list(
+                warranty_item.project.media_assets.exclude(pk__in=website_media_ids)
+            )
+            for media_asset in warranty_item.project_media:
+                media_asset.display_url = reverse(
+                    "operations:media-file",
+                    kwargs={"pk": media_asset.pk},
+                )
+    warranty_resolution_form = WarrantyResolutionForm()
 
     schedule_queryset = _visible_team_schedule_for_user(request.user) if team_mode else _visible_schedule_for_user(request.user)
     events = list(schedule_queryset.select_related("project", "task", "created_by").prefetch_related("assignees"))
@@ -2157,6 +2337,9 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
     selected_client = next((client for client in clients if str(client.pk) == selected_client_id), None) if selected_client_id else (clients[0] if clients else None)
 
     documents_qs = ProjectDocument.objects.select_related("project", "uploaded_by").filter(project__in=projects_qs)
+    from .storage_retention import hidden_source_ids
+
+    documents_qs = documents_qs.exclude(pk__in=hidden_source_ids(ProjectDocument, "file"))
     document_project = request.GET.get("project", "")
     if document_project:
         try:
@@ -2173,6 +2356,7 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
 
     media_visibility = request.GET.get("media_visibility", "all")
     media_qs = MediaAsset.objects.select_related("project", "uploaded_by").filter(project__in=projects_qs)
+    media_qs = media_qs.exclude(pk__in=hidden_source_ids(MediaAsset, "file"))
     if team_mode:
         website_publication_asset_ids = MediaPublication.objects.filter(
             destination=MediaPublication.Destination.WEBSITE,
@@ -2375,7 +2559,7 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
         section_nav_counts["tasks"] = sum(
             task.status in actionable_task_statuses
             for task in tasks
-        )
+        ) + len(warranty_items)
     elif section == "calendar":
         month_events = {}
         current_time = timezone.now()
@@ -2398,6 +2582,9 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
         "projects": projects,
         "selected_project": selected_project,
         "tasks": tasks,
+        "warranty_items": warranty_items,
+        "selected_warranty": selected_warranty,
+        "warranty_resolution_form": warranty_resolution_form,
         "task_filter_groups": task_filter_groups,
         "selected_task": selected_task,
         "task_status_choices": Task.Status.choices,
@@ -4008,6 +4195,10 @@ def document_upload(request):
 @login_required
 def document_file(request, pk):
     document = get_object_or_404(ProjectDocument.objects.select_related("project", "project__client"), pk=pk)
+    from .storage_retention import is_source_file_restricted
+
+    if is_source_file_restricted(document, "file") or not document.file:
+        raise Http404
     if not request.user.is_authenticated:
         return redirect(f"{reverse('operations:login')}?{urlencode({'next': request.path})}")
     if not can_view_project_document(request.user, document):
@@ -4378,7 +4569,11 @@ def lead_permanent_delete(request):
         )
 
     deleted_count = len(leads)
+    retained_attachment_count = 0
     for lead in leads:
+        from .storage_retention import retain_lead_attachments_before_delete
+
+        retained_attachment_count += retain_lead_attachments_before_delete(lead, actor=request.user)
         lead.delete()
 
     record_activity(
@@ -4386,6 +4581,12 @@ def lead_permanent_delete(request):
         f"{deleted_count} trashed lead(s)",
         actor=request.user,
     )
+    if retained_attachment_count:
+        messages.info(
+            request,
+            f"{retained_attachment_count} uploaded lead file(s) moved to Storage Trash. "
+            "Empty Trash to free the Supabase storage they use.",
+        )
     if deleted_count == 1:
         messages.success(request, "Lead permanently deleted.")
     else:
@@ -5315,10 +5516,11 @@ def _attach_existing_website_video_rows(form):
     form.existing_asset_rows = rows
 
 
-def _save_website_video_poster(item, upload):
+def _save_website_video_poster(item, upload, *, actor=None):
     """Store a normalized website-only poster; never shares the original media asset."""
     if not upload or item.asset.media_type != MediaAsset.MediaType.VIDEO:
         return
+    previous_name = item.poster_image.name if item.poster_image else ""
     from PIL import Image, ImageOps
 
     with Image.open(upload) as source:
@@ -5333,6 +5535,30 @@ def _save_website_video_poster(item, upload):
         save=False,
     )
     item.save(update_fields=["poster_image"])
+    if previous_name:
+        from .storage_retention import retain_replaced_upload
+
+        retain_replaced_upload(item, "poster_image", previous_name, actor=actor)
+
+
+def _delete_website_post_items_with_retained_posters(post, *, actor, is_in_draft=False):
+    from .storage_retention import move_file_to_trash
+
+    items = list(
+        WebsiteGalleryPostItem.objects.select_for_update()
+        .filter(post=post, is_in_draft=is_in_draft)
+        .select_related("asset")
+    )
+    for item in items:
+        if item.poster_image:
+            move_file_to_trash(
+                "operations.websitegallerypostitem",
+                item.pk,
+                "poster_image",
+                actor=actor,
+            )
+    if items:
+        WebsiteGalleryPostItem.objects.filter(pk__in=[item.pk for item in items]).delete()
 
 
 @require_POST
@@ -5772,6 +5998,7 @@ def _save_website_gallery_post(request, *, post=None):
         _save_website_video_poster(
             item,
             form.cleaned_data.get(f"slide_poster_{item.asset_id}"),
+            actor=request.user,
         )
 
     previous_live_ids = {
@@ -5780,6 +6007,7 @@ def _save_website_gallery_post(request, *, post=None):
         if slide.get("asset_id")
     }
     post = form.save(commit=False)
+    post._storage_retention_actor = request.user
     post.project = project
     post.save()
 
@@ -5808,6 +6036,7 @@ def _save_website_gallery_post(request, *, post=None):
         _save_website_video_poster(
             item,
             form.cleaned_data.get(f"existing_poster_{asset.pk}"),
+            actor=request.user,
         )
         current_order += 1
 
@@ -5837,6 +6066,7 @@ def _save_website_gallery_post(request, *, post=None):
         _save_website_video_poster(
             item,
             form.cleaned_data.get(f"new_poster_{upload_index}"),
+            actor=request.user,
         )
         MediaPublication.objects.get_or_create(
             asset=asset,
@@ -5884,7 +6114,11 @@ def _save_website_gallery_post(request, *, post=None):
         post.published_data = post.draft_data()
         post.published_at = timezone.now()
         post.save(update_fields=["published_data", "published_at", "updated_at"])
-        WebsiteGalleryPostItem.objects.filter(post=post, is_in_draft=False).delete()
+        _delete_website_post_items_with_retained_posters(
+            post,
+            actor=request.user,
+            is_in_draft=False,
+        )
         _remove_unpublished_website_publications(removed_item_ids | {
             asset_id for asset_id in previous_live_ids - active_ids
         })
@@ -5906,7 +6140,11 @@ def _save_website_gallery_post(request, *, post=None):
         post.published_at = None
         post.published_data = {}
         post.save(update_fields=["published_data", "published_at", "updated_at"])
-        WebsiteGalleryPostItem.objects.filter(post=post, is_in_draft=False).delete()
+        _delete_website_post_items_with_retained_posters(
+            post,
+            actor=request.user,
+            is_in_draft=False,
+        )
         _remove_unpublished_website_publications(removed_item_ids)
         record_activity(
             "Project gallery post unpublished",
@@ -5919,7 +6157,11 @@ def _save_website_gallery_post(request, *, post=None):
         if not post.published_at:
             # An excluded slide in an unpublished post is no longer part of that
             # post. Keep its original MediaAsset available for reuse elsewhere.
-            WebsiteGalleryPostItem.objects.filter(post=post, is_in_draft=False).delete()
+            _delete_website_post_items_with_retained_posters(
+                post,
+                actor=request.user,
+                is_in_draft=False,
+            )
             _remove_unpublished_website_publications(removed_item_ids)
         record_activity(
             "Project gallery post draft saved",
@@ -6056,6 +6298,16 @@ def website_gallery_post_delete(request, pk):
 
     post_title = post.title
     project = post.project
+    _delete_website_post_items_with_retained_posters(
+        post,
+        actor=request.user,
+        is_in_draft=True,
+    )
+    _delete_website_post_items_with_retained_posters(
+        post,
+        actor=request.user,
+        is_in_draft=False,
+    )
     post.delete()
     for asset in assets:
         sync_legacy_visibility(asset)
@@ -6131,6 +6383,10 @@ def website_post_poster(request, pk, asset_id):
     )
     if not slide or not slide.get("poster_image"):
         raise Http404
+    from .storage_retention import is_storage_name_restricted
+
+    if is_storage_name_restricted(slide["poster_image"]):
+        raise Http404
 
     item = next((item for item in post.items.all() if str(item.asset_id) == str(asset_id)), None)
     if not item or item.asset.media_type != MediaAsset.MediaType.VIDEO:
@@ -6203,6 +6459,13 @@ def service_save(request, pk=None):
     instance = get_object_or_404(Service.objects.select_for_update(), pk=pk) if pk else Service()
     form = ServiceForm(request.POST, request.FILES, instance=instance, prefix=f"service-{pk}" if pk else "new-service")
     if form.is_valid():
+        if pk and instance.image:
+            from django.core.files.uploadedfile import UploadedFile
+            from .storage_retention import move_file_to_trash
+
+            replacement = form.cleaned_data.get("image")
+            if replacement is False or isinstance(replacement, UploadedFile):
+                move_file_to_trash("operations.service", instance.pk, "image", actor=request.user)
         service = form.save(commit=False)
         if not service.slug:
             service.slug = f"{slugify(service.title)[:65] or 'service'}-{uuid.uuid4().hex[:8]}"
@@ -6226,6 +6489,10 @@ def service_delete(request, pk):
         raise PermissionDenied
     service = get_object_or_404(Service.objects.select_for_update(), pk=pk)
     title = service.title
+    if service.image:
+        from .storage_retention import move_file_to_trash
+
+        move_file_to_trash("operations.service", service.pk, "image", actor=request.user)
     service.delete()
     record_activity("Service deleted", title, actor=request.user)
     messages.success(request, "Service deleted.")
@@ -6261,9 +6528,11 @@ def service_image(request, pk):
     same path instead of depending on a directly served MEDIA_URL.
     """
     service = get_object_or_404(Service, pk=pk)
+    from .storage_retention import is_source_file_restricted
+
     if not service.is_active and not _can_manage_content(request.user):
         raise Http404
-    if not service.image:
+    if not service.image or is_source_file_restricted(service, "image"):
         raise Http404
     try:
         response = FileResponse(service.image.open("rb"), content_type=mimetypes.guess_type(service.image.name)[0] or "application/octet-stream")
@@ -6284,6 +6553,13 @@ def process_step_save(request, pk=None):
     prefix = f"process-step-{pk}" if pk else "new-process-step"
     form = ProcessStepForm(request.POST, request.FILES, instance=instance, prefix=prefix)
     if form.is_valid():
+        if pk and instance.image:
+            from django.core.files.uploadedfile import UploadedFile
+            from .storage_retention import move_file_to_trash
+
+            replacement = form.cleaned_data.get("image")
+            if replacement is False or isinstance(replacement, UploadedFile):
+                move_file_to_trash("operations.processstep", instance.pk, "image", actor=request.user)
         step = form.save(commit=False)
         if pk is None:
             base_key = slugify(step.title)[:32] or "step"
@@ -6316,6 +6592,10 @@ def process_step_remove(request, pk):
         raise PermissionDenied
     step = get_object_or_404(ProcessStep.objects.select_for_update(), pk=pk)
     title = step.title
+    if step.image:
+        from .storage_retention import move_file_to_trash
+
+        move_file_to_trash("operations.processstep", step.pk, "image", actor=request.user)
     step.delete()
     for position, item in enumerate(ProcessStep.objects.select_for_update().order_by("sort_order", "pk")):
         if item.sort_order != position:
@@ -6351,9 +6631,11 @@ def process_step_move(request, pk):
 @require_GET
 def process_step_image(request, pk):
     step = get_object_or_404(ProcessStep, pk=pk)
+    from .storage_retention import is_source_file_restricted
+
     if not step.is_active and not _can_manage_content(request.user):
         raise Http404
-    if not step.image:
+    if not step.image or is_source_file_restricted(step, "image"):
         raise Http404
     try:
         response = FileResponse(
@@ -6484,7 +6766,9 @@ def project_cover_file(request, pk):
         if not request.user.is_authenticated:
             return redirect(f"{reverse('operations:login')}?{urlencode({'next': request.path})}")
         raise PermissionDenied
-    if not project.cover:
+    from .storage_retention import is_source_file_restricted
+
+    if not project.cover or is_source_file_restricted(project, "cover"):
         raise Http404
     try:
         opened = project.cover.open("rb")
@@ -6518,6 +6802,8 @@ def external_estimate_link(request, pk):
     )
     if not is_linked_client:
         raise Http404
+    if estimate.projects.exists() and not estimate.projects.filter(archived_at__isnull=True).exists():
+        raise Http404
     if not estimate.external_url:
         raise Http404
     # Do not copy the URL into logs or an intermediate page.
@@ -6539,7 +6825,7 @@ def external_invoice_link(request, pk):
         and schedule.project.client.user_id == request.user.pk
         and schedule.external_client_visible
     )
-    if not is_linked_client:
+    if not is_linked_client or schedule.project.archived_at:
         raise Http404
     if not schedule.external_invoice_url:
         raise Http404
@@ -6740,7 +7026,17 @@ def portal(request, section="overview"):
         )
     if portal_estimate is None and not selected_project and portal_estimates:
         portal_estimate = portal_estimates[0]
-    portal_documents = list(selected_project.documents.filter(visibility=ProjectDocument.Visibility.CLIENT)[:12]) if selected_project else []
+    if selected_project:
+        from .storage_retention import hidden_source_ids
+
+        portal_documents = list(
+            selected_project.documents.filter(
+                visibility=ProjectDocument.Visibility.CLIENT,
+                file__gt="",
+            ).exclude(pk__in=hidden_source_ids(ProjectDocument, "file"))[:12]
+        )
+    else:
+        portal_documents = []
     portal_agreement = (
         Agreement.objects.select_related("estimate").filter(project=selected_project).first()
         if selected_project
@@ -6841,6 +7137,8 @@ def portal_accept_estimate(request, pk):
     )
     if not _client_can_access_estimate(request, estimate):
         raise PermissionDenied
+    if estimate.projects.exists() and not estimate.projects.filter(archived_at__isnull=True).exists():
+        raise PermissionDenied("Estimates linked only to archived projects are read-only.")
     messages.info(
         request,
         "Review and accept the estimate in the linked estimate service. Grand Coast will record the outcome here after confirming it.",
@@ -6862,6 +7160,8 @@ def portal_accept_agreement(request, pk):
         or agreement.project.client.user_id != request.user.id
     ):
         raise PermissionDenied
+    if agreement.project.archived_at:
+        raise PermissionDenied("Archived projects are read-only in the client portal.")
     accepted = False
     if agreement.status == Agreement.Status.ISSUED:
         agreement, accepted = accept_agreement_command(
@@ -6921,6 +7221,8 @@ def portal_selection_advance(request, pk):
         or selection.project.client.user_id != request.user.id
     ):
         raise PermissionDenied
+    if selection.project.archived_at:
+        raise PermissionDenied("Archived projects are read-only in the client portal.")
     if selection.status == Selection.Status.PENDING:
         advance_selection_command(
             selection,
@@ -6951,6 +7253,8 @@ def portal_approve_change_order(request, pk):
         or change_order.project.client.user_id != request.user.id
     ):
         raise PermissionDenied
+    if change_order.project.archived_at:
+        raise PermissionDenied("Archived projects are read-only in the client portal.")
     approved = False
     if change_order.status == ChangeOrder.Status.SENT:
         change_order, approved = approve_change_order_command(
@@ -6996,6 +7300,8 @@ def portal_decline_estimate(request, pk):
     )
     if not _client_can_access_estimate(request, estimate):
         raise PermissionDenied
+    if estimate.projects.exists() and not estimate.projects.filter(archived_at__isnull=True).exists():
+        raise PermissionDenied("Estimates linked only to archived projects are read-only.")
     messages.info(
         request,
         "Record your response in the linked estimate service. Grand Coast will update this status after confirming it.",
@@ -7014,6 +7320,8 @@ def portal_send_message(request):
     project = None
     if request.POST.get("project"):
         project = get_object_or_404(Project, pk=request.POST["project"], client=client)
+        if project.archived_at:
+            raise PermissionDenied("Archived projects are read-only in the client portal.")
     form = ClientMessageForm(request.POST)
     if form.is_valid():
         client_message = form.save(commit=False)
@@ -7122,6 +7430,10 @@ def client_invite(request, token):
 @require_GET
 def media_file(request, pk):
     asset = get_object_or_404(MediaAsset.objects.select_related("project__client"), pk=pk)
+    from .storage_retention import is_source_file_restricted
+
+    if is_source_file_restricted(asset, "file"):
+        raise Http404
     allowed = can_view_media(request.user, asset)
     if not allowed:
         if not request.user.is_authenticated:
@@ -7150,6 +7462,10 @@ def media_file(request, pk):
 @staff_required
 def lead_attachment_file(request, pk):
     attachment = get_object_or_404(LeadAttachment.objects.select_related("lead"), pk=pk)
+    from .storage_retention import is_source_file_restricted
+
+    if is_source_file_restricted(attachment, "file"):
+        raise Http404
     if not can_view_lead(request.user, attachment.lead):
         raise PermissionDenied
     if not attachment.file:

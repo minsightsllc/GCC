@@ -1,0 +1,35 @@
+{% extends "operations/project_archive.html" %}
+{% load i18n %}
+{% block title %}{% translate 'Confirm permanent project deletion | Grand Coast' %}{% endblock %}
+{% block archive_content %}
+<section class="admin-view is-active">
+    <div class="admin-heading-row"><div><span class="section-kicker">{% translate 'Permanent deletion' %}</span><h2>{% translate 'Review before deleting' %}</h2><p class="admin-intro">{% translate 'This permanently removes this project and its app-stored records and files. The client account and other projects stay active.' %}</p></div></div>
+    <section class="record-detail project-archive-delete-panel">
+        <div class="detail-header"><div><span class="section-kicker">{% translate 'Project to delete' %}</span><h3>{{ project.title }}</h3><p>{% if project.client %}{{ project.client.name }}{% else %}{% translate 'No client linked' %}{% endif %}{% if project.location %} · {{ project.location }}{% endif %}</p></div><span class="status-badge green">{% translate 'Archived' %} {{ project.archived_at|date:'M j, Y' }}</span></div>
+        {% if errors %}<div class="dashboard-alert" role="alert"><strong>{% translate 'Review the confirmation' %}</strong>{% for error in errors %}<span>{{ error }}</span>{% endfor %}</div>{% endif %}
+        <div class="project-archive-delete-data">
+            <h3>{% translate 'Data included in deletion' %}</h3>
+            <ul>
+                <li>{{ linked_record_count }} {% translate 'project-linked records, including operational history and project conversations' %}</li>
+                <li>{{ message_count }} {% translate 'project-linked messages; general client conversations are kept' %}</li>
+                <li>{{ document_count }} {% translate 'project documents' %}; {{ media_count }} {% translate 'media records' %}; {{ file_count }} {% translate 'stored files' %}</li>
+                <li>{{ task_count }} {% translate 'project tasks' %}; {{ warranty_count }} {% translate 'warranty records' %}</li>
+                <li>{% if published_publicly %}{% translate 'The published project gallery will be removed from the public website.' %}{% else %}{% translate 'There is no published public gallery for this project.' %}{% endif %}</li>
+                <li>{% translate 'Files are deleted from Supabase only when no remaining record refers to them.' %}</li>
+            </ul>
+        </div>
+        {% if estimate_history_count %}
+            <div class="project-archive-estimate-choice">
+                <h3>{% translate 'Linked client estimate history' %}</h3>
+                <p>{% blocktranslate count history_count=estimate_history_count %}There is {{ history_count }} local estimate record in this revision history. External estimate-provider documents and payment records are not included.{% plural %}There are {{ history_count }} local estimate records in this revision history. External estimate-provider documents and payment records are not included.{% endblocktranslate %}</p>
+                {% if estimate_history_blocked %}<p class="form-error">{% translate 'This history is also referenced by another project or agreement, so it cannot be deleted here.' %}</p>{% else %}<label class="form-check"><input form="project-archive-delete-form" type="checkbox" name="delete_estimate_history"> <span>{% translate 'Also permanently delete this linked client estimate history and its local line items.' %}</span></label>{% endif %}
+            </div>
+        {% endif %}
+        <form id="project-archive-delete-form" method="post" class="project-archive-delete-confirm">
+            {% csrf_token %}
+            <label class="form-check"><input type="checkbox" name="confirm_delete" value="yes" required> <span>{% blocktranslate with title=project.title %}I understand that “{{ title }}” and its project-linked records will be permanently deleted.{% endblocktranslate %}</span></label>
+            <div class="detail-actions"><a class="button button-quiet" href="{% url 'operations:project-archive' %}">{% translate 'Cancel' %}</a><button class="button button-danger" type="submit">{% translate 'Permanently delete project' %}</button></div>
+        </form>
+    </section>
+</section>
+{% endblock %}

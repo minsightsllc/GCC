@@ -5,10 +5,24 @@
     </div>
     <div class='project-document-list'>
         {% for document in selected_project.documents.all %}
+        {% if document.file %}
+            <div class='project-document-row-wrap'>
             <a class='project-document-row' href='/documents/{{ document.pk }}/'>
                 <span><strong>{{ document.title }}</strong><small>{{ document.category }} &middot; {{ document.get_visibility_display }}</small></span>
                 <span>&darr;</span>
             </a>
+            {% if request.user.is_superuser %}
+            <form class='storage-retention-inline-action' method='post' action='{% url "operations:storage-file-trash" %}'>
+                {% csrf_token %}
+                <input type='hidden' name='source_model' value='operations.projectdocument'>
+                <input type='hidden' name='source_id' value='{{ document.pk }}'>
+                <input type='hidden' name='source_field' value='file'>
+                <input type='hidden' name='return_to' value='/dashboard/projects/?project={{ selected_project.pk }}'>
+                <button class='button button-danger' type='submit'>Move file to Storage Trash</button>
+            </form>
+            {% endif %}
+            </div>
+        {% endif %}
         {% empty %}
             <p class='detail-value'>No documents have been added to this project yet.</p>
         {% endfor %}

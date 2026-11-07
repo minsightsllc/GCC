@@ -437,6 +437,16 @@ body.gcc-admin-records-page #content {
     line-height: 1.5;
 }
 
+.gcc-admin-storage-action {
+    margin-top: 14px;
+    min-height: 44px;
+}
+
+.gcc-admin-storage-action:focus-visible {
+    outline: 3px solid var(--gcc-gold);
+    outline-offset: 3px;
+}
+
 .gcc-admin-storage-message code {
     color: var(--gcc-deep);
     font-size: .92em;
@@ -1652,6 +1662,10 @@ body.gcc-admin-login-page #page {
 
     .gcc-admin-storage-grid {
         grid-template-columns: 1fr;
+    }
+
+    .gcc-admin-storage-action {
+        width: 100%;
     }
 
     .gcc-admin-heading-actions {

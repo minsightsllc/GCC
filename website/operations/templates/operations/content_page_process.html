@@ -62,6 +62,16 @@
                         <button type="submit" class="button button-primary">Save step</button>
                     </div>
                 </form>
+                {% if row.step.image %}
+                <form class="storage-retention-inline-action" method="post" action="{% url 'operations:storage-file-trash' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="source_model" value="operations.processstep">
+                    <input type="hidden" name="source_id" value="{{ row.step.pk }}">
+                    <input type="hidden" name="source_field" value="image">
+                    <input type="hidden" name="return_to" value="/dashboard/content/#publish-page-process">
+                    <button class="button button-danger" type="submit">Move process image to Storage Trash</button>
+                </form>
+                {% endif %}
             </article>
             {% empty %}
             <div class="media-empty-state service-empty-state">

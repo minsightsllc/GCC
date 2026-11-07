@@ -1055,6 +1055,8 @@ def record_external_invoice_status(
 def accept_agreement(agreement, *, actor, request=None, idempotency_key=None):
     locked = Agreement.objects.select_for_update().select_related("project", "project__client").get(pk=agreement.pk)
     project = locked.project
+    if project.archived_at:
+        raise PermissionDenied("Archived projects are read-only.")
     is_client_acceptance = bool(
         project.client_id
         and project.client.user_id == getattr(actor, "pk", None)
@@ -1463,6 +1465,8 @@ def create_change_order(
 def approve_change_order(change_order, *, actor, request=None, idempotency_key=None):
     locked = ChangeOrder.objects.select_for_update().select_related("project", "project__client").get(pk=change_order.pk)
     project = locked.project
+    if project.archived_at:
+        raise PermissionDenied("Archived projects are read-only.")
     is_client_approval = bool(
         project.client_id
         and project.client.user_id == getattr(actor, "pk", None)
@@ -2625,11 +2629,14 @@ def complete_closeout_item(item, *, actor, status=CloseoutItem.Status.COMPLETE, 
     if not locked.project.closeout_items.filter(
         required=True,
     ).exclude(status__in=[CloseoutItem.Status.COMPLETE, CloseoutItem.Status.NOT_APPLICABLE]).exists():
+        # Initialize coverage while the project is still operational. Saving
+        # Complete archives it immediately, after which only an Owner may make
+        # non-warranty changes to archived project records.
+        initialize_warranty(locked.project, actor=actor)
         locked.project.operational_phase = Project.OperationalPhase.WARRANTY
         locked.project.status = Project.Status.COMPLETE
         locked.project.next_step = "Warranty support"
         locked.project.save(update_fields=["operational_phase", "status", "next_step", "updated_at"])
-        initialize_warranty(locked.project, actor=actor)
     record_workflow_event(
         "closeout_item_completed",
         actor=actor,
@@ -2646,6 +2653,8 @@ def complete_closeout_item(item, *, actor, status=CloseoutItem.Status.COMPLETE, 
 def advance_selection(selection, *, actor, status, client_choice=None, idempotency_key=None):
     locked = Selection.objects.select_for_update().select_related("project", "project__client").get(pk=selection.pk)
     project = locked.project
+    if project.archived_at and is_client(actor):
+        raise PermissionDenied("Archived projects are read-only.")
     if is_client(actor):
         if not can_view_project(actor, project) or status != Selection.Status.SUBMITTED:
             raise PermissionDenied("Clients may only submit their own selection choices.")
@@ -3009,12 +3018,25 @@ def resolve_warranty_item(
     idempotency_key=None,
 ):
     locked = WarrantyItem.objects.select_for_update().select_related("project").get(pk=item.pk)
-    if not can_manage_project_operations(actor, locked.project):
-        raise PermissionDenied("You cannot resolve this warranty item.")
+    assigned_archived_warranty_actor = bool(
+        locked.project.archived_at
+        and is_staff_user(actor)
+        and locked.assigned_to_id == actor.pk
+    )
     if idempotency_key and WorkflowEvent.objects.filter(
         idempotency_key=_workflow_event_key("warranty_item_resolved", locked, idempotency_key),
     ).exists():
+        # An assigned employee may safely retry the same completed command.
+        # The existing event makes this a no-op; it cannot change the record.
+        if not can_manage_project_operations(actor, locked.project) and not assigned_archived_warranty_actor:
+            raise PermissionDenied("You cannot resolve this warranty item.")
         return locked
+    assigned_archived_warranty = bool(
+        assigned_archived_warranty_actor
+        and locked.status in {WarrantyItem.Status.OPEN, WarrantyItem.Status.IN_PROGRESS}
+    )
+    if not can_manage_project_operations(actor, locked.project) and not assigned_archived_warranty:
+        raise PermissionDenied("You cannot resolve this warranty item.")
     if status not in {WarrantyItem.Status.RESOLVED, WarrantyItem.Status.CLOSED}:
         raise ValidationError("Warranty items can only be resolved or closed by this command.")
     resolution = str(resolution or "").strip()

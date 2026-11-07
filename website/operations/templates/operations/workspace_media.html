@@ -30,6 +30,16 @@
                     <button class="button button-danger" type="submit" aria-label="{% translate 'Remove from workspace' %}: {{ media.title }}">{% translate 'Remove from workspace' %}</button>
                 </form>
                 {% endif %}
+                {% if not team_mode and request.user.is_superuser and media.file %}
+                <form class="storage-retention-inline-action" method="post" action="{% url 'operations:storage-file-trash' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="source_model" value="operations.mediaasset">
+                    <input type="hidden" name="source_id" value="{{ media.pk }}">
+                    <input type="hidden" name="source_field" value="file">
+                    <input type="hidden" name="return_to" value="{{ request.get_full_path }}">
+                    <button class="button button-danger" type="submit">Move file to Storage Trash</button>
+                </form>
+                {% endif %}
             </div>
         </article>
         {% empty %}<div class="empty-detail">{% translate 'No project media is available to this role yet.' %}</div>{% endfor %}

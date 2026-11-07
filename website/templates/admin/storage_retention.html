@@ -1,0 +1,166 @@
+{% extends 'unfold/layouts/base_simple.html' %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+{% block bodyclass %}{{ block.super }} gcc-storage-admin-body{% endblock %}
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'operations/css/admin-storage.css' %}?v=20261106-danger-red">
+{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <script defer src="{% static 'operations/js/storage-retention.js' %}?v=20261106-trash-modal"></script>
+{% endblock %}
+
+{% block content %}
+<main class="gcc-storage-page" aria-labelledby="gcc-storage-title">
+    <header class="gcc-storage-heading">
+        <div>
+            <span class="gcc-admin-kicker">Private administration</span>
+            <h1 id="gcc-storage-title">Storage &amp; Retention</h1>
+            <p>Review GCC-managed uploads, recover files, and permanently remove items from storage.</p>
+        </div>
+        <a class="gcc-admin-button gcc-admin-button-outline" href="{% url 'admin:index' %}">Back to administration <span aria-hidden="true">&rarr;</span></a>
+    </header>
+
+    {% include 'unfold/helpers/messages.html' %}
+
+    <section class="gcc-storage-guidance" aria-label="How storage retention works">
+        <h2>What counts toward storage</h2>
+        <p>Moving a file to Trash hides it from employee, client, and public views, but it stays in Supabase and continues using storage until deletion succeeds. Trash has no automatic expiry.</p>
+        <p>The Supabase meter is project-wide and may include objects in other buckets. This inventory lists only uploads managed by GCC in its configured storage. Render database usage is separate; Activity history and other records use PostgreSQL.</p>
+        <p>Restored files stay in Recovered until you reattach them. Reattaching to an already public record may make the file visible immediately, so review that record's sharing and publishing settings first. Signed agreements and cost receipts can only be removed when their archived project is permanently deleted.</p>
+    </section>
+
+    <section class="gcc-storage-meters" aria-label="Storage meters">
+        {% for meter in storage_usage.meters %}
+        <article class="gcc-storage-meter{% if meter.source == 'supabase' %} is-files{% else %} is-database{% endif %}">
+            <div><strong>{% if meter.source == 'supabase' %}Static File Storage{% else %}Database Disk Storage{% endif %}</strong><span>{{ meter.status|title }}</span></div>
+            {% if meter.status == 'ready' %}
+                <p><b>{{ meter.used_gb|floatformat:2 }} GB</b> of {{ meter.capacity_gb|floatformat:2 }} GB</p>
+                <div class="gcc-storage-meter-track" role="progressbar" aria-label="{{ meter.source }} storage used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ meter.percent|floatformat:1 }}"><span style="width: {{ meter.percent|floatformat:1 }}%"></span></div>
+                <small>{{ meter.remaining_gb|floatformat:2 }} GB left · {{ meter.percent|floatformat:1 }}% used</small>
+            {% elif meter.source == 'supabase' and meter.used_gb != None %}
+                <p><b>{{ meter.used_gb|floatformat:2 }} GB</b> currently in use</p><small>Quota is unavailable.</small>
+            {% else %}
+                <p>Usage is unavailable.</p><small>Review the storage service configuration.</small>
+            {% endif %}
+        </article>
+        {% endfor %}
+    </section>
+    <p class="gcc-storage-checked">Storage meters last checked {{ storage_usage.checked_at|date:'M j, Y, g:i a T' }}</p>
+
+    <section class="gcc-storage-inventory" aria-labelledby="gcc-storage-inventory-title">
+        <div class="gcc-storage-inventory-heading">
+            <div><span class="gcc-admin-kicker">Managed uploads</span><h2 id="gcc-storage-inventory-title">File inventory</h2></div>
+            {% if trash_item_count %}<a class="gcc-admin-button gcc-admin-button-danger" href="{% url 'admin:storage-empty-trash' %}">Empty Trash <span>({{ trash_item_count }})</span></a>{% endif %}
+        </div>
+
+        <nav class="gcc-storage-filters" aria-label="Storage inventory views">
+            <a href="{% url 'admin:storage-retention' %}?status=all{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}"{% if storage_status == 'all' %} aria-current="page"{% endif %}>All files <span>{{ storage_counts.all }}</span></a>
+            <a href="{% url 'admin:storage-retention' %}?status=active{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}"{% if storage_status == 'active' %} aria-current="page"{% endif %}>In use <span>{{ storage_counts.active }}</span></a>
+            <a href="{% url 'admin:storage-retention' %}?status=trash{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}"{% if storage_status == 'trash' %} aria-current="page"{% endif %}>Trash <span>{{ storage_counts.trash }}</span></a>
+            <a href="{% url 'admin:storage-retention' %}?status=recovered{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}"{% if storage_status == 'recovered' %} aria-current="page"{% endif %}>Recovered <span>{{ storage_counts.recovered }}</span></a>
+        </nav>
+
+        <form class="gcc-storage-search" method="get" action="{% url 'admin:storage-retention' %}">
+            <input type="hidden" name="status" value="{{ storage_status }}">
+            <label for="gcc-storage-search">Search files</label>
+            <input id="gcc-storage-search" type="search" name="q" value="{{ storage_query }}" placeholder="File, record, project, or sharing status">
+            <button class="gcc-admin-button gcc-admin-button-outline" type="submit">Search</button>
+            {% if storage_query %}<a href="{% url 'admin:storage-retention' %}?status={{ storage_status }}">Clear</a>{% endif %}
+        </form>
+
+        {% if storage_rows %}
+        <form id="gcc-storage-bulk-form" class="gcc-storage-bulk-actions" method="post" action="{% url 'admin:storage-bulk-action' %}">
+            {% csrf_token %}
+            <input type="hidden" name="return_to" value="{{ request.get_full_path }}">
+            <input id="gcc-storage-confirm-delete" type="hidden" name="confirm_delete" value="">
+            <span class="gcc-storage-bulk-label">Selected files</span>
+            {% if storage_status == 'trash' %}
+                <button class="gcc-admin-button gcc-admin-button-outline" type="submit" name="bulk_action" value="restore" disabled>Restore selected privately</button>
+                <button class="gcc-admin-button gcc-admin-button-danger" type="submit" name="bulk_action" value="delete" data-storage-delete-open disabled>Delete permanently</button>
+            {% elif storage_status == 'active' or storage_status == 'recovered' %}
+                <button class="gcc-admin-button gcc-admin-button-danger" type="submit" name="bulk_action" value="trash" disabled>Move selected to Trash</button>
+            {% else %}
+                <button class="gcc-admin-button gcc-admin-button-danger" type="submit" name="bulk_action" value="trash" disabled>Move selected to Trash</button>
+                <button class="gcc-admin-button gcc-admin-button-outline" type="submit" name="bulk_action" value="restore" disabled>Restore selected privately</button>
+            {% endif %}
+            <span class="gcc-storage-selection-count" data-storage-selection-count aria-live="polite">0 selected</span>
+            <p>Select files from one status group at a time. Selecting In use, Trash, or Recovered disables selections from the other statuses.</p>
+        </form>
+        {% endif %}
+
+        <div class="gcc-storage-table-wrap">
+            <table class="gcc-storage-table">
+                <thead>
+                    <tr>
+                        <th scope="col" class="gcc-storage-select-cell">
+                            <div class="gcc-storage-select-all-group">
+                                {% if storage_status == 'all' or storage_status == 'active' %}<label><input type="checkbox" form="gcc-storage-bulk-form" data-storage-select-all-status="in-use" aria-label="Select all in-use files on this page"><span>Select all in use</span></label>{% endif %}
+                                {% if storage_status == 'all' or storage_status == 'trash' %}<label><input type="checkbox" form="gcc-storage-bulk-form" data-storage-select-all-status="trash" aria-label="Select all trashed files on this page"><span>Select all in trash</span></label>{% endif %}
+                                {% if storage_status == 'all' or storage_status == 'recovered' %}<label><input type="checkbox" form="gcc-storage-bulk-form" data-storage-select-all-status="recovered" aria-label="Select all recovered files on this page"><span>Select all recovered</span></label>{% endif %}
+                            </div>
+                        </th>
+                        <th scope="col">File</th><th scope="col">Size</th><th scope="col">Record / project</th><th scope="col">Sharing</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in storage_rows %}
+                    <tr>
+                        <td class="gcc-storage-select-cell">
+                            {% if row.status == 'active' and row.protected %}
+                                <input type="checkbox" data-storage-select-file data-storage-status="in-use" data-storage-select-protected="true" data-storage-file-name="{{ row.original_name }}" data-storage-file-size="{% if row.size_bytes != None %}{{ row.size_bytes|filesizeformat }}{% else %}Size unavailable{% endif %}" disabled aria-label="{{ row.original_name }} is protected from being moved to Trash">
+                            {% elif row.status == 'active' %}
+                                <input id="gcc-storage-select-{{ forloop.counter }}" type="checkbox" form="gcc-storage-bulk-form" name="selected_files" value="source:{{ row.source_model }}:{{ row.source_id }}:{{ row.source_field }}" data-storage-select-file data-storage-status="in-use" data-storage-file-name="{{ row.original_name }}" data-storage-file-size="{% if row.size_bytes != None %}{{ row.size_bytes|filesizeformat }}{% else %}Size unavailable{% endif %}" aria-label="Select {{ row.original_name }}">
+                            {% else %}
+                                <input id="gcc-storage-select-{{ forloop.counter }}" type="checkbox" form="gcc-storage-bulk-form" name="selected_files" value="trash:{{ row.id }}" data-storage-select-file data-storage-status="{% if row.status == 'recovered' %}recovered{% else %}trash{% endif %}" data-storage-file-name="{{ row.original_name }}" data-storage-file-size="{% if row.size_bytes != None %}{{ row.size_bytes|filesizeformat }}{% else %}Size unavailable{% endif %}" aria-label="Select {{ row.original_name }}">
+                            {% endif %}
+                        </td>
+                        <td><strong>{{ row.original_name }}</strong><small>{{ row.type_label }} · {{ row.record_type }}{% if row.references|length > 1 %} · {{ row.references|length }} records{% endif %}</small></td>
+                        <td>{% if row.size_bytes != None %}{{ row.size_bytes|filesizeformat }}{% else %}<span class="gcc-storage-muted">Unavailable</span>{% endif %}</td>
+                        <td><strong>{{ row.record_title }}</strong>{% if row.project_title %}<small>{{ row.project_title }}</small>{% endif %}</td>
+                        <td>{{ row.sharing_status|default:'Private' }}</td>
+                        <td><span class="gcc-storage-status is-{{ row.status }}">{% if row.status == 'active' %}In use{% elif row.status == 'recovered' %}Recovered{% elif row.status == 'purge_failed' %}Deletion failed{% else %}In Trash{% endif %}</span>{% if row.status == 'purge_failed' %}<small>Use the checkbox to retry deletion, or choose Empty Trash.</small>{% endif %}</td>
+                        <td class="gcc-storage-actions">
+                            {% if row.status == 'active' %}
+                                {% if row.protected %}<span class="gcc-storage-muted">Archive project deletion only</span>{% else %}
+                                <form method="post" action="{% url 'operations:storage-file-trash' %}">{% csrf_token %}<input type="hidden" name="source_model" value="{{ row.source_model }}"><input type="hidden" name="source_id" value="{{ row.source_id }}"><input type="hidden" name="source_field" value="{{ row.source_field }}"><input type="hidden" name="return_to" value="{% url 'admin:storage-retention' %}?status={{ storage_status }}"><button class="gcc-admin-button gcc-admin-button-danger" type="submit">Move to Trash</button></form>
+                                {% endif %}
+                            {% elif row.status == 'recovered' %}
+                                <a class="gcc-admin-button gcc-admin-button-outline" href="{% url 'operations:storage-file-recovered-download' item_id=row.id %}">Download</a>
+                                {% if row.can_reattach %}<form method="post" action="{% url 'operations:storage-file-reattach' item_id=row.id %}">{% csrf_token %}<input type="hidden" name="return_to" value="{% url 'admin:storage-retention' %}?status=recovered"><button class="gcc-admin-button gcc-admin-button-outline" type="submit">Reattach to original record</button></form>{% endif %}
+                                <form method="post" action="{% url 'operations:storage-file-recovered-to-trash' item_id=row.id %}">{% csrf_token %}<input type="hidden" name="return_to" value="{% url 'admin:storage-retention' %}?status=recovered"><button class="gcc-admin-button gcc-admin-button-danger" type="submit">Move to Trash</button></form>
+                            {% else %}
+                                <form method="post" action="{% url 'operations:storage-file-restore' item_id=row.id %}">{% csrf_token %}<input type="hidden" name="return_to" value="{% url 'admin:storage-retention' %}?status=trash"><button class="gcc-admin-button gcc-admin-button-outline" type="submit">Restore privately</button></form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="gcc-storage-empty">No files match this view.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if storage_page.paginator.num_pages > 1 %}
+        <nav class="gcc-storage-pagination" aria-label="File inventory pages">
+            <span>Page {{ storage_page.number }} of {{ storage_page.paginator.num_pages }}</span>
+            {% if storage_page.has_previous %}<a href="?status={{ storage_status }}{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}&amp;page={{ storage_page.previous_page_number }}">Previous</a>{% endif %}
+            {% if storage_page.has_next %}<a href="?status={{ storage_status }}{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}&amp;page={{ storage_page.next_page_number }}">Next</a>{% endif %}
+        </nav>
+        {% endif %}
+
+        <dialog class="gcc-storage-delete-dialog" data-storage-delete-dialog aria-labelledby="gcc-storage-delete-title" aria-describedby="gcc-storage-delete-description">
+            <span class="gcc-admin-kicker">Permanent deletion</span>
+            <h2 id="gcc-storage-delete-title">Are you sure you want to permanently delete the following files?</h2>
+            <p id="gcc-storage-delete-description">This cannot be undone. If another record still references a stored object, that object will be kept.</p>
+            <ul class="gcc-storage-delete-list" data-storage-delete-list></ul>
+            <div class="gcc-storage-delete-dialog-actions">
+                <button class="gcc-admin-button gcc-admin-button-outline" type="button" data-storage-delete-cancel>Cancel</button>
+                <button class="gcc-admin-button gcc-admin-button-danger" type="submit" form="gcc-storage-bulk-form" name="bulk_action" value="delete" data-storage-delete-confirm>Delete permanently</button>
+            </div>
+        </dialog>
+    </section>
+</main>
+{% endblock %}

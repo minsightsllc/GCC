@@ -57,6 +57,7 @@ from .models import (
     validate_contact_upload,
     validate_uploaded_media,
 )
+from .construction_policies import assignable_staff_users
 from .turnstile import (
     TURNSTILE_ERROR_MESSAGE,
     is_mobile_owner_login,
@@ -211,7 +212,7 @@ class LeadForm(forms.ModelForm):
 
     def __init__(self, *args, staff_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["assigned_to"].queryset = staff_queryset if staff_queryset is not None else get_user_model().objects.filter(is_staff=True)
+        self.fields["assigned_to"].queryset = staff_queryset if staff_queryset is not None else assignable_staff_users()
         self.fields["assigned_to"].label_from_instance = user_choice_label
 
 
@@ -254,7 +255,7 @@ class QuickTaskForm(forms.ModelForm):
             # field in this compact follow-up form. Set it before ModelForm's
             # model validation runs.
             self.instance.lead = lead
-        self.fields["assigned_to"].queryset = staff_queryset if staff_queryset is not None else get_user_model().objects.filter(is_staff=True)
+        self.fields["assigned_to"].queryset = staff_queryset if staff_queryset is not None else assignable_staff_users()
         self.fields["assigned_to"].label_from_instance = user_choice_label
         self.fields["assigned_to"].label = "Assigned to"
 
@@ -289,7 +290,7 @@ class TaskForm(forms.ModelForm):
 
     def __init__(self, *args, staff_queryset=None, client_queryset=None, project_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
-        staff = staff_queryset if staff_queryset is not None else get_user_model().objects.filter(is_staff=True)
+        staff = staff_queryset if staff_queryset is not None else assignable_staff_users()
         self.fields["assigned_to"].queryset = staff
         self.fields["watchers"].queryset = staff
         self.fields["assigned_to"].label_from_instance = user_choice_label
@@ -380,7 +381,7 @@ class LeadAssignmentForm(forms.ModelForm):
 
     def __init__(self, *args, staff_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["assigned_to"].queryset = staff_queryset if staff_queryset is not None else get_user_model().objects.filter(is_staff=True)
+        self.fields["assigned_to"].queryset = staff_queryset if staff_queryset is not None else assignable_staff_users()
         self.fields["assigned_to"].label_from_instance = user_choice_label
 
 
@@ -542,7 +543,7 @@ class ProjectForm(forms.ModelForm):
         if stage_note_choices and stage_note_choices[0][0] == "":
             stage_note_choices[0] = ("", "No admin note")
             self.fields["admin_stage_note"].choices = stage_note_choices
-        self.fields["assigned_staff"].queryset = staff_queryset if staff_queryset is not None else get_user_model().objects.filter(is_staff=True)
+        self.fields["assigned_staff"].queryset = staff_queryset if staff_queryset is not None else assignable_staff_users()
         self.fields["assigned_staff"].label_from_instance = user_choice_label
 
     def clean(self):
@@ -896,6 +897,7 @@ class ServiceImageInput(forms.ClearableFileInput):
     def get_context(self, name, value, attrs):
         context = super().get_context(name, value, attrs)
         context["widget"]["preview_url"] = getattr(self, "preview_url", "")
+        context["widget"]["show_clear_checkbox"] = getattr(self, "show_clear_checkbox", True)
         return context
 
 
@@ -914,6 +916,9 @@ class ServiceForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Service images must be moved through the shared Storage Trash flow so
+        # the admin can track and later purge or restore the stored object.
+        self.fields["image"].widget.show_clear_checkbox = False
         if self.instance.pk and self.instance.image:
             # Serve the existing file through the storage-aware view. Its
             # FieldFile.open() uses local media in development and Supabase in
@@ -1108,7 +1113,7 @@ class ScheduleEventForm(forms.ModelForm):
 
     def __init__(self, *args, staff_queryset=None, project_queryset=None, task_queryset=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["assignees"].queryset = staff_queryset if staff_queryset is not None else get_user_model().objects.filter(is_staff=True)
+        self.fields["assignees"].queryset = staff_queryset if staff_queryset is not None else assignable_staff_users()
         self.fields["assignees"].label_from_instance = user_choice_label
         self.fields["project"].queryset = project_queryset if project_queryset is not None else Project.objects.filter(is_portfolio_only=False)
         self.fields["task"].queryset = task_queryset if task_queryset is not None else Task.objects.all()

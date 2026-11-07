@@ -23,7 +23,9 @@
             <div class="conversation-chat-empty">{% translate 'Your conversation will appear here.' %}</div>
         {% endfor %}
     </div>
-    {% if not request.user.is_staff %}
+    {% if not request.user.is_staff and portal_project.archived_at %}
+        <p class="conversation-chat-note" role="status">{% translate 'This completed project is archived. Its messages are available to view, but you cannot add a new message here.' %}</p>
+    {% elif not request.user.is_staff %}
         <form class="conversation-chat-composer" method="post" action="{% url 'operations:portal-message' %}">
             {% csrf_token %}
             {% if portal_project %}<input type="hidden" name="project" value="{{ portal_project.pk }}">{% endif %}

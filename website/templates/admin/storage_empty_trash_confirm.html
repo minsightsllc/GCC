@@ -1,0 +1,53 @@
+{% extends 'unfold/layouts/base_simple.html' %}
+{% load static %}
+
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+{% block bodyclass %}{{ block.super }} gcc-storage-admin-body{% endblock %}
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'operations/css/admin-storage.css' %}?v=20261106-storage">
+{% endblock %}
+
+{% block content %}
+<main class="gcc-storage-page gcc-storage-confirm-page" aria-labelledby="gcc-storage-confirm-title">
+    <header class="gcc-storage-heading">
+        <div>
+            <span class="gcc-admin-kicker">Permanent deletion</span>
+            <h1 id="gcc-storage-confirm-title">Empty Storage Trash</h1>
+            <p>Review the files and sizes before confirming.</p>
+        </div>
+        <a class="gcc-admin-button gcc-admin-button-outline" href="{% url 'admin:storage-retention' %}?status=trash">Cancel</a>
+    </header>
+
+    {% include 'unfold/helpers/messages.html' %}
+
+    {% if errors %}<div class="gcc-storage-errors" role="alert">{% for error in errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
+    <section class="gcc-storage-confirm-warning">
+        <h2>This permanently deletes the listed files from configured storage.</h2>
+        <p>Trash still uses storage until deletion succeeds. Files that another record still references will be kept, and failed deletions will remain in Trash for retry.</p>
+    </section>
+
+    <div class="gcc-storage-table-wrap">
+        <table class="gcc-storage-table">
+            <thead><tr><th scope="col">File</th><th scope="col">Size</th><th scope="col">Record / project</th><th scope="col">Status</th></tr></thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td><strong>{{ item.original_name }}</strong><small>{{ item.content_type|default:'File' }}</small></td>
+                    <td>{% if item.size_bytes != None %}{{ item.size_bytes|filesizeformat }}{% else %}Unavailable{% endif %}</td>
+                    <td><strong>{{ item.record_title }}</strong>{% if item.project_title_snapshot %}<small>{{ item.project_title_snapshot }}</small>{% endif %}</td>
+                    <td>{% if item.status == 'purge_failed' %}Deletion failed · retry{% else %}In Trash{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="gcc-storage-empty">Trash is empty.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <form class="gcc-storage-confirm-actions" method="post" action="{% url 'admin:storage-empty-trash' %}">
+        {% csrf_token %}
+        <label><input type="checkbox" name="confirm_empty" value="yes" required> I understand that files successfully deleted from storage cannot be recovered.</label>
+        <button class="gcc-admin-button gcc-admin-button-danger" type="submit"{% if not items %} disabled{% endif %}>Permanently delete listed files</button>
+    </form>
+</main>
+{% endblock %}

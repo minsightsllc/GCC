@@ -3468,3 +3468,151 @@ msgstr "Anule la publicaci?n de esta entrada antes de eliminar el borrador."
 
 msgid "Use ?Send estimate to client? on the external estimate record. Existing internal estimates are read-only history."
 msgstr "Use ?Enviar presupuesto al cliente? en el registro del presupuesto externo. Los presupuestos internos existentes son un historial de solo lectura."
+
+
+msgid "Completed-project archive | Grand Coast"
+msgstr "Archivo de proyectos completados | Grand Coast"
+
+msgid "Completed-project archive"
+msgstr "Archivo de proyectos completados"
+
+msgid "Back to Projects"
+msgstr "Volver a proyectos"
+
+msgid "Archived projects and retained records"
+msgstr "Proyectos archivados y registros conservados"
+
+msgid "Retention"
+msgstr "Conservación"
+
+msgid "Completed projects"
+msgstr "Proyectos completados"
+
+msgid "Projects remain stored here until you export or permanently delete them. Archiving does not free database or file storage."
+msgstr "Los proyectos permanecen aquí hasta que los exporte o los elimine permanentemente. Archivarlos no libera espacio en la base de datos ni en el almacenamiento de archivos."
+
+msgid "projects"
+msgstr "proyectos"
+
+msgid "Archived"
+msgstr "Archivado"
+
+msgid "No client linked"
+msgstr "No hay un cliente vinculado"
+
+msgid "project messages"
+msgstr "mensajes del proyecto"
+
+msgid "documents"
+msgstr "documentos"
+
+msgid "media files"
+msgstr "archivos multimedia"
+
+msgid "warranty records"
+msgstr "registros de garantía"
+
+msgid "Public gallery live"
+msgstr "Galería pública activa"
+
+msgid "Export project ZIP"
+msgstr "Exportar el ZIP del proyecto"
+
+msgid "Delete permanently"
+msgstr "Eliminar permanentemente"
+
+msgid "No completed projects are archived yet."
+msgstr "Aún no hay proyectos completados archivados."
+
+msgid "This completed project is archived. Its records remain available to view, but project actions are disabled."
+msgstr "Este proyecto completado está archivado. Sus registros siguen disponibles para consulta, pero las acciones del proyecto están deshabilitadas."
+
+msgid "This estimate is part of a completed project and is available as read-only history."
+msgstr "Este presupuesto forma parte de un proyecto completado y está disponible únicamente como historial de consulta."
+
+msgid "This completed project is archived. Its messages are available to view, but you cannot add a new message here."
+msgstr "Este proyecto completado está archivado. Puede consultar sus mensajes, pero no agregar mensajes nuevos aquí."
+
+msgid "Assigned warranty work"
+msgstr "Trabajo de garantía asignado"
+
+msgid "Warranty work"
+msgstr "Trabajo de garantía"
+
+msgid "No additional details are available."
+msgstr "No hay más detalles disponibles."
+
+msgid "Project records for this warranty visit"
+msgstr "Registros del proyecto para esta visita de garantía"
+
+msgid "Resolution status"
+msgstr "Estado de resolución"
+
+msgid "What was completed?"
+msgstr "¿Qué trabajo se completó?"
+
+msgid "Permanent deletion"
+msgstr "Eliminación permanente"
+
+msgid "Review before deleting"
+msgstr "Revise antes de eliminar"
+
+msgid "This permanently removes this project and its app-stored records and files. The client account and other projects stay active."
+msgstr "Esto eliminará permanentemente este proyecto y sus registros y archivos almacenados en la aplicación. La cuenta del cliente y sus otros proyectos permanecerán activos."
+
+msgid "Project to delete"
+msgstr "Proyecto que se eliminará"
+
+msgid "Review the confirmation"
+msgstr "Revise la confirmación"
+
+msgid "Data included in deletion"
+msgstr "Datos que se eliminarán"
+
+msgid "project-linked records, including operational history and project conversations"
+msgstr "registros vinculados al proyecto, incluido el historial operativo y las conversaciones del proyecto"
+
+msgid "project-linked messages; general client conversations are kept"
+msgstr "mensajes vinculados al proyecto; las conversaciones generales con el cliente se conservarán"
+
+msgid "project documents"
+msgstr "documentos del proyecto"
+
+msgid "media records"
+msgstr "registros multimedia"
+
+msgid "stored files"
+msgstr "archivos almacenados"
+
+msgid "project tasks"
+msgstr "tareas del proyecto"
+
+msgid "The published project gallery will be removed from the public website."
+msgstr "La galería publicada de este proyecto se quitará del sitio web público."
+
+msgid "There is no published public gallery for this project."
+msgstr "Este proyecto no tiene una galería pública publicada."
+
+msgid "Files are deleted from Supabase only when no remaining record refers to them."
+msgstr "Los archivos de Supabase solo se eliminan cuando ningún otro registro los utiliza."
+
+msgid "Linked client estimate history"
+msgstr "Historial de presupuestos del cliente vinculado"
+
+msgid "There is %(history_count)s local estimate record in this revision history. External estimate-provider documents and payment records are not included."
+msgstr "Este historial de revisiones contiene %(history_count)s registro local de presupuesto. No se incluyen documentos ni registros de pago del proveedor externo de presupuestos."
+
+msgid "There are %(history_count)s local estimate records in this revision history. External estimate-provider documents and payment records are not included."
+msgstr "Este historial de revisiones contiene %(history_count)s registros locales de presupuesto. No se incluyen documentos ni registros de pago del proveedor externo de presupuestos."
+
+msgid "This history is also referenced by another project or agreement, so it cannot be deleted here."
+msgstr "Otro proyecto o acuerdo también utiliza este historial, por lo que no se puede eliminar desde aquí."
+
+msgid "Also permanently delete this linked client estimate history and its local line items."
+msgstr "Eliminar también permanentemente este historial de presupuestos del cliente y sus partidas locales."
+
+msgid "I understand that “%(title)s” and its project-linked records will be permanently deleted."
+msgstr "Entiendo que “%(title)s” y los registros vinculados al proyecto se eliminarán permanentemente."
+
+msgid "Permanently delete project"
+msgstr "Eliminar el proyecto permanentemente"

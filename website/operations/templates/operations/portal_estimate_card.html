@@ -7,7 +7,7 @@
         <div class="estimate-status"><span class="status-check">{% if portal_estimate.external_url and portal_estimate.external_status == 'approved' or not portal_estimate.external_url and portal_estimate.status == 'accepted' %}&#10003;{% else %}?{% endif %}</span><span>{% if portal_estimate.external_url %}{{ portal_estimate.get_external_status_display }}{% else %}{% translate 'Historical status:' %} {{ portal_estimate.get_status_display }}{% endif %}</span></div>
         {% if portal_estimate.external_client_visible and portal_estimate.external_url %}
             <p class="detail-value">{% translate 'Your detailed estimate is hosted by the estimate service selected by Grand Coast. The service is authoritative for your response.' %}</p>
-            <a class="button button-primary full-width" href="{% url 'operations:external-estimate-link' pk=portal_estimate.pk %}" aria-label="Open estimate for {{ portal_estimate.title }}">{% translate 'Open estimate link →' %}</a>
+            {% if not portal_project or not portal_project.archived_at %}<a class="button button-primary full-width" href="{% url 'operations:external-estimate-link' pk=portal_estimate.pk %}" aria-label="Open estimate for {{ portal_estimate.title }}">{% translate 'Open estimate link →' %}</a>{% else %}<p class="portal-accepted-note">{% translate 'This estimate is part of a completed project and is available as read-only history.' %}</p>{% endif %}
             {% if portal_estimate.external_status_by and portal_estimate.external_status_at %}<p class="detail-value">{% translate 'Grand Coast last confirmed this status on' %} {{ portal_estimate.external_status_at|date:'M d, Y' }}{% translate '.' %}</p>{% endif %}
         {% else %}
             {% if portal_estimate.external_url %}

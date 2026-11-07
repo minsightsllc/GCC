@@ -410,7 +410,18 @@ class GrandCoastAdminSite(UnfoldAdminSite):
             },
         )
 
+    def storage_retention(self, request):
+        from .storage_retention_views import storage_retention_context
+
+        return self._render_admin_page(
+            request,
+            "admin/storage_retention.html",
+            storage_retention_context(request),
+        )
+
     def get_urls(self):
+        from .storage_retention_views import storage_bulk_action, storage_empty_trash
+
         custom_urls = [
             path("access/", self.access, name="access"),
             path("otp/", self.otp, name="otp"),
@@ -440,6 +451,21 @@ class GrandCoastAdminSite(UnfoldAdminSite):
                 "records/",
                 self.admin_view(self.records),
                 name="records",
+            ),
+            path(
+                "storage/",
+                self.admin_view(self.storage_retention),
+                name="storage-retention",
+            ),
+            path(
+                "storage/empty/",
+                self.admin_view(storage_empty_trash),
+                name="storage-empty-trash",
+            ),
+            path(
+                "storage/bulk/",
+                self.admin_view(storage_bulk_action),
+                name="storage-bulk-action",
             ),
             path(
                 "security/",

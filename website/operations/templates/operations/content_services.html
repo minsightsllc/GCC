@@ -28,6 +28,15 @@
                 </div>
             </header>
 
+            {% if row.service.image %}
+            <form id="service-image-trash-{{ row.service.pk }}" class="service-image-trash-form" method="post" action="{% url 'operations:storage-file-trash' %}" hidden>
+                {% csrf_token %}
+                <input type="hidden" name="source_model" value="operations.service">
+                <input type="hidden" name="source_id" value="{{ row.service.pk }}">
+                <input type="hidden" name="source_field" value="image">
+                <input type="hidden" name="return_to" value="/dashboard/content/#publish-page-services">
+            </form>
+            {% endif %}
             <form method="post" action="{% url 'operations:service-save' pk=row.service.pk %}" enctype="multipart/form-data" class="service-edit-form" novalidate data-publication-save>
                 {% csrf_token %}
                 {{ row.form.non_field_errors }}

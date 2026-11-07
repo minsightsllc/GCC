@@ -1,0 +1,693 @@
+body.gcc-storage-admin-body #content {
+    max-width: none;
+    padding: 28px clamp(16px, 3vw, 42px) 48px;
+}
+
+.gcc-storage-page {
+    color: #203454;
+    margin: 0 auto;
+    max-width: 1560px;
+}
+
+.gcc-storage-heading,
+.gcc-storage-inventory-heading {
+    align-items: center;
+    display: flex;
+    gap: 24px;
+    justify-content: space-between;
+}
+
+.gcc-storage-heading {
+    margin: 0 0 24px;
+}
+
+.gcc-storage-heading h1,
+.gcc-storage-inventory-heading h2 {
+    color: #203454;
+    font-family: Merriweather, Georgia, serif;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    margin: 7px 0 9px;
+}
+
+.gcc-storage-heading h1 {
+    font-size: clamp(28px, 3vw, 40px);
+}
+
+.gcc-storage-heading p {
+    color: #5c6673;
+    margin: 0;
+    max-width: 780px;
+}
+
+.gcc-storage-guidance,
+.gcc-storage-inventory,
+.gcc-storage-meter,
+.gcc-storage-confirm-warning {
+    background: #fff;
+    border: 1px solid #d3deef;
+    border-radius: 8px;
+}
+
+.gcc-storage-guidance {
+    border-top: 3px solid #d7a321;
+    margin-bottom: 18px;
+    padding: 20px 24px;
+}
+
+.gcc-storage-guidance h2,
+.gcc-storage-confirm-warning h2 {
+    color: #203454;
+    font-size: 17px;
+    font-weight: 800;
+    margin: 0 0 10px;
+}
+
+.gcc-storage-guidance p,
+.gcc-storage-confirm-warning p {
+    color: #5c6673;
+    line-height: 1.6;
+    margin: 7px 0 0;
+}
+
+.gcc-storage-meters {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.gcc-storage-meter {
+    border-top: 3px solid #4969a2;
+    padding: 17px 20px;
+}
+
+.gcc-storage-meter.is-files {
+    border-top-color: #d7a321;
+}
+
+.gcc-storage-meter > div {
+    align-items: center;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+}
+
+.gcc-storage-meter > div span {
+    color: #24624c;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+
+.gcc-storage-meter p {
+    color: #5c6673;
+    margin: 13px 0 9px;
+}
+
+.gcc-storage-meter p b {
+    color: #203454;
+    font-size: 24px;
+    font-weight: 800;
+}
+
+.gcc-storage-meter small,
+.gcc-storage-checked {
+    color: #697482;
+    font-size: 12px;
+}
+
+.gcc-storage-meter-track {
+    background: #e8edf4;
+    border-radius: 999px;
+    height: 9px;
+    margin: 11px 0 7px;
+    overflow: hidden;
+}
+
+.gcc-storage-meter-track span {
+    background: #4969a2;
+    border-radius: inherit;
+    display: block;
+    height: 100%;
+    min-width: 3px;
+}
+
+.gcc-storage-meter.is-files .gcc-storage-meter-track span {
+    background: #d7a321;
+}
+
+.gcc-storage-checked {
+    margin: 9px 2px 28px;
+    text-align: right;
+}
+
+.gcc-storage-inventory {
+    overflow: hidden;
+}
+
+.gcc-storage-inventory-heading {
+    padding: 21px 22px 14px;
+}
+
+.gcc-storage-inventory-heading h2 {
+    font-size: 25px;
+    margin-bottom: 0;
+}
+
+.gcc-storage-filters {
+    border-bottom: 1px solid #d3deef;
+    border-top: 1px solid #e5ebf3;
+    display: flex;
+    gap: 5px;
+    overflow-x: auto;
+    padding: 0 16px;
+}
+
+.gcc-storage-filters a {
+    align-items: center;
+    border-bottom: 3px solid transparent;
+    color: #4c5a6d;
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 9px;
+    min-height: 48px;
+    padding: 0 10px;
+    text-decoration: none;
+}
+
+.gcc-storage-filters a[aria-current="page"] {
+    border-bottom-color: #d7a321;
+    color: #203454;
+    font-weight: 800;
+}
+
+.gcc-storage-filters a span {
+    background: #edf1f7;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    min-width: 23px;
+    padding: 3px 7px;
+    text-align: center;
+}
+
+.gcc-storage-search {
+    align-items: end;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 15px 20px;
+}
+
+.gcc-storage-search label {
+    color: #354b6a;
+    flex-basis: 100%;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.gcc-storage-search input[type="search"] {
+    background: #fff;
+    border: 1px solid #cbd6e6;
+    border-radius: 6px;
+    color: #203454;
+    flex: 1 1 260px;
+    min-height: 42px;
+    padding: 8px 11px;
+}
+
+.gcc-storage-search > a {
+    align-self: center;
+    color: #4969a2;
+    font-weight: 700;
+    padding: 8px;
+}
+
+.gcc-storage-table-wrap {
+    overflow-x: auto;
+    width: 100%;
+}
+
+.gcc-storage-bulk-actions {
+    align-items: center;
+    background: #fff;
+    border-bottom: 1px solid #d3deef;
+    border-top: 1px solid #e5ebf3;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    padding: 13px 20px;
+}
+
+.gcc-storage-bulk-label {
+    color: #354b6a;
+    font-size: 12px;
+    font-weight: 800;
+    margin-right: 3px;
+}
+
+.gcc-storage-bulk-actions > p {
+    color: #697482;
+    flex-basis: 100%;
+    font-size: 11px;
+    margin: 0;
+}
+
+.gcc-storage-bulk-actions .gcc-admin-button:disabled {
+    cursor: not-allowed;
+    opacity: .5;
+}
+
+.gcc-storage-selection-count {
+    color: #354b6a;
+    font-size: 12px;
+    font-weight: 700;
+    margin-left: auto;
+}
+
+.gcc-storage-select-cell {
+    text-align: center !important;
+    width: 156px;
+}
+
+.gcc-storage-select-all-group {
+    display: grid;
+    gap: 5px;
+    text-align: left;
+}
+
+.gcc-storage-select-all-group label {
+    align-items: center;
+    color: #354b6a;
+    cursor: pointer;
+    display: flex;
+    font-size: 10px;
+    font-weight: 700;
+    gap: 6px;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: nowrap;
+}
+
+.gcc-storage-select-cell input[type="checkbox"] {
+    accent-color: #4969a2;
+    cursor: pointer;
+    height: 17px;
+    margin: 0;
+    vertical-align: middle;
+    width: 17px;
+}
+
+.gcc-storage-select-cell input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+    opacity: .45;
+}
+
+.gcc-storage-table {
+    border-collapse: collapse;
+    min-width: 900px;
+    width: 100%;
+}
+
+.gcc-storage-table th,
+.gcc-storage-table td {
+    border-top: 1px solid #e1e7f0;
+    padding: 13px 16px;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.gcc-storage-table th {
+    background: #f4f6f9;
+    color: #354b6a;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.gcc-storage-table td {
+    color: #354b6a;
+    font-size: 13px;
+}
+
+.gcc-storage-table td strong,
+.gcc-storage-table td small {
+    display: block;
+}
+
+.gcc-storage-table td strong {
+    color: #203454;
+    overflow-wrap: anywhere;
+}
+
+.gcc-storage-table td small {
+    color: #697482;
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+.gcc-storage-status {
+    background: #e8f3ed;
+    border-radius: 999px;
+    color: #24624c;
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 5px 9px;
+    white-space: nowrap;
+}
+
+.gcc-storage-status.is-trashed,
+.gcc-storage-status.is-purge_failed {
+    background: #fbf0d2;
+    color: #785400;
+}
+
+.gcc-storage-status.is-recovered {
+    background: #e8edf7;
+    color: #345782;
+}
+
+.gcc-storage-muted {
+    color: #697482;
+    font-size: 12px;
+}
+
+.gcc-storage-actions {
+    min-width: 165px;
+}
+
+.gcc-storage-actions form {
+    margin: 4px 0;
+}
+
+.gcc-storage-actions .gcc-admin-button,
+.gcc-storage-search .gcc-admin-button,
+.gcc-storage-confirm-actions .gcc-admin-button {
+    align-items: center;
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    justify-content: center;
+    min-height: 38px;
+    padding: 7px 11px;
+    text-decoration: none;
+}
+
+.gcc-storage-page .gcc-admin-button.gcc-admin-button-danger {
+    background-color: #b83e3a;
+    border: 1px solid #b83e3a;
+    border-radius: 6px;
+    color: #fff;
+}
+
+.gcc-storage-page button.gcc-admin-button.gcc-admin-button-danger,
+.gcc-storage-page a.gcc-admin-button.gcc-admin-button-danger {
+    background-color: #b83e3a !important;
+    background-image: none !important;
+    border-color: #b83e3a !important;
+    color: #fff !important;
+}
+
+.gcc-storage-page .gcc-admin-button.gcc-admin-button-danger:not(:disabled):hover,
+.gcc-storage-page .gcc-admin-button.gcc-admin-button-danger:not(:disabled):focus-visible {
+    background-color: #972f2b;
+    border-color: #972f2b;
+    color: #fff;
+}
+
+.gcc-storage-page button.gcc-admin-button.gcc-admin-button-danger:not(:disabled):hover,
+.gcc-storage-page button.gcc-admin-button.gcc-admin-button-danger:not(:disabled):focus-visible,
+.gcc-storage-page a.gcc-admin-button.gcc-admin-button-danger:hover,
+.gcc-storage-page a.gcc-admin-button.gcc-admin-button-danger:focus-visible {
+    background-color: #972f2b !important;
+    border-color: #972f2b !important;
+    color: #fff !important;
+}
+
+.gcc-storage-page .gcc-storage-search .gcc-admin-button,
+.gcc-storage-page .gcc-storage-bulk-actions .gcc-admin-button[value="restore"],
+.gcc-storage-page .gcc-storage-actions form[action*="/restore/"] .gcc-admin-button {
+    background-color: #4969a2;
+    border: 1px solid #4969a2;
+    border-radius: 6px;
+    color: #fff;
+}
+
+.gcc-storage-page .gcc-storage-search .gcc-admin-button:not(:disabled):hover,
+.gcc-storage-page .gcc-storage-search .gcc-admin-button:not(:disabled):focus-visible,
+.gcc-storage-page .gcc-storage-bulk-actions .gcc-admin-button[value="restore"]:not(:disabled):hover,
+.gcc-storage-page .gcc-storage-bulk-actions .gcc-admin-button[value="restore"]:not(:disabled):focus-visible,
+.gcc-storage-page .gcc-storage-actions form[action*="/restore/"] .gcc-admin-button:not(:disabled):hover,
+.gcc-storage-page .gcc-storage-actions form[action*="/restore/"] .gcc-admin-button:not(:disabled):focus-visible {
+    background-color: #345382;
+    border-color: #345382;
+    color: #fff;
+}
+
+.gcc-storage-empty {
+    color: #697482 !important;
+    padding: 36px 18px !important;
+    text-align: center !important;
+}
+
+.gcc-storage-pagination {
+    align-items: center;
+    border-top: 1px solid #e1e7f0;
+    color: #697482;
+    display: flex;
+    gap: 16px;
+    justify-content: flex-end;
+    padding: 14px 20px;
+}
+
+.gcc-storage-pagination a {
+    color: #345782;
+    font-weight: 700;
+}
+
+.gcc-storage-confirm-warning {
+    border-left: 4px solid #c83a36;
+    margin-bottom: 18px;
+    padding: 18px 21px;
+}
+
+.gcc-storage-confirm-actions {
+    align-items: center;
+    background: #f3f5f8;
+    border: 1px solid #d3deef;
+    border-radius: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: space-between;
+    margin-top: 18px;
+    padding: 18px;
+}
+
+.gcc-storage-confirm-actions label {
+    align-items: flex-start;
+    color: #354b6a;
+    display: flex;
+    gap: 9px;
+    line-height: 1.5;
+}
+
+.gcc-storage-confirm-actions input {
+    flex: 0 0 auto;
+    margin-top: 3px;
+}
+
+.gcc-storage-confirm-actions .gcc-admin-button-danger:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.gcc-storage-errors {
+    background: #fff3f2;
+    border: 1px solid #e2a6a2;
+    border-radius: 6px;
+    color: #8b2926;
+    margin: 0 0 16px;
+    padding: 8px 16px;
+}
+
+.gcc-storage-errors p {
+    margin: 7px 0;
+}
+
+.gcc-storage-delete-dialog {
+    background: #fff;
+    border: 1px solid #d3deef;
+    border-radius: 9px;
+    border-top: 4px solid #c83a36;
+    box-shadow: 0 24px 70px rgba(17, 34, 58, .28);
+    color: #203454;
+    margin: auto;
+    max-height: min(82vh, 760px);
+    max-width: min(620px, calc(100vw - 32px));
+    overflow: auto;
+    padding: 24px;
+    width: 100%;
+}
+
+.gcc-storage-delete-dialog::backdrop {
+    background: rgba(20, 33, 55, .62);
+}
+
+.gcc-storage-delete-dialog h2 {
+    color: #203454;
+    font-family: Merriweather, Georgia, serif;
+    font-size: 22px;
+    line-height: 1.35;
+    margin: 8px 0 10px;
+}
+
+.gcc-storage-delete-dialog > p {
+    color: #5c6673;
+    line-height: 1.55;
+    margin: 0;
+}
+
+.gcc-storage-delete-list {
+    border: 1px solid #e1e7f0;
+    border-radius: 6px;
+    list-style: none;
+    margin: 18px 0;
+    max-height: 38vh;
+    overflow: auto;
+    padding: 0;
+}
+
+.gcc-storage-delete-list li {
+    align-items: center;
+    border-bottom: 1px solid #e1e7f0;
+    display: flex;
+    gap: 14px;
+    justify-content: space-between;
+    padding: 11px 13px;
+}
+
+.gcc-storage-delete-list li:last-child {
+    border-bottom: 0;
+}
+
+.gcc-storage-delete-list strong {
+    color: #203454;
+    overflow-wrap: anywhere;
+}
+
+.gcc-storage-delete-list span {
+    color: #697482;
+    flex: 0 0 auto;
+    font-size: 12px;
+}
+
+.gcc-storage-delete-dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+
+.gcc-storage-delete-dialog-actions .gcc-admin-button {
+    align-items: center;
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    justify-content: center;
+    min-height: 42px;
+    padding: 9px 16px;
+}
+
+.visually-hidden {
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}
+
+@media (max-width: 760px) {
+    body.gcc-storage-admin-body #content {
+        padding: 18px 12px 32px;
+    }
+
+    .gcc-storage-heading,
+    .gcc-storage-inventory-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .gcc-storage-heading .gcc-admin-button {
+        align-self: flex-start;
+    }
+
+    .gcc-storage-guidance {
+        padding: 17px;
+    }
+
+    .gcc-storage-meters {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .gcc-storage-checked {
+        text-align: left;
+    }
+
+    .gcc-storage-inventory-heading {
+        padding: 18px 16px 12px;
+    }
+
+    .gcc-storage-search {
+        padding: 13px;
+    }
+
+    .gcc-storage-confirm-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .gcc-storage-confirm-actions .gcc-admin-button {
+        width: 100%;
+    }
+
+    .gcc-storage-bulk-actions {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 13px;
+    }
+
+    .gcc-storage-bulk-actions .gcc-admin-button {
+        width: 100%;
+    }
+
+    .gcc-storage-bulk-actions > p {
+        flex-basis: auto;
+    }
+
+    .gcc-storage-selection-count {
+        margin-left: 0;
+    }
+
+    .gcc-storage-delete-dialog {
+        padding: 19px;
+    }
+
+    .gcc-storage-delete-dialog-actions {
+        flex-direction: column-reverse;
+    }
+
+    .gcc-storage-delete-dialog-actions .gcc-admin-button {
+        width: 100%;
+    }
+}

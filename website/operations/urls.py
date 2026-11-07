@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import construction_views
+from . import storage_retention_views
 from . import views
 
 
@@ -28,6 +29,14 @@ urlpatterns = [
     path("dashboard/", views.dashboard, name="dashboard"),
     path("dashboard/command-center/", construction_views.legacy_construction_workspace_redirect, name="command-center"),
     path("dashboard/reviews/weekly/", construction_views.legacy_construction_workspace_redirect, name="weekly-review"),
+    path("dashboard/projects/archive/", views.project_archive, name="project-archive"),
+    path("dashboard/projects/archive/<uuid:pk>/export/", views.project_archive_export, name="project-archive-export"),
+    path("dashboard/projects/archive/<uuid:pk>/delete/", views.project_archive_delete, name="project-archive-delete"),
+    path("dashboard/storage/files/trash/", storage_retention_views.storage_file_trash, name="storage-file-trash"),
+    path("dashboard/storage/files/<uuid:item_id>/restore/", storage_retention_views.storage_file_restore, name="storage-file-restore"),
+    path("dashboard/storage/files/<uuid:item_id>/reattach/", storage_retention_views.storage_file_reattach, name="storage-file-reattach"),
+    path("dashboard/storage/files/<uuid:item_id>/trash-again/", storage_retention_views.storage_recovered_to_trash, name="storage-file-recovered-to-trash"),
+    path("dashboard/storage/files/<uuid:item_id>/download/", storage_retention_views.storage_recovered_download, name="storage-file-recovered-download"),
     path("dashboard/projects/<uuid:pk>/operations/", construction_views.legacy_construction_workspace_redirect, name="project-operations"),
     path("dashboard/estimates/<uuid:pk>/external-status/", construction_views.external_estimate_status, name="external-estimate-status"),
     path("dashboard/payment-schedules/<uuid:pk>/external-status/", construction_views.external_invoice_status, name="external-invoice-status"),

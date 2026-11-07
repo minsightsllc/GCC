@@ -24,6 +24,7 @@
         <div>
             <span class="section-kicker">{% translate 'Your project' %}</span>
             <h1>{{ portal_client.name|truncatewords:1 }}{% translate ', here’s your project.' %}</h1>
+            {% if portal_project.archived_at %}<div class="portal-accepted-note" role="status">{% translate 'This completed project is archived. Its records remain available to view, but project actions are disabled.' %}</div>{% endif %}
             <div class="portal-project-meta">
                 <strong>{{ portal_project.title }}</strong>
                 <span>{{ portal_project.location|default:'Southern California' }}</span>
@@ -63,7 +64,7 @@
                         <h3>{{ portal_agreement.project.title }}</h3>
                         <div class="portal-control-row">
                             <span>{% translate 'Estimate' %}</span>
-                            {% if portal_agreement.estimate and portal_agreement.estimate.external_url and portal_agreement.estimate.external_client_visible %}
+                            {% if not portal_project.archived_at and portal_agreement.estimate and portal_agreement.estimate.external_url and portal_agreement.estimate.external_client_visible %}
                                 <a class="text-link-button" href="{% url 'operations:external-estimate-link' pk=portal_agreement.estimate.pk %}" aria-label="Open the actual estimate for {{ portal_agreement.project.title }}">{% translate 'Open actual estimate →' %}</a>
                             {% else %}
                                 <strong class="detail-value">{% translate 'Not shared in the portal yet' %}</strong>
@@ -71,7 +72,7 @@
                         </div>
                         <div class="portal-control-row"><span>{% translate 'Status' %}</span><strong>{{ portal_agreement.get_status_display }}</strong></div>
                         {% if portal_agreement.signed_pdf %}<a class="text-link-button" href="{% url 'operations:agreement-file' pk=portal_agreement.pk %}">{% translate 'View signed agreement →' %}</a>{% endif %}
-                        {% if portal_agreement.status == 'issued' and not request.user.is_staff %}
+                        {% if portal_agreement.status == 'issued' and not request.user.is_staff and not portal_project.archived_at %}
                             <form method="post" action="{% url 'operations:portal-accept-agreement' pk=portal_agreement.pk %}">
                                 {% csrf_token %}
                                 <button class="button button-primary full-width" type="submit">{% translate 'Accept agreement' %} <span aria-hidden="true">&rarr;</span></button>
@@ -89,7 +90,7 @@
                         {% for selection in portal_selections %}
                             <div class="portal-control-item">
                                 <div><strong>{{ selection.item_name }}</strong><span>{{ selection.category }} &middot; {{ selection.get_status_display }}</span></div>
-                                {% if selection.status == 'pending' and not request.user.is_staff %}
+                                {% if selection.status == 'pending' and not request.user.is_staff and not portal_project.archived_at %}
                                     <form class="portal-inline-form" method="post" action="{% url 'operations:portal-selection-advance' pk=selection.pk %}">
                                         {% csrf_token %}
                                         <input type="text" name="client_choice" maxlength="20000" placeholder="Your choice" aria-label="Choice for {{ selection.item_name }}" required>
@@ -109,7 +110,7 @@
                         {% for change_order in portal_change_orders %}
                             <div class="portal-control-item">
                                 <div><strong>{% translate 'CO-' %}{{ change_order.number }} &middot; {{ change_order.title }}</strong><span>{{ change_order.get_status_display }} &middot; {% if change_order.price_impact < 0 %}{% translate 'Credit' %}{% else %}{% translate '+' %}{% endif %}{% translate '$' %}{{ change_order.price_impact|floatformat:2 }}</span></div>
-                                {% if change_order.status == 'sent' and not request.user.is_staff %}
+                                {% if change_order.status == 'sent' and not request.user.is_staff and not portal_project.archived_at %}
                                     <form method="post" action="{% url 'operations:portal-approve-change-order' pk=change_order.pk %}">
                                         {% csrf_token %}
                                         <button class="button button-outline button-small" type="submit">{% translate 'Approve change order' %}</button>
@@ -125,7 +126,7 @@
                         <h3>{% translate 'Project milestones' %}</h3>
                         {% for schedule in portal_payment_schedules %}
                             <div class="portal-control-row"><span>{{ schedule.description }} &middot; {{ schedule.get_status_display }}{% if external_estimate_portal_enabled and schedule.external_invoice_status != 'not_started' %} {% translate '· Invoice' %} {{ schedule.get_external_invoice_status_display }}{% endif %}</span><strong>{% translate '$' %}{{ schedule.remaining_amount|floatformat:2 }}</strong></div>
-                            {% if external_estimate_portal_enabled and schedule.external_client_visible and schedule.external_invoice_url %}<a class="text-link-button" href="{% url 'operations:external-invoice-link' pk=schedule.pk %}">{% translate 'Open invoice →' %}</a>{% endif %}
+                            {% if not portal_project.archived_at and external_estimate_portal_enabled and schedule.external_client_visible and schedule.external_invoice_url %}<a class="text-link-button" href="{% url 'operations:external-invoice-link' pk=schedule.pk %}">{% translate 'Open invoice →' %}</a>{% endif %}
                         {% endfor %}
                         <small class="secure-note">{% translate 'Payments are recorded by Grand Coast. No card or bank details are stored in this portal.' %}</small>
                     </article>

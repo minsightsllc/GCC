@@ -1,0 +1,37 @@
+{% extends "operations/base.html" %}
+{% load i18n static %}
+{% block title %}{% translate 'Completed-project archive | Grand Coast' %}{% endblock %}
+{% block body_class %}admin-site{% endblock %}
+{% block body %}
+<div class="admin-app" data-admin-root>
+    <div aria-hidden="true" data-operations-notifications data-workspace-kind="admin" style="display:none" data-count-overview="{{ operations_nav_counts.overview }}" data-count-clients="{{ operations_nav_counts.clients }}" data-count-tasks="{{ operations_nav_counts.tasks }}" data-count-calendar="{{ operations_nav_counts.calendar }}" data-count-time="{{ operations_nav_counts.time }}" data-count-documents="{{ operations_nav_counts.documents }}" data-count-leads="{{ operations_nav_counts.leads }}" data-count-estimates="{{ operations_nav_counts.estimates }}" data-count-projects="{{ operations_nav_counts.projects }}" data-count-media="{{ operations_nav_counts.media }}" data-count-content="{{ operations_nav_counts.content }}" data-count-team="{{ operations_nav_counts.team }}" data-count-messages="{{ operations_nav_counts.messages }}" data-count-notifications="{{ operations_nav_counts.notifications }}"></div>
+    <aside class="admin-sidebar" data-admin-sidebar>
+        <div class="admin-brand"><a href="{% url 'operations:home' %}" aria-label="{% translate 'Return to public site' %}"><span class="admin-logo-frame"><img src="{% static 'operations/images/gcc-logo.png' %}" alt="Grand Coast Construction Inc. logo"></span><span><strong>Grand Coast</strong><small>Construction Inc.</small></span></a></div>
+        {% include "operations/sidebar_nav.html" %}
+        <div class="sidebar-footer"><div class="sidebar-user"><span class="avatar">{{ request.user.first_name|slice:':1'|default:request.user.username|slice:':1'|upper }}</span><span><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>{% translate 'Staff account' %}</small></span></div><a class="sidebar-back" href="{% url 'admin:index' %}">{% translate 'Administration home' %}</a><a class="sidebar-back" href="{% url 'operations:home' %}">{% translate 'Return to public site' %}</a><form method="post" action="{% url 'operations:logout' %}">{% csrf_token %}<button class="sidebar-reset" type="submit">{% translate 'Sign out' %}</button></form></div>
+    </aside>
+    <div class="admin-main">
+        <header class="admin-topbar"><button class="admin-menu-toggle" type="button" data-admin-menu-toggle aria-expanded="false" aria-label="{% translate 'Open Operations navigation' %}">☰</button><div><span class="admin-breadcrumb">{% translate 'Grand Coast / Operations' %}</span><h1>{% translate 'Completed-project archive' %}</h1></div><div class="admin-top-actions"><a class="button button-outline button-small" href="{% url 'operations:dashboard-section' section='projects' %}">{% translate 'Back to Projects' %}</a></div></header>
+        <div class="admin-workspace-notice"><span class="staging-label">{% translate 'OWNER WORKSPACE' %}</span><span>{% translate 'Archived projects and retained records' %}</span><span class="staging-spacer"></span><span class="admin-workspace-user">{{ request.user.get_full_name|default:request.user.username }}</span></div>
+        <main class="admin-content">
+        {% block archive_content %}
+            <section class="admin-view is-active">
+                <div class="admin-heading-row"><div><span class="section-kicker">{% translate 'Retention' %}</span><h2>{% translate 'Completed projects' %}</h2><p class="admin-intro">{% translate 'Projects remain stored here until you export or permanently delete them. Archiving does not free database or file storage.' %}</p></div><span class="archive-project-total">{{ projects|length }} {% translate 'projects' %}</span></div>
+                <div class="project-archive-list">
+                    {% for project in projects %}
+                        <article class="project-archive-card">
+                            <div class="project-archive-card-heading"><div><span class="section-kicker">{% translate 'Archived' %} {{ project.archived_at|date:'M j, Y' }}</span><h3>{{ project.title }}</h3><p>{% if project.client %}{{ project.client.name }}{% else %}{% translate 'No client linked' %}{% endif %}{% if project.location %} · {{ project.location }}{% endif %}</p></div><span class="status-badge green">{% translate 'Complete' %}</span></div>
+                            {% if project.summary %}<p class="project-archive-summary">{{ project.summary|truncatewords:36 }}</p>{% endif %}
+                            <div class="project-archive-stats"><span><strong>{{ project.archive_message_count }}</strong> {% translate 'project messages' %}</span><span><strong>{{ project.archive_document_count }}</strong> {% translate 'documents' %}</span><span><strong>{{ project.archive_media_count }}</strong> {% translate 'media files' %}</span><span><strong>{{ project.archive_warranty_count }}</strong> {% translate 'warranty records' %}</span>{% if project.is_published %}<span class="status-badge gold">{% translate 'Public gallery live' %}</span>{% endif %}</div>
+                            <div class="project-archive-actions"><a class="button button-outline" href="{% url 'operations:project-archive-export' pk=project.pk %}">{% translate 'Export project ZIP' %} ↓</a><a class="button button-danger-outline" href="{% url 'operations:project-archive-delete' pk=project.pk %}">{% translate 'Delete permanently' %}</a></div>
+                        </article>
+                    {% empty %}
+                        <div class="empty-detail">{% translate 'No completed projects are archived yet.' %}</div>
+                    {% endfor %}
+                </div>
+            </section>
+        {% endblock %}
+        </main>
+    </div>
+</div>
+{% endblock %}
