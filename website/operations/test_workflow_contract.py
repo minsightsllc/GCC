@@ -258,7 +258,7 @@ class WorkflowContractTests(TestCase):
         owner_sidebar = self.sidebar_markup(owner_response)
         owner_tokens = (
             ">Overview<",
-            "Client &amp; Job Operations",
+            "Client & Job Operations",
             ">Leads<",
             ">Clients<",
             ">Estimates<",
@@ -281,7 +281,7 @@ class WorkflowContractTests(TestCase):
         employee_sidebar = self.sidebar_markup(employee_response)
         employee_tokens = (
             ">Overview<",
-            "Client &amp; Job Operations",
+            "Client & Job Operations",
             ">Projects<",
             ">Tasks<",
             ">Calendar<",

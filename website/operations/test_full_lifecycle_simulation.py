@@ -56,14 +56,14 @@ class FullLifecycleSimulationTests(TestCase):
         self.assertGreaterEqual(len(self.result["checks"]), 18)
         self.assertGreater(self.project.readiness_items.count(), 0)
         self.assertEqual(self.project.status, Project.Status.COMPLETE)
-        self.assertEqual(self.project.operational_phase, Project.OperationalPhase.WARRANTY)
+        self.assertEqual(self.project.operational_phase, Project.OperationalPhase.CLOSEOUT)
+        self.assertIsNotNone(self.project.archived_at)
         self.assertEqual(Project.objects.filter(pk=self.project.pk).count(), 1)
         self.assertEqual(Estimate.objects.filter(pk=self.result["records"]["estimate_id"]).count(), 1)
         self.assertEqual(Client.objects.filter(pk=self.result["records"]["client_id"]).count(), 1)
         self.assertEqual(ChangeOrder.objects.filter(project=self.project).count(), 1)
         self.assertEqual(PaymentRecord.objects.filter(project=self.project).count(), 2)
-        self.assertEqual(WarrantyItem.objects.filter(project=self.project).count(), 1)
-        self.assertEqual(WarrantyItem.objects.get(project=self.project).status, WarrantyItem.Status.RESOLVED)
+        self.assertEqual(WarrantyItem.objects.filter(project=self.project).count(), 0)
 
     def test_role_scoped_project_workspaces_and_financial_surfaces(self):
         project_url = reverse("operations:project-operations", kwargs={"pk": self.project.pk})
@@ -87,8 +87,8 @@ class FullLifecycleSimulationTests(TestCase):
         owner_document.close()
 
         self._login("manager")
-        # The simulation resolves the warranty item. Non-owner staff therefore
-        # no longer see this archived project or its execution APIs.
+        # Completed projects are retained for the client but hidden from
+        # employee work lists and execution APIs.
         self.assertEqual(self.http.get(project_url).status_code, 404)
         self.assertEqual(self.http.get(summary_url).status_code, 404)
         self.assertEqual(self.http.get(commitments_url).status_code, 404)
@@ -134,7 +134,23 @@ class FullLifecycleSimulationTests(TestCase):
 
     def test_api_mutation_parsing_and_native_upload_boundary(self):
         self._login("owner")
-        milestone = self.project.milestones.get(sort_order=3)
+        # The lifecycle simulation ends with an archived project, which is
+        # intentionally immutable. Exercise JSON boolean parsing against a
+        # separate active project instead of reopening archived history.
+        active_project = Project.objects.create(
+            title="Active API parsing project",
+            client=self.project.client,
+            status=Project.Status.CONSTRUCTION,
+            operational_phase=Project.OperationalPhase.CONSTRUCTION,
+        )
+        from .models import Milestone
+
+        milestone = Milestone.objects.create(
+            project=active_project,
+            title="Selections",
+            sort_order=3,
+            is_complete=True,
+        )
         milestone_url = reverse("operations-api:milestone-status", kwargs={"pk": milestone.pk})
         response = self.http.post(
             milestone_url,

@@ -6,15 +6,15 @@
 {% block extrastyle %}
     {{ block.super }}
     <link rel="stylesheet" href="{% static 'operations/css/admin-storage.css' %}?v=20261107-db-capacity">
-    <link rel="stylesheet" href="{% static 'operations/css/admin-database-capacity.css' %}?v=20261107-db-capacity">
+    <link rel="stylesheet" href="{% static 'operations/css/admin-database-capacity.css' %}?v=20261108-audit-inventory">
 {% endblock %}
 {% block extrahead %}
     {{ block.super }}
-    <script defer src="{% static 'operations/js/database-capacity.js' %}?v=20261107-db-capacity"></script>
+    <script defer src="{% static 'operations/js/database-capacity.js' %}?v=20261108-pagination-fix"></script>
 {% endblock %}
 
 {% block content %}
-<main class="gcc-storage-page gcc-db-capacity-page" aria-labelledby="gcc-db-capacity-title">
+<main class="gcc-storage-page gcc-db-capacity-page" aria-labelledby="gcc-db-capacity-title" data-db-audit-page="active">
     <header class="gcc-storage-heading">
         <div>
             <span class="gcc-admin-kicker">Private administration</span>
@@ -99,7 +99,7 @@
 
     <section class="gcc-db-panel" aria-labelledby="gcc-db-cleanup-title">
         <div class="gcc-db-panel-heading"><div><span class="gcc-admin-kicker">Manual retention</span><h2 id="gcc-db-cleanup-title">Clean up audit records</h2></div></div>
-        <p class="gcc-db-note">Choose a cutoff date to review older Activity history and admin security events. Records moved to Database Trash remain in Database Disk Storage and can be restored; trash has no automatic expiry. Permanent deletion removes selected audit rows, but may not immediately reduce this meter.</p>
+        <p class="gcc-db-note">Choose a cutoff date to review older Activity history and admin security events. Search and filter the results, then select only the records you want to move to Database Trash. Trashed records remain in Database Disk Storage and can be restored; trash has no automatic expiry.</p>
         <form class="gcc-db-cutoff-form" method="get" action="{% url 'admin:database-capacity' %}">
             <label for="gcc-db-cutoff-date">Show records older than</label>
             <input id="gcc-db-cutoff-date" name="cutoff" type="date" value="{{ cutoff_raw }}" required>
@@ -108,40 +108,21 @@
         {% if cutoff_error %}<p class="gcc-db-error" role="alert">Choose a valid cutoff date.</p>{% endif %}
 
         {% if cutoff_date %}
-            <div class="gcc-db-preview-summary" role="status">
-                <strong>{{ preview_total }} matching record{{ preview_total|pluralize }}</strong>
-                <span>{{ preview_counts.activity }} Activity · {{ preview_counts.security }} security events before {{ cutoff_date|date:'M j, Y' }}</span>
+            <div class="gcc-db-audit-inventory" data-db-audit-inventory>
+                <form class="gcc-storage-search gcc-db-audit-search" method="get" action="{% url 'admin:database-capacity' %}">
+                    <input type="hidden" name="cutoff" value="{{ cutoff_date|date:'Y-m-d' }}">
+                    <input type="hidden" name="kind" value="{{ audit_kind_filter }}">
+                    <input type="hidden" name="sort" value="{{ audit_sort }}">
+                    <input type="hidden" name="direction" value="{{ audit_sort_direction }}">
+                    <label for="gcc-db-audit-search">Search audit records</label>
+                    <input id="gcc-db-audit-search" type="search" name="q" value="{{ audit_query }}" placeholder="Record, detail, actor, or event type" autocomplete="off">
+                    <button class="gcc-admin-button gcc-admin-button-outline" type="submit">Search</button>
+                    <a href="{{ audit_clear_url }}" data-db-search-clear{% if not audit_query %} hidden{% endif %}>Clear</a>
+                </form>
+                <p class="gcc-storage-request-error gcc-db-request-error" data-db-request-error role="status" hidden></p>
+                <span class="visually-hidden" data-db-audit-announcement aria-live="polite"></span>
+                {% include 'admin/database_audit_records_partial.html' %}
             </div>
-            <p class="gcc-db-note">The preview shows up to 150 newest matching records. Both actions below apply to every matching record, across all preview pages.</p>
-            <div class="gcc-db-table-wrap">
-                <table class="gcc-db-table">
-                    <thead><tr><th scope="col">Type</th><th scope="col">Record</th><th scope="col">Detail</th><th scope="col">Actor</th><th scope="col">Created</th></tr></thead>
-                    <tbody>
-                    {% for record in preview_page %}
-                        <tr><td>{{ record.kind }}</td><th scope="row">{{ record.summary }}</th><td>{{ record.detail|default:'—' }}</td><td>{{ record.actor }}</td><td>{{ record.created_at|date:'M j, Y, g:i a' }}</td></tr>
-                    {% empty %}<tr><td colspan="5">No records match this cutoff.</td></tr>{% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% if preview_page.paginator.num_pages > 1 %}
-                <nav class="gcc-db-pagination" aria-label="Audit record preview pages">
-                    <span>Page {{ preview_page.number }} of {{ preview_page.paginator.num_pages }}</span>
-                    {% if preview_page.has_previous %}<a href="?cutoff={{ cutoff_date|date:'Y-m-d' }}&amp;preview_page={{ preview_page.previous_page_number }}">Previous</a>{% endif %}
-                    {% if preview_page.has_next %}<a href="?cutoff={{ cutoff_date|date:'Y-m-d' }}&amp;preview_page={{ preview_page.next_page_number }}">Next</a>{% endif %}
-                </nav>
-            {% endif %}
-            {% if preview_total %}
-                <div class="gcc-db-cleanup-actions">
-                    <form method="post" action="{% url 'admin:database-capacity-cutoff' %}">
-                        {% csrf_token %}<input type="hidden" name="cutoff_date" value="{{ cutoff_date|date:'Y-m-d' }}">
-                        <button class="gcc-admin-button gcc-admin-button-primary" type="submit" name="action" value="trash">Move to Database Trash</button>
-                    </form>
-                    <form method="post" action="{% url 'admin:database-capacity-cutoff' %}" data-db-confirm-form data-confirm-title="Permanently delete these audit records?" data-confirm-detail="This cannot be undone. The action applies to every matching record before {{ cutoff_date|date:'M j, Y' }}." data-confirm-activity="{{ preview_counts.activity }}" data-confirm-security="{{ preview_counts.security }}">
-                        {% csrf_token %}<input type="hidden" name="cutoff_date" value="{{ cutoff_date|date:'Y-m-d' }}">
-                        <button class="gcc-admin-button gcc-admin-button-danger" type="submit" name="action" value="purge" data-db-confirm-trigger>Permanently delete</button>
-                    </form>
-                </div>
-            {% endif %}
         {% endif %}
     </section>
 
@@ -155,15 +136,4 @@
         </div>
     </section>
 </main>
-
-<dialog class="gcc-db-confirm-dialog" data-db-confirm-dialog aria-labelledby="gcc-db-confirm-title" aria-describedby="gcc-db-confirm-detail">
-    <span class="gcc-admin-kicker">Permanent deletion</span>
-    <h2 id="gcc-db-confirm-title">Permanently delete these audit records?</h2>
-    <p id="gcc-db-confirm-detail"></p>
-    <ul class="gcc-db-confirm-counts" data-db-confirm-counts></ul>
-    <div class="gcc-db-confirm-actions">
-        <button class="gcc-admin-button gcc-admin-button-outline" type="button" data-db-confirm-cancel>Cancel</button>
-        <button class="gcc-admin-button gcc-admin-button-danger" type="button" data-db-confirm-accept>Delete permanently</button>
-    </div>
-</dialog>
 {% endblock %}

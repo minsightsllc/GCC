@@ -345,7 +345,7 @@ class PlatformWorkflowTests(TestCase):
         self.assert_sidebar_sequence(
             dashboard_response,
             (
-                '>Overview<', 'Client &amp; Job Operations', '>Leads<',
+                '>Overview<', 'Client & Job Operations', '>Leads<',
                 '>Clients<', '>Estimates<', '>Projects<', '>Tasks<',
                 '>Calendar<', '>Time<', '>Documents<', '>Client Media<',
                 '>Publish Content<', 'Miscellaneous', '>Team<', '>Messages<', '>Notifications<',
@@ -358,7 +358,7 @@ class PlatformWorkflowTests(TestCase):
         self.assert_operations_badges(workspace_response, 'admin', admin_keys)
         self.assert_sidebar_sequence(
             workspace_response,
-            ('>Overview<', 'Client &amp; Job Operations', '>Leads<', '>Clients<', '>Estimates<', '>Projects<', '>Tasks<', '>Calendar<', '>Time<', '>Documents<', '>Client Media<', '>Publish Content<', 'Miscellaneous', '>Team<', '>Messages<', '>Notifications<'),
+            ('>Overview<', 'Client & Job Operations', '>Leads<', '>Clients<', '>Estimates<', '>Projects<', '>Tasks<', '>Calendar<', '>Time<', '>Documents<', '>Client Media<', '>Publish Content<', 'Miscellaneous', '>Team<', '>Messages<', '>Notifications<'),
         )
 
     def test_employee_operations_sidebar_hides_zero_counts_and_keeps_positive_counts(self):
@@ -369,7 +369,7 @@ class PlatformWorkflowTests(TestCase):
         self.assert_operations_badges(response, 'employee', employee_keys)
         self.assert_sidebar_sequence(
             response,
-            ('>Overview<', 'Client &amp; Job Operations', '>Projects<', '>Tasks<', '>Calendar<', '>Time<', '>Media<', 'Miscellaneous', '>Notifications<', '>Profile<'),
+            ('>Overview<', 'Client & Job Operations', '>Projects<', '>Tasks<', '>Calendar<', '>Time<', '>Media<', 'Miscellaneous', '>Notifications<', '>Profile<'),
         )
         self.assertEqual(
             response.context['operations_nav_counts']['projects'],
@@ -1121,7 +1121,8 @@ class PlatformWorkflowTests(TestCase):
         owner_project_response = self.browser.get(
             reverse('operations:project-detail', kwargs={'pk': self.project.pk}),
         )
-        self.assertEqual(owner_project_response.status_code, 404)
+        self.assertEqual(owner_project_response.status_code, 302)
+        self.assertEqual(owner_project_response['Location'], reverse('operations:projects'))
         self.assertEqual(self.browser.session.get('_auth_user_id'), str(self.owner.pk))
 
         self.login(self.manager)
@@ -1268,8 +1269,8 @@ class PlatformWorkflowTests(TestCase):
         self.login(self.client_user)
         pages = {
             'overview': 'Choose what you need next.',
-            'updates': 'What&rsquo;s happening on your project.',
-            'photos': 'Photos &amp; videos from the job.',
+            'updates': 'What’s happening on your project.',
+            'photos': 'Photos & videos from the job.',
             'messages': 'class="conversation-chat portal-chat"',
             'estimate-files': 'Your estimate and shared project files.',
             'notifications': 'Important project alerts, decisions, and updates.',
@@ -1941,6 +1942,7 @@ class PlatformWorkflowTests(TestCase):
         self.assertEqual(project.client_id, self.client_record.pk)
         self.assertEqual(project.estimate_id, accepted_estimate.pk)
         self.assertEqual(project.lead_id, self.lead.pk)
+        self.assertEqual(project.progress_percent, 40)
 
     def test_task_assignment_status_filters_and_activity(self):
         self.login(self.owner)
@@ -2706,7 +2708,7 @@ class PlatformWorkflowTests(TestCase):
         self.login(self.field)
         response = self.browser.get(reverse('operations:team-section', kwargs={'section': 'time'}))
         self.assertContains(response, '9:15 AM')
-        self.assertContains(response, 'America/Los_Angeles')
+        self.assertContains(response, 'Pacific Time')
 
         clock_in = self.browser.post(
             reverse('operations:team-time-clock'),
@@ -2856,7 +2858,8 @@ class PlatformWorkflowTests(TestCase):
         public_response = self.browser.get(reverse('operations:home'))
         self.assertContains(public_response, 'Review us on Google')
         detail_response = self.browser.get(reverse('operations:project-detail', kwargs={'pk': self.project.pk}))
-        self.assertEqual(detail_response.status_code, 404)
+        self.assertEqual(detail_response.status_code, 302)
+        self.assertEqual(detail_response['Location'], reverse('operations:projects'))
 
     def test_owner_can_change_the_title_shown_on_client_messages(self):
         self.login(self.owner)
@@ -3353,10 +3356,11 @@ class PlatformWorkflowTests(TestCase):
         self.project.refresh_from_db()
         self.assertTrue(self.project.is_published)
         self.assertEqual(self.project.assigned_staff.count(), 0)
-        self.assertEqual(
-            self.browser.get(reverse('operations:project-detail', kwargs={'pk': self.project.pk})).status_code,
-            404,
+        public_detail = self.browser.get(
+            reverse('operations:project-detail', kwargs={'pk': self.project.pk})
         )
+        self.assertEqual(public_detail.status_code, 302)
+        self.assertEqual(public_detail['Location'], reverse('operations:projects'))
 
     def test_related_task_schedule_and_time_records_reject_mismatches(self):
         with self.assertRaises(ValidationError):

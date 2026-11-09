@@ -6,7 +6,7 @@
 {% block extrastyle %}
     {{ block.super }}
     <link rel="stylesheet" href="{% static 'operations/css/admin-storage.css' %}?v=20261107-db-capacity">
-    <link rel="stylesheet" href="{% static 'operations/css/admin-database-capacity.css' %}?v=20261107-db-capacity">
+    <link rel="stylesheet" href="{% static 'operations/css/admin-database-capacity.css' %}?v=20261108-audit-inventory">
 {% endblock %}
 {% block content %}
 <main class="gcc-storage-page gcc-db-capacity-page" aria-labelledby="gcc-db-confirm-page-title">
@@ -17,11 +17,19 @@
         <ul>
             {% for label, count in record_counts %}<li><strong>{{ label }}:</strong> {{ count }}</li>{% endfor %}
         </ul>
+        {% if selected_record_labels %}
+            <h2>Selected records</h2>
+            <ul class="gcc-db-confirm-record-labels">
+                {% for record in selected_record_labels %}
+                    <li><strong>{{ record.record_kind }}: {{ record.summary }}</strong>{% if record.display_detail %}<br>{{ record.display_detail }}{% endif %}{% if record.display_actor %}<br><small>{{ record.display_actor }}</small>{% endif %}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
         <div class="gcc-db-confirm-actions">
             <a class="gcc-admin-button gcc-admin-button-outline" href="{{ return_url }}">Cancel</a>
             <form method="post" action="{{ form_action }}">
                 {% csrf_token %}
-                {% for name, value in hidden_fields.items %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+                {% for name, value in hidden_field_pairs %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
                 <input type="hidden" name="confirmed" value="1">
                 <button class="gcc-admin-button gcc-admin-button-danger" type="submit">Delete permanently</button>
             </form>

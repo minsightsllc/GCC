@@ -1,8 +1,8 @@
-const GCC_CACHE = "gcc-public-v21";
+const GCC_CACHE = "gcc-public-v22";
 const GCC_PUBLIC_ASSETS = [
     "/offline/",
     "/static/operations/css/site.css?v=20261028-project-post-workflow-3",
-    "/static/operations/js/operations.js?v=20261028-project-post-workflow-3",
+    "/static/operations/js/operations.js?v=20261108-task-delete-confirmation-1",
     "/static/operations/js/pwa-register.js",
     "/static/operations/images/gcc-logo.png",
     "/static/operations/images/hero-kitchen.png",

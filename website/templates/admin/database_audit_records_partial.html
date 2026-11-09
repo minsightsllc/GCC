@@ -1,0 +1,68 @@
+<section class="gcc-db-audit-results" data-db-audit-results data-db-sort="{{ audit_sort }}" data-db-direction="{{ audit_sort_direction }}" aria-label="Audit record results">
+    <nav class="gcc-storage-filters gcc-db-record-filters" aria-label="Audit record types">
+        {% for tab in audit_filter_tabs %}
+            <a href="{{ tab.url }}" data-db-kind-link data-db-kind="{{ tab.key }}"{% if tab.current %} aria-current="page"{% endif %}>{{ tab.label }} <span>{{ tab.count }}</span></a>
+        {% endfor %}
+    </nav>
+
+    <div class="gcc-db-preview-summary" role="status">
+        <strong>{{ audit_filtered_total }} matching record{{ audit_filtered_total|pluralize }}</strong>
+        <span>{% if audit_kind_filter == 'activity' %}{{ audit_kind_counts.activity }} Activity records{% elif audit_kind_filter == 'security' %}{{ audit_kind_counts.security }} security events{% else %}{{ audit_kind_counts.activity }} Activity &middot; {{ audit_kind_counts.security }} security events{% endif %}{% if cutoff_date %} before {{ cutoff_date|date:'M j, Y' }}{% endif %}</span>
+    </div>
+    <p class="gcc-db-note gcc-db-selection-help">Select records on this page, or keep selecting as you move through results. Cleanup actions apply only to selected records, up to {{ audit_selection_limit }} at a time.</p>
+
+    <form id="gcc-db-audit-bulk-form" class="gcc-storage-bulk-actions gcc-db-audit-bulk-form" method="post" action="{% url 'admin:database-capacity-cutoff' %}" data-db-bulk-form data-db-selection-mode="active">
+        {% csrf_token %}
+        <input type="hidden" name="cutoff_date" value="{{ cutoff_date|date:'Y-m-d' }}">
+        <input type="hidden" name="selection_mode" value="1">
+        <input type="hidden" name="return_to" value="{{ audit_return_url }}">
+        <span class="gcc-storage-bulk-label">Selected records</span>
+        <button class="gcc-admin-button gcc-admin-button-danger" type="submit" name="action" value="trash" data-db-selection-action>Move selected to Database Trash</button>
+        <span class="gcc-storage-selection-count" data-db-selection-count aria-live="polite">0 selected</span>
+        <p>Moving records to Database Trash is reversible. Permanent deletion is available from Database Trash.</p>
+    </form>
+
+    <div class="gcc-db-table-wrap gcc-db-audit-table-wrap">
+        <table class="gcc-db-table gcc-db-audit-table">
+            <thead>
+                <tr>
+                    <th scope="col" class="gcc-storage-select-cell">
+                        <label class="gcc-db-select-all-label"><input type="checkbox" form="gcc-db-audit-bulk-form" data-db-select-all aria-label="Select all audit records on this page"><span>Select page</span></label>
+                    </th>
+                    {% for column in audit_sort_headers %}
+                    <th scope="col" aria-sort="{{ column.aria_sort }}">
+                        <span class="gcc-storage-sort-heading">{{ column.label }}<span class="gcc-storage-sort-arrows">
+                            <a class="gcc-storage-sort-arrow{% if column.ascending_active %} is-active{% endif %}" href="{{ column.ascending_url }}" data-db-sort-link data-db-sort-field="{{ column.key }}" data-db-sort-direction="asc" aria-label="{% if column.ascending_active %}Sorted ascending by {{ column.label|lower }}{% else %}Sort {{ column.label|lower }} ascending{% endif %}"{% if column.ascending_active %} aria-current="true"{% endif %} title="Sort ascending"><span aria-hidden="true">▲</span></a>
+                            <a class="gcc-storage-sort-arrow{% if column.descending_active %} is-active{% endif %}" href="{{ column.descending_url }}" data-db-sort-link data-db-sort-field="{{ column.key }}" data-db-sort-direction="desc" aria-label="{% if column.descending_active %}Sorted descending by {{ column.label|lower }}{% else %}Sort {{ column.label|lower }} descending{% endif %}"{% if column.descending_active %} aria-current="true"{% endif %} title="Sort descending"><span aria-hidden="true">▼</span></a>
+                        </span></span>
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in audit_page %}
+                <tr>
+                    <td class="gcc-storage-select-cell">
+                        <input type="checkbox" form="gcc-db-audit-bulk-form" name="selected_records" value="{{ record.selection_key }}" data-db-select-record data-db-record-kind="{{ record.record_kind }}" data-db-record-summary="{{ record.summary }}" data-db-record-detail="{{ record.detail }}" data-db-record-actor="{{ record.actor }}" data-db-record-created="{{ record.created_at|date:'M j, Y, g:i a' }}" aria-label="Select {{ record.record_kind }}: {{ record.summary }}">
+                    </td>
+                    <td>{{ record.record_kind }}</td>
+                    <th scope="row"><a class="gcc-db-record-location-link" href="{{ record.location_url }}" aria-label="Open details for {{ record.record_kind }}: {{ record.summary }}">{{ record.summary|default:'—' }}</a></th>
+                    <td>{{ record.detail|default:'—' }}</td>
+                    <td>{{ record.actor }}</td>
+                    <td>{{ record.created_at|date:'M j, Y, g:i a' }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="gcc-db-empty">No audit records match this cutoff and search.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if audit_pagination.num_pages > 1 %}
+    <nav class="gcc-storage-pagination gcc-db-pagination" aria-label="Audit record pages">
+        <span>Page {{ audit_pagination.number }} of {{ audit_pagination.num_pages }}</span>
+        {% if audit_pagination.has_previous %}<a href="{{ audit_pagination.previous_url }}" data-db-page-link data-db-page-step="previous">Previous</a>{% endif %}
+        {% if audit_pagination.has_next %}<a href="{{ audit_pagination.next_url }}" data-db-page-link data-db-page-step="next">Next</a>{% endif %}
+    </nav>
+    {% endif %}
+</section>

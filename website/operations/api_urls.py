@@ -40,7 +40,6 @@ urlpatterns = [
     path("v1/payment-schedules/<uuid:pk>/external-status/", construction_api.api_v1_payment_schedule_external_status, name="payment-schedule-external-status"),
     path("v1/selections/<uuid:pk>/advance/", api.api_v1_selection_advance, name="selection-advance"),
     path("v1/inspections/<uuid:pk>/result/", api.api_v1_inspection_result, name="inspection-result"),
-    path("v1/warranty/<uuid:pk>/resolve/", api.api_v1_warranty_resolve, name="warranty-resolve"),
     path("v1/site-visits/<uuid:pk>/complete/", api.api_v1_site_visit_complete, name="site-visit-complete"),
     path("v1/projects/<uuid:pk>/daily-reports/", api.api_v1_daily_reports, name="daily-reports"),
     path("v1/projects/<uuid:pk>/material-requests/", api.api_v1_material_requests, name="material-requests"),

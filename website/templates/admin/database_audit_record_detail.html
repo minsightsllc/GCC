@@ -1,0 +1,34 @@
+{% extends 'unfold/layouts/base_simple.html' %}
+{% load static %}
+
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+{% block bodyclass %}{{ block.super }} gcc-db-capacity-body{% endblock %}
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'operations/css/admin-storage.css' %}?v=20261108-record-locations">
+    <link rel="stylesheet" href="{% static 'operations/css/admin-database-capacity.css' %}?v=20261108-record-locations">
+{% endblock %}
+
+{% block content %}
+<main class="gcc-db-capacity-page gcc-db-record-detail-page" aria-labelledby="gcc-db-record-detail-title">
+    <header class="gcc-storage-heading">
+        <div>
+            <span class="gcc-admin-kicker">Database audit record</span>
+            <h1 id="gcc-db-record-detail-title">{{ record_title }}</h1>
+            <p>{{ record_type }}{% if record_is_trashed %} · In Database Trash{% else %} · In audit history{% endif %}</p>
+        </div>
+        <a class="gcc-admin-button gcc-admin-button-outline" href="{{ record_return_url }}">Back to matching records <span aria-hidden="true">←</span></a>
+    </header>
+
+    <section class="gcc-db-panel" aria-label="Audit record details">
+        <dl class="gcc-db-record-detail-list">
+            {% for detail in record_details %}
+                <div>
+                    <dt>{{ detail.0 }}</dt>
+                    <dd>{{ detail.1|default_if_none:'—' }}</dd>
+                </div>
+            {% endfor %}
+        </dl>
+    </section>
+</main>
+{% endblock %}

@@ -99,7 +99,7 @@
 
     {% if can_edit_operations %}
     <details class="execution-loop-section" id="closeout">
-        <summary><span>{% translate 'Closeout and warranty' %}</span><small>{% translate 'Finish required items, then keep warranty work visible' %}</small></summary>
+        <summary><span>{% translate 'Closeout' %}</span><small>{% translate 'Finish the required handoff items for this project' %}</small></summary>
         <div class="execution-loop-body">
             {% for row in execution_closeout_rows %}
             <form class="execution-record-card" method="post" action="{% url 'operations:project-closeout-action' pk=row.item.pk %}">
@@ -107,12 +107,6 @@
                 <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">{% translate 'Update closeout' %}</button></div>
             </form>
             {% empty %}<p class="construction-empty">{% translate 'No closeout checklist items are available.' %}</p>{% endfor %}
-            {% for row in execution_warranty_rows %}
-            <form class="execution-record-card" method="post" action="{% url 'operations:project-warranty-resolution' pk=row.item.pk %}">
-                {% csrf_token %}<strong>{{ row.item.title }} &middot; {{ row.item.get_status_display }}</strong>{{ row.form.as_p }}
-                <div class="construction-form-actions"><button class="button button-quiet button-small" type="submit">{% translate 'Save warranty resolution' %}</button></div>
-            </form>
-            {% empty %}<p class="construction-empty">{% translate 'No warranty items are open.' %}</p>{% endfor %}
         </div>
     </details>
     {% endif %}

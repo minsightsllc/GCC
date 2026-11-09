@@ -788,5 +788,5 @@ UNFOLD = {
         ],
     },
     'SCRIPTS': ['/static/operations/js/pwa-register.js'],
-    'STYLES': ['/static/operations/css/unfold.css'],
+    'STYLES': ['/static/operations/css/unfold.css?v=20261108-admin-form-contrast'],
 }

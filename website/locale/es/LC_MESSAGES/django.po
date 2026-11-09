@@ -2310,6 +2310,9 @@ msgstr "Decisiones del cliente y adquisiciones"
 msgid "Closeout and warranty"
 msgstr "Cierre y garantía"
 
+msgid "Closeout"
+msgstr "Cierre del proyecto"
+
 msgid "Complete"
 msgstr "Completar"
 
@@ -2336,6 +2339,9 @@ msgstr "Registro financiero"
 
 msgid "Finish required items, then keep warranty work visible"
 msgstr "Complete los elementos pendientes y mantenga visible el trabajo de garantía"
+
+msgid "Finish the required handoff items for this project"
+msgstr "Complete los elementos necesarios para la entrega del proyecto"
 
 msgid "Material"
 msgstr "Material"

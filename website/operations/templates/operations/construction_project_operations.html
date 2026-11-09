@@ -219,10 +219,9 @@
                     </div>
                 </section>
                 <section class="construction-panel">
-                    <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Closeout and warranty' %}</span><h3>{% translate 'Finish the project well' %}</h3></div><span class="construction-count">{{ project_closeout|length }}</span></div>
+                    <div class="construction-panel-heading"><div><span class="section-kicker">{% translate 'Closeout' %}</span><h3>{% translate 'Finish the project well' %}</h3></div><span class="construction-count">{{ project_closeout|length }}</span></div>
                     <div class="construction-list">
                         {% for item in project_closeout|slice:':6' %}<div class="construction-list-row"><span class="status-badge {% if item.status == 'complete' %}green{% elif item.status == 'blocked' %}red{% else %}gold{% endif %}">{{ item.get_status_display }}</span><span><strong>{{ item.label }}</strong><small>{{ item.get_category_display }}{% if item.due_date %} &middot; {% translate 'Due' %} {{ item.due_date }}{% endif %}</small></span></div>{% empty %}<div class="construction-empty"><span>{% translate 'Closeout checklist has not been initialized.' %}</span></div>{% endfor %}
-                        {% for item in project_warranty|slice:':4' %}<div class="construction-list-row"><span class="status-badge {% if item.status == 'resolved' or item.status == 'closed' %}green{% else %}gold{% endif %}">{% translate 'Warranty' %}</span><span><strong>{{ item.title }}</strong><small>{{ item.get_status_display }}{% if item.due_date %} &middot; {% translate 'Due' %} {{ item.due_date }}{% endif %}</small></span></div>{% endfor %}
                     </div>
                 </section>
             </div>

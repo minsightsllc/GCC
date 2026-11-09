@@ -62,7 +62,6 @@ from .construction_services import (
     record_material_request_status,
     set_milestone_status,
     request_material,
-    resolve_warranty_item,
     submit_problem_report,
     submit_daily_report,
     update_readiness_item,
@@ -94,7 +93,6 @@ from .construction_forms import (
     SelectionForm,
     SiteVisitForm,
     SubcontractorAssignmentForm,
-    WarrantyResolutionForm,
 )
 from .forms import ProjectDocumentForm, ProjectUpdateForm
 from .models import (
@@ -120,7 +118,6 @@ from .models import (
     SiteVisit,
     Subcontractor,
     SubcontractorAssignment,
-    WarrantyItem,
     WorkflowEvent,
 )
 
@@ -361,7 +358,6 @@ def project_operations(request, pk):
             "problem_reports",
             "subcontractor_assignments__subcontractor",
             "closeout_items",
-            "warranty_items",
             "updates",
         ),
         pk=pk,
@@ -500,10 +496,6 @@ def project_operations(request, pk):
         {"item": item, "form": CloseoutActionForm()}
         for item in project_closeout
     ] if execution_enabled else []
-    execution_warranty_rows = [
-        {"item": item, "form": WarrantyResolutionForm(initial={"status": WarrantyItem.Status.RESOLVED})}
-        for item in project.warranty_items.select_related("assigned_to").all()[:30]
-    ] if execution_enabled else []
     project_schedule_queryset = ScheduleEvent.objects.filter(project=project).select_related(
         "task",
         "created_by",
@@ -573,7 +565,6 @@ def project_operations(request, pk):
         "project_field_work_count": project.material_requests.count() + project.problem_reports.count(),
         "project_assignments": project_assignments[:30],
         "project_closeout": project_closeout[:30],
-        "project_warranty": list(project.warranty_items.select_related("assigned_to").all()[:30]),
         "project_updates": project_updates,
         "project_update_form": (
             ProjectUpdateForm()
@@ -597,7 +588,6 @@ def project_operations(request, pk):
         "execution_task_rows": execution_task_rows,
         "execution_material_rows": execution_material_rows,
         "execution_closeout_rows": execution_closeout_rows,
-        "execution_warranty_rows": execution_warranty_rows,
         "site_visit_form": SiteVisitForm() if execution_enabled and can_manage_project_operations(request.user, project) else None,
         "permit_form": PermitForm() if execution_enabled and can_manage_project_operations(request.user, project) else None,
         "inspection_form": (
@@ -1258,12 +1248,21 @@ def project_milestone_status(request, pk):
     project = _project_for_execution(request, milestone.project_id)
     if not can_manage_project_operations(request.user, project):
         raise PermissionDenied
-    set_milestone_status(
+    updated_milestone = set_milestone_status(
         milestone,
         actor=request.user,
         is_complete=request.POST.get("is_complete") == "1",
         idempotency_key=str(request.POST.get("idempotency_key") or "").strip() or None,
     )
+    if Project.objects.filter(
+        pk=updated_milestone.project_id,
+        archived_at__isnull=False,
+    ).exists():
+        messages.success(
+            request,
+            "All project milestones are complete. The project was moved to the completed-project archive.",
+        )
+        return redirect("operations:project-archive")
     return redirect("operations:project-operations", pk=project.pk)
 
 
@@ -1408,39 +1407,7 @@ def project_closeout_action(request, pk):
         notes=values.get("notes"),
         idempotency_key=_execution_idempotency_key(request, "closeout", item.pk, values.get("status")),
     )
-    return redirect("operations:project-operations", pk=project.pk)
-
-
-@require_POST
-@login_required
-def project_warranty_resolution(request, pk):
-    item = get_object_or_404(WarrantyItem.objects.select_related("project"), pk=pk)
-    assigned_archived_warranty = bool(
-        item.project.archived_at
-        and is_staff_user(request.user)
-        and item.assigned_to_id == request.user.pk
-        and item.status in {WarrantyItem.Status.OPEN, WarrantyItem.Status.IN_PROGRESS}
-    )
-    if assigned_archived_warranty:
-        project = item.project
-    else:
-        project = _project_for_execution(request, item.project_id)
-    if not can_manage_project_operations(request.user, project) and not assigned_archived_warranty:
-        raise PermissionDenied
-    form = WarrantyResolutionForm(request.POST)
-    if not form.is_valid():
-        raise ValidationError("Please provide a valid warranty resolution.")
-    values = form.cleaned_data
-    resolve_warranty_item(
-        item,
-        actor=request.user,
-        idempotency_key=_execution_idempotency_key(request, "warranty", item.pk, values.get("status")),
-        **values,
-    )
-    if project.archived_at and not existing_views._can_access_dashboard(request.user):
-        return redirect("operations:team-section", section="tasks")
-    if project.archived_at:
-        return redirect("operations:project-archive")
+    messages.success(request, "Project closeout item updated.")
     return redirect("operations:project-operations", pk=project.pk)
 
 

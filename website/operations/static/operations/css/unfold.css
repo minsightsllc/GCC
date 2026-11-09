@@ -15,6 +15,49 @@
     --gcc-white: #ffffff;
 }
 
+/* Keep Unfold's account menu readable against its white dropdown surface. */
+#nav-sidebar nav[x-show="openUserLinks"] {
+    color: var(--gcc-navy);
+}
+
+#nav-sidebar nav[x-show="openUserLinks"] a {
+    color: var(--gcc-navy);
+    font-weight: 600;
+}
+
+#nav-sidebar nav[x-show="openUserLinks"] a:hover,
+#nav-sidebar nav[x-show="openUserLinks"] a:focus-visible {
+    background-color: var(--gcc-soft);
+    color: var(--gcc-deep);
+}
+
+#nav-sidebar nav[x-show="openUserLinks"] a:focus-visible {
+    outline: 2px solid var(--gcc-blue);
+    outline-offset: 1px;
+}
+
+#nav-sidebar [x-data*="openUserLinks"] > div.cursor-pointer:hover,
+#nav-sidebar [x-data*="openUserLinks"] > div.cursor-pointer.bg-base-100 {
+    color: var(--gcc-navy);
+}
+
+#nav-sidebar [x-data*="openUserLinks"] > div.cursor-pointer:hover .text-important,
+#nav-sidebar [x-data*="openUserLinks"] > div.cursor-pointer.bg-base-100 .text-important {
+    color: var(--gcc-navy);
+}
+
+#nav-sidebar [x-data*="openUserLinks"] > div.cursor-pointer:hover .text-subtle,
+#nav-sidebar [x-data*="openUserLinks"] > div.cursor-pointer.bg-base-100 .text-subtle,
+#nav-sidebar [x-data*="openUserLinks"] > div.cursor-pointer:hover .text-font-default-light,
+#nav-sidebar [x-data*="openUserLinks"] > div.cursor-pointer.bg-base-100 .text-font-default-light {
+    color: #526175;
+}
+
+#nav-sidebar [x-data*="openUserLinks"] > div.cursor-pointer .bg-base-200.text-important {
+    background-color: var(--gcc-blue);
+    color: var(--gcc-white);
+}
+
 body {
     color: var(--gcc-ink);
     background: var(--gcc-soft);
@@ -198,6 +241,36 @@ body {
 }
 
 #main input:focus,
+#main select:focus,
+#main textarea:focus {
+    border-color: var(--gcc-blue);
+    box-shadow: 0 0 0 1px var(--gcc-blue);
+}
+
+#main input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]),
+#main select,
+#main textarea {
+    background-color: var(--gcc-white);
+    border: 1px solid #aab9cf;
+    border-radius: 5px;
+    color: var(--gcc-navy);
+}
+
+#main input::placeholder,
+#main textarea::placeholder {
+    color: #68778d;
+    opacity: 1;
+}
+
+#main input:disabled,
+#main select:disabled,
+#main textarea:disabled {
+    background-color: #edf1f7;
+    color: #526175;
+    opacity: 1;
+}
+
+#main input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):focus,
 #main select:focus,
 #main textarea:focus {
     border-color: var(--gcc-blue);

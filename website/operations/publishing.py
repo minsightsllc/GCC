@@ -17,8 +17,7 @@ def website_is_live(asset):
     return bool(
         publication
         and publication.published_at
-        and asset.project_id
-        and asset.project.is_published
+        and (not asset.project_id or asset.project.is_published)
     )
 
 
@@ -55,6 +54,7 @@ def website_post_presentation(post, *, preview=False, language="en"):
     }
     localized = str(language).lower().startswith("es")
     display_title = (data.get("title_es") or data.get("title", "")) if localized else data.get("title", "")
+    location = (data.get("location_es") or data.get("location", "")) if localized else data.get("location", "")
     slides = []
     for slide in data.get("slides", []):
         asset = items.get(str(slide.get("asset_id", "")))
@@ -80,14 +80,15 @@ def website_post_presentation(post, *, preview=False, language="en"):
                 if slide.get("poster_image") and asset.media_type == MediaAsset.MediaType.VIDEO
                 else static("operations/images/video-poster-placeholder.svg")
             ),
-            "alt_text": display_title or ("Foto o video del proyecto" if localized else "Project photo or video"),
+            "alt_text": display_title or ("Foto o video de la galería" if localized else "Public gallery photo or video"),
         })
     return {
         "pk": post.pk,
         "title": display_title,
         "caption": (data.get("caption_es") or data.get("caption", "")) if localized else data.get("caption", ""),
         "label": (data.get("label_es") or data.get("label", "")) if localized else data.get("label", ""),
-        "client_name": data.get("client_name", "") if data.get("show_client_name") else "",
+        "location": location,
+        "client_name": data.get("client_name", ""),
         "layout": data.get("layout", WebsiteGalleryPost.Layout.SPLIT),
         "accent": data.get("accent", WebsiteGalleryPost.Accent.GOLD),
         "sort_order": data.get("sort_order", 0),
@@ -107,8 +108,7 @@ def publish(publication):
             raise ValidationError("Connect a client to this project before sharing media.")
         publication.shared_client = project.client
     elif publication.destination == "website":
-        if not project:
-            raise ValidationError("Assign this media to a project before publishing it to the website.")
+        publication.shared_client = None
     else:
         raise ValidationError("Choose a valid destination before publishing this media.")
     changed = (publication.published_at is None or publication.published_data != publication.draft_data()

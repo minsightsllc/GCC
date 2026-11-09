@@ -70,7 +70,6 @@ from .construction_services import (
     record_payment,
     request_material,
     resolve_problem_report,
-    resolve_warranty_item,
     submit_problem_report,
     submit_daily_report,
     weekly_project_review,
@@ -106,7 +105,6 @@ from .models import (
     ScheduleEvent,
     SiteVisit,
     Task,
-    WarrantyItem,
     WorkflowEvent,
     sanitize_uploaded_name,
     validate_construction_document,
@@ -1775,30 +1773,6 @@ def api_v1_inspection_result(request, pk):
             idempotency_key=key,
         )
         return JsonResponse({"inspection": {"id": str(inspection.pk), "status": inspection.status}})
-    except PermissionDenied as exc:
-        return _error(exc, 403)
-    except ValidationError as exc:
-        return _error(exc, 400)
-
-
-@never_cache
-@require_POST
-@_api_access
-def api_v1_warranty_resolve(request, pk):
-    try:
-        payload = _body(request)
-        key = _required_idempotency_key(request, payload)
-        item = get_object_or_404(WarrantyItem.objects.select_related("project"), pk=pk)
-        if not can_view_project(request.user, item.project):
-            return _error("Record not found.", 404)
-        item = resolve_warranty_item(
-            item,
-            actor=request.user,
-            resolution=str(payload.get("resolution", "")),
-            status=str(payload.get("status", WarrantyItem.Status.RESOLVED)),
-            idempotency_key=key,
-        )
-        return JsonResponse({"warranty_item": {"id": str(item.pk), "status": item.status}})
     except PermissionDenied as exc:
         return _error(exc, 403)
     except ValidationError as exc:

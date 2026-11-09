@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import mimetypes
+from urllib.parse import urlencode
 from uuid import UUID
 
 from django.apps import apps
@@ -13,10 +14,10 @@ from django.core.paginator import Paginator
 from django.db.models import FileField
 from django.http import FileResponse, Http404
 from django.shortcuts import redirect
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from .models import StorageTrash
+from .models import MediaAsset, StorageTrash
 from .storage_retention import (
     StorageRetentionError,
     empty_storage_trash,
@@ -33,6 +34,72 @@ from .storage_retention import (
 STORAGE_SORT_FIELDS = {"file", "size", "record", "sharing", "status"}
 STORAGE_SORT_DIRECTIONS = {"asc", "desc"}
 STORAGE_STATUS_FIRST = {"in-use", "trash", "recovered"}
+
+
+def _storage_source_location_url(request, row, admin_site):
+    """Return the permission-checked admin destination for a file's source record."""
+    instance = row.get("_source_record")
+    if instance is None:
+        return ""
+
+    if instance._meta.label_lower == "operations.websitegallerypostitem":
+        if not _may_manage(request):
+            return ""
+        post = getattr(instance, "post", None)
+        if post is None:
+            return ""
+        post_ids = list(
+            post.__class__._base_manager.all()
+            .order_by("sort_order", "created_at", "pk")
+            .values_list("pk", flat=True)
+        )
+        try:
+            post_page = post_ids.index(post.pk) // 10 + 1
+        except ValueError:
+            post_page = 1
+        query = urlencode({
+            "website_state": "all",
+            "website_page": post_page,
+            "content_page_focus": "projects",
+        })
+        return (
+            f"{reverse('operations:dashboard-section', kwargs={'section': 'content'})}"
+            f"?{query}#website-post-item-{instance.pk}"
+        )
+
+    if isinstance(instance, MediaAsset):
+        post_item = getattr(instance, "website_post_item", None)
+        if post_item is not None:
+            if not _may_manage(request):
+                return ""
+            post = post_item.post
+            post_ids = list(
+                post.__class__._base_manager.all()
+                .order_by("sort_order", "created_at", "pk")
+                .values_list("pk", flat=True)
+            )
+            try:
+                post_page = post_ids.index(post.pk) // 10 + 1
+            except ValueError:
+                post_page = 1
+            query = urlencode({
+                "website_state": "all",
+                "website_page": post_page,
+                "content_page_focus": "projects",
+            })
+            return (
+                f"{reverse('operations:dashboard-section', kwargs={'section': 'content'})}"
+                f"?{query}#website-post-item-{post_item.pk}"
+            )
+
+    try:
+        model_admin = admin_site._registry.get(instance.__class__)
+        if model_admin is None or not model_admin.has_view_or_change_permission(request, instance):
+            return ""
+        route_name = f"admin:{instance._meta.app_label}_{instance._meta.model_name}_change"
+        return reverse(route_name, args=[instance.pk])
+    except (AttributeError, NoReverseMatch):
+        return ""
 
 
 def _sort_storage_rows(rows, sort_field, direction, status_first):
@@ -74,7 +141,7 @@ def _sort_storage_rows(rows, sort_field, direction, status_first):
     return rows
 
 
-def storage_retention_context(request):
+def storage_retention_context(request, admin_site):
     rows = storage_file_rows()
     trash_modal_rows = list(
         StorageTrash.objects.filter(
@@ -134,6 +201,9 @@ def storage_retention_context(request):
         f"&direction={direction}&status_first={status_first}"
     )
     page = Paginator(rows, 50).get_page(request.GET.get("page"))
+    page_rows = list(page.object_list)
+    for row in page_rows:
+        row["location_url"] = _storage_source_location_url(request, row, admin_site)
 
     from .admin_usage import get_admin_storage_usage
 
@@ -141,7 +211,7 @@ def storage_retention_context(request):
         "title": "Storage & Retention",
         "subtitle": "GCC-managed files and recovery",
         "storage_usage": get_admin_storage_usage(),
-        "storage_rows": list(page),
+        "storage_rows": page_rows,
         "storage_page": page,
         "storage_counts": counts,
         "storage_status": selected_status,

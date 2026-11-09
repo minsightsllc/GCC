@@ -402,6 +402,33 @@ body.gcc-storage-admin-body #content {
     overflow-wrap: anywhere;
 }
 
+.gcc-storage-file-location-link {
+    border-radius: 2px;
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: #b7c5dc;
+    text-underline-offset: 3px;
+    transition: color 140ms ease, text-decoration-color 140ms ease;
+}
+
+.gcc-storage-file-location-link:hover {
+    color: #365a98;
+    text-decoration-color: currentColor;
+}
+
+.gcc-storage-file-location-link:focus-visible {
+    color: #365a98;
+    outline: 2px solid #4969a2;
+    outline-offset: 3px;
+    text-decoration-color: currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .gcc-storage-file-location-link {
+        transition: none;
+    }
+}
+
 .gcc-storage-table td small {
     color: #697482;
     font-size: 11px;

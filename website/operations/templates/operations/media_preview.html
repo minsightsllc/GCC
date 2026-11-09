@@ -6,20 +6,19 @@
     <div class="admin-heading-row">
         <div>
             <span class="section-kicker">Private preview</span>
-            <h1>{% if destination == 'client' %}Client Media{% else %}Projects page preview{% endif %}</h1>
-            <p>{% if destination == 'client' %}Review this draft. It has not changed the client portal.{% else %}See this draft in its project gallery. It has not changed the live website.{% endif %}</p>
+            <h1>{% if destination == 'client' %}Client Media{% else %}Public content preview{% endif %}</h1>
+            <p>{% if destination == 'client' %}Review this draft. It has not changed the client portal.{% else %}Review this public media draft. It has not changed the live website.{% endif %}</p>
         </div>
-        {% if destination == 'client' %}<a class="button button-outline" href="{% url 'operations:dashboard-section' section='media' %}?media_project={{ asset.project_id }}#media-{{ asset.pk }}">Back to Client Media</a>{% else %}<a class="button button-outline" href="{% url 'operations:dashboard-section' section='content' %}?website_project={{ asset.project_id }}#website-media-{{ asset.pk }}">Back to Publish Content</a>{% endif %}
+        {% if destination == 'client' %}<a class="button button-outline" href="{% url 'operations:dashboard-section' section='media' %}?media_project={{ asset.project_id }}#media-{{ asset.pk }}">Back to Client Media</a>{% else %}<a class="button button-outline" href="{% url 'operations:dashboard-section' section='content' %}?content_page_focus=projects#publish-page-projects">Back to Publish Content</a>{% endif %}
     </div>
     {% if destination == 'website' %}
-    <article class="public-project-listing publication-preview-project">
-        <header class="public-project-listing-header"><div><h2>{{ asset.project.public_title|default:"A Grand Coast project" }}</h2></div></header>
-        <div class="public-gallery-grid gallery-layout-{{ asset.project.gallery_layout }} gallery-accent-{{ asset.project.gallery_accent }}">
-            {% for media in preview_gallery %}{% include 'operations/public_media_item.html' %}{% endfor %}
-        </div>
-    </article>
+        {% if website_post_preview %}
+            {% include 'operations/public_gallery_post.html' with post=website_post_preview %}
+        {% else %}
+            <div class="public-gallery-grid gallery-layout-grid gallery-accent-gold">{% include 'operations/public_media_item.html' %}</div>
+        {% endif %}
     {% else %}
-    <div class="public-gallery-grid gallery-layout-{{ asset.project.gallery_layout }} gallery-accent-{{ asset.project.gallery_accent }}">{% include 'operations/public_media_item.html' %}</div>
+    <div class="public-gallery-grid gallery-layout-{{ asset.project.gallery_layout|default:'grid' }} gallery-accent-{{ asset.project.gallery_accent|default:'gold' }}">{% include 'operations/public_media_item.html' %}</div>
     {% endif %}
 </main>
 {% endblock %}

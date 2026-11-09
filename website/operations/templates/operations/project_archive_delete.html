@@ -13,8 +13,8 @@
                 <li>{{ linked_record_count }} {% translate 'project-linked records, including operational history and project conversations' %}</li>
                 <li>{{ message_count }} {% translate 'project-linked messages; general client conversations are kept' %}</li>
                 <li>{{ document_count }} {% translate 'project documents' %}; {{ media_count }} {% translate 'media records' %}; {{ file_count }} {% translate 'stored files' %}</li>
-                <li>{{ task_count }} {% translate 'project tasks' %}; {{ warranty_count }} {% translate 'warranty records' %}</li>
-                <li>{% if published_publicly %}{% translate 'The published project gallery will be removed from the public website.' %}{% else %}{% translate 'There is no published public gallery for this project.' %}{% endif %}</li>
+                <li>{{ task_count }} {% translate 'project tasks' %}</li>
+                <li>{% if published_publicly %}{% translate 'This project’s public cover and featured-work selection will be removed with it. Independent public gallery posts and media stay published.' %}{% else %}{% translate 'Independent public gallery posts and media are not linked to this project and are unaffected by its deletion.' %}{% endif %}</li>
                 <li>{% translate 'Files are deleted from Static File Storage only when no remaining record refers to them.' %}</li>
             </ul>
         </div>

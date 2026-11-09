@@ -462,7 +462,7 @@ class GrandCoastAdminSite(UnfoldAdminSite):
         return self._render_admin_page(
             request,
             "admin/storage_retention.html",
-            storage_retention_context(request),
+            storage_retention_context(request, self),
         )
 
     def database_capacity(self, request):
@@ -475,11 +475,17 @@ class GrandCoastAdminSite(UnfoldAdminSite):
 
         return database_capacity_trash_page(self, request)
 
+    def database_capacity_record(self, request, kind, record_id):
+        from .database_capacity_views import database_capacity_record_detail_page
+
+        return database_capacity_record_detail_page(self, request, kind, record_id)
+
     def get_urls(self):
         from .storage_retention_views import storage_bulk_action, storage_empty_trash
         from .database_capacity_views import (
             database_capacity_cutoff_action,
             database_capacity_trash_action,
+            database_capacity_trash_selection_action,
         )
 
         custom_urls = [
@@ -541,6 +547,16 @@ class GrandCoastAdminSite(UnfoldAdminSite):
                 "database-capacity/trash/",
                 self.admin_view(self.database_capacity_trash),
                 name="database-capacity-trash",
+            ),
+            path(
+                "database-capacity/records/<slug:kind>/<uuid:record_id>/",
+                self.admin_view(self.database_capacity_record),
+                name="database-capacity-record",
+            ),
+            path(
+                "database-capacity/trash/selected/",
+                self.admin_view(database_capacity_trash_selection_action),
+                name="database-capacity-trash-selected",
             ),
             path(
                 "database-capacity/trash/<uuid:batch_id>/",

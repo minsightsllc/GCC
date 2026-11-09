@@ -4,6 +4,7 @@
         {% if post.label %}<span class="publication-label">{{ post.label }}</span>{% endif %}
         <h3>{{ post.title }}</h3>
         {% if post.caption %}<p>{{ post.caption|linebreaksbr }}</p>{% endif %}
+        {% if post.location %}<p class="publication-meta">{{ post.location }}</p>{% endif %}
         {% if post.client_name %}<p class="publication-meta">{% translate 'Client:' %} {{ post.client_name }}</p>{% endif %}
     </div>
     <div class="public-post-carousel" data-gallery-carousel role="group" aria-roledescription="carousel" aria-label="Photos and videos for {{ post.title }}">

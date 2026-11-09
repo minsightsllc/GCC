@@ -1,5 +1,8 @@
 from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
+import shutil
+import tempfile
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -26,7 +29,6 @@ from .construction_services import (
     project_financial_summary,
     record_deposit,
     record_payment,
-    resolve_warranty_item,
     set_milestone_status,
     send_estimate,
     submit_problem_report,
@@ -62,15 +64,26 @@ from .models import (
     Subcontractor,
     SubcontractorAssignment,
     Task,
-    WarrantyItem,
     WorkflowEvent,
 )
 
 
 User = get_user_model()
+TEST_MEDIA_ROOT = Path(tempfile.mkdtemp(prefix="gcc-construction-os-tests-"))
+TEST_STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    "contact_submissions": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+}
 
 
+@override_settings(MEDIA_ROOT=TEST_MEDIA_ROOT, STORAGES=TEST_STORAGES)
 class ConstructionOperatingSystemTests(TestCase):
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(TEST_MEDIA_ROOT, ignore_errors=True)
+
     def setUp(self):
         self.http = HttpClient()
         self.owner = User.objects.create_user(
@@ -158,6 +171,7 @@ class ConstructionOperatingSystemTests(TestCase):
         self.assertEqual(PaymentSchedule.objects.filter(project=project).count(), 1)
         self.assertTrue(WorkflowEvent.objects.filter(event_type="project_created_from_estimate").exists())
         self.assertFalse(project.is_published)
+        self.assertEqual(project.progress_percent, 40)
 
     def test_role_and_object_scope_hides_unassigned_project(self):
         project = self._create_project()
@@ -637,6 +651,8 @@ class ConstructionOperatingSystemTests(TestCase):
     def test_permits_problems_and_closeout_are_scoped_and_idempotent(self):
         project = self._create_project()
         initialize_closeout(project, actor=self.owner)
+        self.assertEqual(project.closeout_items.count(), 5)
+        self.assertFalse(project.closeout_items.filter(category="warranty").exists())
         permit_url = reverse("operations-api:project-permits", kwargs={"pk": project.pk})
         self.http.force_login(self.owner)
         missing_key = self.http.post(
@@ -674,7 +690,7 @@ class ConstructionOperatingSystemTests(TestCase):
             reverse("operations-api:project-closeout", kwargs={"pk": project.pk})
         )
         self.assertEqual(closeout_response.status_code, 200)
-        self.assertEqual(len(closeout_response.json()["results"]), 6)
+        self.assertEqual(len(closeout_response.json()["results"]), 5)
 
     def test_subcontractor_sees_only_assigned_work(self):
         project = self._create_project()
@@ -1152,7 +1168,7 @@ class ConstructionOperatingSystemTests(TestCase):
         GCC_EXECUTION_LOOP_USER_IDS="",
         GCC_OPERATING_SYSTEM_ENABLED=True,
     )
-    def test_execution_transitions_release_draw_and_finish_warranty(self):
+    def test_project_archives_only_after_all_milestones_are_complete(self):
         project = self._create_project()
         initialize_readiness(project, actor=self.owner)
         initialize_closeout(project, actor=self.owner)
@@ -1178,17 +1194,23 @@ class ConstructionOperatingSystemTests(TestCase):
                 idempotency_key=f"closeout-{index}",
             )
         project.refresh_from_db()
-        self.assertEqual(project.operational_phase, Project.OperationalPhase.WARRANTY)
+        self.assertNotEqual(project.status, Project.Status.COMPLETE)
+        self.assertIsNone(project.archived_at)
+        for index, remaining_milestone in enumerate(
+            project.milestones.filter(is_complete=False).order_by("sort_order"),
+            start=1,
+        ):
+            set_milestone_status(
+                remaining_milestone,
+                actor=self.owner,
+                is_complete=True,
+                idempotency_key=f"completion-milestone-{index}",
+            )
+        project.refresh_from_db()
+        self.assertEqual(project.operational_phase, Project.OperationalPhase.CLOSEOUT)
         self.assertEqual(project.status, Project.Status.COMPLETE)
-        warranty = WarrantyItem.objects.create(project=project, title="Touch-up warranty item")
-        resolve_warranty_item(
-            warranty,
-            actor=self.owner,
-            resolution="Touch-up completed and documented.",
-            idempotency_key="warranty-1",
-        )
-        warranty.refresh_from_db()
-        self.assertEqual(warranty.status, WarrantyItem.Status.RESOLVED)
+        self.assertIsNotNone(project.archived_at)
+        self.assertEqual(project.warranty_items.count(), 0)
 
     def test_execution_creation_commands_are_idempotent_on_retries(self):
         project = self._create_project()

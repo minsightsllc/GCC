@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -17,10 +16,11 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .admin import ProjectAdmin, grand_coast_admin_site
-from .construction_services import complete_closeout_item
+from .construction_services import set_milestone_status
 from .models import (
     Activity,
     Agreement,
+    ChangeOrder,
     Client,
     ClientMessage,
     ClientNotification,
@@ -29,8 +29,10 @@ from .models import (
     EmployeeProfile,
     Estimate,
     EstimateLineItem,
+    Milestone,
     Project,
     ProjectDocument,
+    Selection,
     Task,
     WarrantyItem,
     WorkflowEvent,
@@ -120,7 +122,7 @@ class ProjectArchiveTests(TestCase):
             project_manager=self.employee,
             status=status,
             operational_phase=(
-                Project.OperationalPhase.WARRANTY
+                Project.OperationalPhase.CLOSEOUT
                 if status == Project.Status.COMPLETE
                 else Project.OperationalPhase.CONSTRUCTION
             ),
@@ -130,13 +132,32 @@ class ProjectArchiveTests(TestCase):
         project.assigned_staff.add(self.employee)
         return project
 
-    def test_project_completion_archives_creates_warranty_and_keeps_employee_active(self):
-        project = self.make_project(
-            title="Ready to close",
-            status=Project.Status.FINAL,
-        )
-        project.operational_phase = Project.OperationalPhase.CLOSEOUT
-        project.save(update_fields=["operational_phase", "updated_at"])
+    def test_final_milestone_archives_without_warranty_and_keeps_employee_active(self):
+        project = self.make_project(title="Ready to close", status=Project.Status.FINAL)
+        milestones = [
+            Milestone.objects.create(
+                project=project,
+                title=f"Project step {index}",
+                sort_order=index,
+                is_complete=index < 5,
+            )
+            for index in range(1, 6)
+        ]
+
+        set_milestone_status(milestones[-1], actor=self.owner, is_complete=True)
+
+        project.refresh_from_db()
+        self.assertEqual(project.status, Project.Status.COMPLETE)
+        self.assertEqual(project.operational_phase, Project.OperationalPhase.CLOSEOUT)
+        self.assertEqual(project.next_step, "Project archived")
+        self.assertIsNotNone(project.archived_at)
+        self.assertEqual(project.warranty_items.count(), 0)
+        self.employee.refresh_from_db()
+        self.assertTrue(self.employee.is_active)
+        self.assertTrue(self.employee.employee_profile.is_active)
+
+    def test_closeout_items_do_not_complete_or_archive_a_project(self):
+        project = self.make_project(title="Closeout is not the completion trigger", status=Project.Status.FINAL)
         closeout = CloseoutItem.objects.create(
             project=project,
             key="final-walkthrough",
@@ -144,16 +165,14 @@ class ProjectArchiveTests(TestCase):
             required=True,
         )
 
+        from .construction_services import complete_closeout_item
+
         complete_closeout_item(closeout, actor=self.owner)
 
         project.refresh_from_db()
-        self.assertEqual(project.status, Project.Status.COMPLETE)
-        self.assertEqual(project.operational_phase, Project.OperationalPhase.WARRANTY)
-        self.assertIsNotNone(project.archived_at)
-        self.assertTrue(project.warranty_items.filter(title="Post-closeout warranty coverage").exists())
-        self.employee.refresh_from_db()
-        self.assertTrue(self.employee.is_active)
-        self.assertTrue(self.employee.employee_profile.is_active)
+        self.assertEqual(project.status, Project.Status.FINAL)
+        self.assertIsNone(project.archived_at)
+        self.assertEqual(project.warranty_items.count(), 0)
 
     def test_archived_project_keeps_complete_status(self):
         project = self.make_project(title="Status stays complete")
@@ -165,24 +184,15 @@ class ProjectArchiveTests(TestCase):
         self.assertEqual(project.status, Project.Status.COMPLETE)
         self.assertIsNotNone(project.archived_at)
 
-    def test_admin_project_save_archives_and_initializes_warranty(self):
+    def test_project_status_is_read_only_in_advanced_admin(self):
         project = self.make_project(title="Admin completed", status=Project.Status.FINAL)
-        project.status = Project.Status.COMPLETE
         admin = ProjectAdmin(Project, grand_coast_admin_site)
+        readonly_fields = admin.get_readonly_fields(SimpleNamespace(user=self.owner), project)
 
-        admin.save_model(
-            SimpleNamespace(user=self.owner),
-            project,
-            form=None,
-            change=True,
-        )
-
-        project.refresh_from_db()
-        self.assertIsNotNone(project.archived_at)
-        self.assertEqual(project.operational_phase, Project.OperationalPhase.WARRANTY)
-        self.assertEqual(project.warranty_items.count(), 1)
+        self.assertIn("status", readonly_fields)
+        self.assertIn("operational_phase", readonly_fields)
+        self.assertIsNone(project.archived_at)
         self.assertFalse(admin.has_delete_permission(SimpleNamespace(user=self.owner), project))
-        self.assertIn("status", admin.get_readonly_fields(SimpleNamespace(user=self.owner), project))
 
     def test_client_can_view_archive_but_project_actions_and_messages_are_read_only(self):
         project = self.make_project()
@@ -190,6 +200,19 @@ class ProjectArchiveTests(TestCase):
             project=project,
             status=Agreement.Status.ISSUED,
             contract_value="1200.00",
+        )
+        selection = Selection.objects.create(
+            project=project,
+            category="Flooring",
+            item_name="White oak",
+            status=Selection.Status.PENDING,
+        )
+        change_order = ChangeOrder.objects.create(
+            project=project,
+            number=1,
+            title="Additional tile work",
+            description="Extend tile into the pantry.",
+            status=ChangeOrder.Status.SENT,
         )
         ClientMessage.objects.create(
             client=self.client_record,
@@ -219,7 +242,20 @@ class ProjectArchiveTests(TestCase):
             reverse("operations:portal-accept-agreement", kwargs={"pk": project.agreement.pk})
         )
         self.assertEqual(denied_agreement.status_code, 403)
+        denied_selection = browser.post(
+            reverse("operations:portal-selection-advance", kwargs={"pk": selection.pk}),
+            {"status": Selection.Status.SUBMITTED, "client_choice": "White oak"},
+        )
+        self.assertEqual(denied_selection.status_code, 403)
+        denied_change_order = browser.post(
+            reverse("operations:portal-approve-change-order", kwargs={"pk": change_order.pk})
+        )
+        self.assertEqual(denied_change_order.status_code, 403)
         self.assertEqual(ClientMessage.objects.filter(project=project).count(), 1)
+        selection.refresh_from_db()
+        change_order.refresh_from_db()
+        self.assertEqual(selection.status, Selection.Status.PENDING)
+        self.assertEqual(change_order.status, ChangeOrder.Status.SENT)
 
     def test_client_keeps_other_active_projects_and_account_after_project_delete(self):
         archived = self.make_project(title="Archived kitchen")
@@ -263,7 +299,7 @@ class ProjectArchiveTests(TestCase):
         )
         self.assertNotContains(after_delete, archived.title)
 
-    def test_employee_sees_only_assigned_archived_warranty_work_and_can_resolve_it(self):
+    def test_legacy_warranty_records_are_hidden_and_cannot_be_resolved(self):
         archived = self.make_project(title="Archive with warranty")
         active = self.make_project(
             title="Current project",
@@ -288,20 +324,20 @@ class ProjectArchiveTests(TestCase):
         self.assertContains(projects_page, active.title)
         self.assertNotContains(projects_page, archived.title)
         tasks_page = browser.get(reverse("operations:team-section", kwargs={"section": "tasks"}))
-        self.assertContains(tasks_page, warranty.title)
+        self.assertNotContains(tasks_page, warranty.title)
         self.assertNotContains(tasks_page, unassigned.title)
         self.assertNotIn(archived.pk, [item.pk for item in tasks_page.context["projects"]])
 
         response = browser.post(
-            reverse("operations:project-warranty-resolution", kwargs={"pk": warranty.pk}),
+            f"/dashboard/warranty/{warranty.pk}/resolve/",
             {
                 "status": WarrantyItem.Status.RESOLVED,
                 "resolution": "Replaced and tested the hinge.",
             },
         )
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 404)
         warranty.refresh_from_db()
-        self.assertEqual(warranty.status, WarrantyItem.Status.RESOLVED)
+        self.assertEqual(warranty.status, WarrantyItem.Status.OPEN)
         self.assertTrue(self.employee.is_active)
 
     def test_export_contains_project_graph_files_but_omits_general_client_messages(self):
@@ -350,21 +386,15 @@ class ProjectArchiveTests(TestCase):
 
         output = project_export_file(project)
         with ZipFile(output) as archive:
-            records = json.loads(archive.read("records.json"))
-            manifest = json.loads(archive.read("manifest.json"))
-            serialized = json.dumps(records)
-            self.assertIn(str(linked_message.pk), serialized)
-            self.assertIn(str(activity.pk), serialized)
-            self.assertIn(str(workflow.pk), serialized)
-            self.assertIn(str(document.pk), serialized)
-            self.assertIn(str(estimate.pk), serialized)
-            self.assertIn("Local estimate line item", serialized)
-            self.assertNotIn(str(general_message.pk), serialized)
-            self.assertNotIn("provider-document.pdf", archive.namelist())
-            self.assertIn(document.file.name, serialized)
-            self.assertTrue(any(name.startswith("files/") for name in archive.namelist()))
-            self.assertEqual(manifest["project_id"], str(project.pk))
-            self.assertEqual(manifest["file_count"], 1)
+            names = archive.namelist()
+            report = archive.read("project-details.pdf")
+            self.assertTrue(report.startswith(b"%PDF-"))
+            self.assertNotIn("records.json", names)
+            self.assertNotIn("manifest.json", names)
+            self.assertNotIn("provider-document.pdf", names)
+            self.assertTrue(any(name.startswith("files/") for name in names))
+            self.assertTrue(any(name.endswith("warranty-guide.pdf") for name in names))
+            self.assertEqual(len([name for name in names if name.startswith("files/")]), 1)
         self.assertTrue(Project.objects.filter(pk=project.pk).exists())
         self.assertTrue(ClientMessage.objects.filter(pk=general_message.pk).exists())
 
@@ -513,6 +543,11 @@ class ProjectArchiveTests(TestCase):
 
     def test_archive_ui_requires_owner_gate_and_confirms_deletion(self):
         project = self.make_project(title="Confirm archive deletion")
+        WarrantyItem.objects.create(
+            project=project,
+            title="Legacy warranty record",
+            status=WarrantyItem.Status.OPEN,
+        )
         browser = DjangoClient()
         force_login_with_admin_gate(browser, self.owner)
 
@@ -520,10 +555,12 @@ class ProjectArchiveTests(TestCase):
         self.assertEqual(archive_response.status_code, 200)
         self.assertContains(archive_response, project.title)
         self.assertContains(archive_response, "Export project ZIP")
+        self.assertNotContains(archive_response, "warranty records")
         confirm_url = reverse("operations:project-archive-delete", kwargs={"pk": project.pk})
         confirm_response = browser.get(confirm_url)
         self.assertContains(confirm_response, "Data included in deletion")
         self.assertContains(confirm_response, "client account and other projects stay active")
+        self.assertNotContains(confirm_response, "warranty records")
 
         invalid_post = browser.post(confirm_url, {"confirm_delete": ""})
         self.assertEqual(invalid_post.status_code, 400)
@@ -533,12 +570,11 @@ class ProjectArchiveTests(TestCase):
         self.assertEqual(delete_response.status_code, 302)
         self.assertFalse(Project.objects.filter(pk=project.pk).exists())
 
-    def test_archive_includes_portfolio_projects_and_keeps_published_gallery_live_until_delete(self):
+    def test_archive_includes_portfolio_projects_and_keeps_independent_gallery_live_after_delete(self):
         project = self.make_project(title="Published archive gallery")
         project.is_portfolio_only = True
         project.save(update_fields=["is_portfolio_only", "updated_at"])
         post = WebsiteGalleryPost.objects.create(
-            project=project,
             title="Published room gallery",
             published_data={"title": "Published room gallery", "slides": []},
             published_at=timezone.now(),
@@ -549,12 +585,12 @@ class ProjectArchiveTests(TestCase):
         archive_response = browser.get(reverse("operations:project-archive"))
         self.assertContains(archive_response, project.title)
         public_response = browser.get(reverse("operations:project-detail", kwargs={"pk": project.pk}))
-        self.assertEqual(public_response.status_code, 302)
+        self.assertEqual(public_response.status_code, 404)
 
         with self.captureOnCommitCallbacks(execute=True):
             permanently_delete_project(project)
 
-        self.assertFalse(WebsiteGalleryPost.objects.filter(pk=post.pk).exists())
+        self.assertTrue(WebsiteGalleryPost.objects.filter(pk=post.pk).exists())
         self.assertEqual(
             browser.get(reverse("operations:project-detail", kwargs={"pk": project.pk})).status_code,
             404,

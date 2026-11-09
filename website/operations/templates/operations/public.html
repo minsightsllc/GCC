@@ -78,7 +78,7 @@
         {% for step in process_steps %}<article class="process-step" data-process-slide><span class="process-number">{{ forloop.counter }}</span><strong>{{ step.display_title }}</strong></article>{% endfor %}
     </div><button class="process-kiosk-toggle" type="button" data-process-kiosk-toggle aria-pressed="false" hidden>{% translate 'Pause steps' %}</button></div></div></section>
 
-    <section class="section feature-section"><div class="container feature-grid"><div class="feature-image-frame"><img src="{{ featured_project_image }}" alt="Featured Grand Coast construction project"></div><div class="feature-copy"><span class="gold-rule"></span><span class="section-kicker">{% translate 'Featured work' %}</span><h2>{{ site_settings.display_featured_title }}</h2><p>{{ site_settings.display_featured_body }}</p><a class="button button-outline" href="{% url 'operations:projects' %}{% if featured_project %}#public-project-{{ featured_project.pk }}{% endif %}">{% translate 'See more projects' %} <span aria-hidden="true">&rarr;</span></a></div></div></section>
+    <section class="section feature-section"><div class="container feature-grid"><div class="feature-image-frame"><img src="{{ featured_project_image }}" alt="Featured Grand Coast construction project"></div><div class="feature-copy"><span class="gold-rule"></span><span class="section-kicker">{% translate 'Featured work' %}</span><h2>{{ site_settings.display_featured_title }}</h2><p>{{ site_settings.display_featured_body }}</p><a class="button button-outline" href="{% url 'operations:projects' %}">{% translate 'See more projects' %} <span aria-hidden="true">&rarr;</span></a></div></div></section>
     <section class="contact-band"><div class="container contact-band-inner"><div><span class="section-kicker">{% translate 'Start the conversation' %}</span><h2>{% translate 'Tell us what you’re building.' %}</h2></div><a class="button button-primary" href="{% url 'operations:contact' %}">{% translate 'Request an Estimate' %} <span aria-hidden="true">&rarr;</span></a></div></section>
 
 {% elif page == "services" %}
@@ -89,16 +89,10 @@
     <section class="contact-band"><div class="container contact-band-inner"><div><span class="section-kicker">{% translate 'Have a project in mind?' %}</span><h2>{% translate 'Let’s talk through the first step.' %}</h2></div><a class="button button-primary" href="{% url 'operations:contact' %}">{% translate 'Request an Estimate →' %}</a></div></section>
 
 {% elif page == "projects" %}
-    <section class="page-hero page-hero-compact"><div class="container page-hero-grid"><div><span class="gold-rule"></span><span class="section-kicker">{% translate 'Projects' %}</span><h1>{% translate 'Work worth living with.' %}</h1><p>{% translate 'Explore photos and videos from Grand Coast projects.' %}</p></div><div class="page-hero-note"><span class="gold-dot"></span><p>{% translate 'Published project galleries, shared by Grand Coast.' %}</p></div></div></section>
+    <section class="page-hero page-hero-compact"><div class="container page-hero-grid"><div><span class="gold-rule"></span><span class="section-kicker">{% translate 'Projects' %}</span><h1>{% translate 'Work worth living with.' %}</h1><p>{% translate 'Explore photos and videos from Grand Coast.' %}</p></div><div class="page-hero-note"><span class="gold-dot"></span><p>{% translate 'Published galleries, shared by Grand Coast.' %}</p></div></div></section>
     <section class="section projects-section"><div class="container"><div class="project-grid" data-project-grid>
-        {% for project in public_projects %}
-        <article class="public-project-listing" id="public-project-{{ project.pk }}">
-            <header class="public-project-listing-header"><div><span class="section-kicker">{% translate 'Project gallery' %}</span><h2>{{ project.display_public_title }}</h2>{% if project.display_public_location %}<p>{{ project.display_public_location }}</p>{% endif %}{% if project.display_public_summary %}<p>{{ project.display_public_summary|linebreaksbr }}</p>{% endif %}</div></header>
-            <div class="public-project-posts">
-                {% for post in project.public_posts %}{% include 'operations/public_gallery_post.html' %}{% endfor %}
-            </div>
-        </article>
-        {% empty %}<div class="empty-detail">{% translate 'Project photos and videos will appear here when published.' %}</div>{% endfor %}
+        {% for post in public_gallery_posts %}{% include 'operations/public_gallery_post.html' %}
+        {% empty %}<div class="empty-detail">{% translate 'Photos and videos will appear here when published.' %}</div>{% endfor %}
     </div></div></section>
     <section class="contact-band"><div class="container contact-band-inner"><div><span class="section-kicker">{% translate 'Have a project in mind?' %}</span><h2>{% translate 'Let’s talk through the first step.' %}</h2></div><a class="button button-primary" href="{% url 'operations:contact' %}">{% translate 'Request an Estimate →' %}</a></div></section>
 {% elif page == "process" %}

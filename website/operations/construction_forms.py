@@ -23,7 +23,6 @@ from .models import (
     Subcontractor,
     SubcontractorAssignment,
     Task,
-    WarrantyItem,
 )
 
 
@@ -363,14 +362,6 @@ class CloseoutActionForm(forms.Form):
         ("not_applicable", "Not applicable"),
     ])
     notes = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}))
-
-
-class WarrantyResolutionForm(forms.Form):
-    status = forms.ChoiceField(choices=[
-        (WarrantyItem.Status.RESOLVED, "Resolved"),
-        (WarrantyItem.Status.CLOSED, "Closed"),
-    ])
-    resolution = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}))
 
 
 class SubcontractorAssignmentForm(forms.ModelForm):

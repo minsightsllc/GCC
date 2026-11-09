@@ -54,16 +54,14 @@ def validate_uploaded_media(upload):
 
 
 def media_asset_upload_to(instance, filename):
-    """Keep each original under the folder for the workflow that uploaded it.
-
-    A single original may later be published to another audience. Reusing it
-    does not create a second storage object or move the original.
-    """
+    """Keep operational uploads and independently uploaded public content apart."""
     storage_area = getattr(instance, "_storage_area", "Client Media")
     if storage_area not in {"Client Media", "Public Content"}:
         storage_area = "Client Media"
     month_path = timezone.now().strftime("%Y/%m")
-    return f"{storage_area}/projects/media/{month_path}/{filename}"
+    if storage_area == "Public Content":
+        return f"Public Content/gallery/media/{month_path}/{filename}"
+    return f"Client Media/projects/media/{month_path}/{filename}"
 
 
 ALLOWED_DOCUMENT_EXTENSIONS = {
@@ -947,7 +945,7 @@ class MediaPublication(models.Model):
 
 
 class WebsiteGalleryPost(TimeStampedModel):
-    """One public project post containing an ordered set of media slides."""
+    """One independent public gallery post containing an ordered set of media slides."""
 
     class Layout(models.TextChoices):
         SPLIT = "split", "Story split"
@@ -961,14 +959,15 @@ class WebsiteGalleryPost(TimeStampedModel):
         SAGE = "sage", "Coastal sage"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="website_gallery_posts")
     title = models.CharField(max_length=180)
     caption = models.TextField(blank=True)
     label = models.CharField(max_length=60, blank=True)
+    location = models.CharField(max_length=160, blank=True)
     title_es = models.CharField(max_length=180, blank=True)
     caption_es = models.TextField(blank=True)
     label_es = models.CharField(max_length=60, blank=True)
-    show_client_name = models.BooleanField(default=False)
+    location_es = models.CharField(max_length=160, blank=True)
+    client_name = models.CharField(max_length=180, blank=True)
     layout = models.CharField(max_length=16, choices=Layout.choices, default=Layout.SPLIT)
     accent = models.CharField(max_length=16, choices=Accent.choices, default=Accent.GOLD)
     sort_order = models.PositiveIntegerField(default=0)
@@ -979,13 +978,6 @@ class WebsiteGalleryPost(TimeStampedModel):
         ordering = ["sort_order", "created_at", "pk"]
 
     def draft_data(self):
-        client_name = ""
-        if (
-            self.show_client_name
-            and self.project_id
-            and self.project.client_id
-        ):
-            client_name = self.project.client.name
         slides = [
             {
                 "asset_id": str(item.asset_id),
@@ -1002,11 +994,12 @@ class WebsiteGalleryPost(TimeStampedModel):
             "title": self.title,
             "caption": self.caption,
             "label": self.label,
+            "location": self.location,
             "title_es": self.title_es,
             "caption_es": self.caption_es,
             "label_es": self.label_es,
-            "show_client_name": self.show_client_name,
-            "client_name": client_name,
+            "location_es": self.location_es,
+            "client_name": self.client_name,
             "layout": self.layout,
             "accent": self.accent,
             "sort_order": self.sort_order,

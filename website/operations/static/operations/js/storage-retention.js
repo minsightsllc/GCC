@@ -170,6 +170,7 @@ const initializeStorageRetention = () => {
             record: `Records and projects sorted ${direction === "asc" ? "A to Z" : "Z to A"}.`,
             sharing: `Sharing status sorted ${direction === "asc" ? "A to Z" : "Z to A"}.`,
             status: `${statusNames[first] || "In use"} files shown first.`,
+            page: "File inventory page " + (url.searchParams.get("page") || 1) + " loaded.",
             search: url.searchParams.has("q") ? "File inventory filtered." : "Search cleared. Showing all files.",
         };
         if (status) status.textContent = results[field] || "Files sorted.";
@@ -394,6 +395,26 @@ const initializeStorageRetention = () => {
                 input.focus();
             }
             scheduleLiveSearch(0);
+            return;
+        }
+
+        const pageLink = event.target.closest?.("[data-storage-page-link]");
+        if (pageLink) {
+            event.preventDefault();
+            window.clearTimeout(searchDebounce);
+            searchDebounce = null;
+            const url = new URL(pageLink.href, window.location.href);
+            const typedQuery = getSearchInput()?.value.trim() || "";
+            const queryChanged = typedQuery !== (url.searchParams.get("q") || "");
+            if (typedQuery) url.searchParams.set("q", typedQuery);
+            else url.searchParams.delete("q");
+            if (queryChanged) url.searchParams.delete("page");
+            searchInteractionActive = false;
+            searchOriginUrl = null;
+            refreshInventory(url, {
+                field: "page",
+                focusSelector: '[data-storage-page-step="' + pageLink.dataset.storagePageStep + '"]',
+            });
             return;
         }
 

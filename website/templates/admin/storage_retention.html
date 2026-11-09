@@ -10,7 +10,7 @@
 
 {% block extrahead %}
     {{ block.super }}
-    <script defer src="{% static 'operations/js/storage-retention.js' %}?v=20261107-live-search-fix2"></script>
+    <script defer src="{% static 'operations/js/storage-retention.js' %}?v=20261108-ajax-pagination"></script>
 {% endblock %}
 
 {% block content %}
@@ -153,7 +153,7 @@
                                 <input id="gcc-storage-select-{{ forloop.counter }}" type="checkbox" form="gcc-storage-bulk-form" name="selected_files" value="trash:{{ row.id }}" data-storage-select-file data-storage-status="{% if row.status == 'recovered' %}recovered{% else %}trash{% endif %}" data-storage-file-name="{{ row.original_name }}" data-storage-file-size="{% if row.size_bytes != None %}{{ row.size_bytes|filesizeformat }}{% else %}Size unavailable{% endif %}" data-storage-file-type="{{ row.content_type }}" data-storage-record-title="{{ row.record_title }}" data-storage-project-title="{{ row.project_title }}" data-storage-file-status-label="{% if row.status == 'recovered' %}Recovered{% elif row.status == 'purge_failed' %}Deletion failed{% else %}In Trash{% endif %}" data-storage-file-status-class="is-{{ row.status }}" aria-label="Select {{ row.original_name }}">
                             {% endif %}
                         </td>
-                        <td><strong>{{ row.original_name }}</strong><small>{{ row.type_label }} · {{ row.record_type }}{% if row.references|length > 1 %} · {{ row.references|length }} records{% endif %}</small></td>
+                        <td><strong>{% if row.location_url %}<a class="gcc-storage-file-location-link" href="{{ row.location_url }}" aria-label="Open the source record for {{ row.original_name }}">{{ row.original_name }}</a>{% else %}{{ row.original_name }}{% endif %}</strong><small>{{ row.type_label }} · {{ row.record_type }}{% if row.references|length > 1 %} · {{ row.references|length }} records{% endif %}</small></td>
                         <td>{% if row.size_bytes != None %}{{ row.size_bytes|filesizeformat }}{% else %}<span class="gcc-storage-muted">Unavailable</span>{% endif %}</td>
                         <td><strong>{{ row.record_title }}</strong>{% if row.project_title %}<small>{{ row.project_title }}</small>{% endif %}</td>
                         <td>{{ row.sharing_status|default:'Private' }}</td>
@@ -181,8 +181,8 @@
         {% if storage_page.paginator.num_pages > 1 %}
         <nav class="gcc-storage-pagination" aria-label="File inventory pages">
             <span>Page {{ storage_page.number }} of {{ storage_page.paginator.num_pages }}</span>
-            {% if storage_page.has_previous %}<a href="?status={{ storage_status }}{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}&amp;sort={{ storage_sort }}&amp;direction={{ storage_sort_direction }}&amp;status_first={{ storage_status_first }}&amp;page={{ storage_page.previous_page_number }}">Previous</a>{% endif %}
-            {% if storage_page.has_next %}<a href="?status={{ storage_status }}{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}&amp;sort={{ storage_sort }}&amp;direction={{ storage_sort_direction }}&amp;status_first={{ storage_status_first }}&amp;page={{ storage_page.next_page_number }}">Next</a>{% endif %}
+            {% if storage_page.has_previous %}<a href="?status={{ storage_status }}{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}&amp;sort={{ storage_sort }}&amp;direction={{ storage_sort_direction }}&amp;status_first={{ storage_status_first }}&amp;page={{ storage_page.previous_page_number }}" data-storage-page-link data-storage-page-step="previous">Previous</a>{% endif %}
+            {% if storage_page.has_next %}<a href="?status={{ storage_status }}{% if storage_query %}&amp;q={{ storage_query|urlencode }}{% endif %}&amp;sort={{ storage_sort }}&amp;direction={{ storage_sort_direction }}&amp;status_first={{ storage_status_first }}&amp;page={{ storage_page.next_page_number }}" data-storage-page-link data-storage-page-step="next">Next</a>{% endif %}
         </nav>
         {% endif %}
 

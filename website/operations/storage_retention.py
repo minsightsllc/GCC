@@ -602,8 +602,10 @@ def storage_file_rows():
         queryset = model._base_manager.all()
         if related:
             queryset = queryset.select_related(*related)
+        if model._meta.label_lower == "operations.mediaasset":
+            queryset = queryset.select_related("website_post_item__post")
         if model._meta.label_lower == "operations.websitegallerypostitem":
-            queryset = queryset.select_related("post__project", "asset")
+            queryset = queryset.select_related("post", "asset")
         for instance in queryset.iterator(chunk_size=200):
             stored_file = getattr(instance, field.name)
             storage_name = str(getattr(stored_file, "name", "") or "")
@@ -614,6 +616,13 @@ def storage_file_rows():
             if key in retained_by_key:
                 continue
             record_title = _source_title(instance, field)
+            public_post_item = (
+                getattr(instance, "website_post_item", None)
+                if isinstance(instance, MediaAsset)
+                else None
+            )
+            if public_post_item is not None:
+                record_title = public_post_item.post.title
             project = _source_project(instance)
             if size_index is not None:
                 size = size_index.get(storage_name)
@@ -642,7 +651,11 @@ def storage_file_rows():
                     "content_type": content_type,
                     "type_label": content_type.split("/", 1)[0].title() if "/" in content_type else "File",
                     "record_title": record_title,
-                    "record_type": str(model._meta.verbose_name).title(),
+                    "record_type": (
+                        "Public Gallery Media"
+                        if public_post_item is not None
+                        else str(model._meta.verbose_name).title()
+                    ),
                     "project_title": str(project.title) if project else "",
                     "sharing_status": _sharing_status(instance, field.name),
                     "protected": _protected_file(model, field.name),
@@ -650,9 +663,24 @@ def storage_file_rows():
                     "source_model": model._meta.label_lower,
                     "source_id": str(instance.pk),
                     "source_field": field.name,
+                    "_source_record": instance,
                 }
             else:
                 row["references"].append(reference)
+                # A legacy project asset and its detached public-copy record can
+                # intentionally share one stored object. Prefer the independent
+                # public post as the inventory destination when both are found.
+                if public_post_item is not None:
+                    row.update({
+                        "record_title": public_post_item.post.title,
+                        "record_type": "Public Gallery Media",
+                        "project_title": "",
+                        "sharing_status": _sharing_status(instance, field.name),
+                        "source_model": model._meta.label_lower,
+                        "source_id": str(instance.pk),
+                        "source_field": field.name,
+                        "_source_record": instance,
+                    })
 
     rows = list(rows_by_key.values())
     for key, items in retained_by_key.items():
@@ -684,6 +712,7 @@ def storage_file_rows():
             "source_model": item.source_model,
             "source_id": item.source_id,
             "source_field": item.source_field,
+            "_source_record": instance,
             "can_reattach": available and item.status == StorageTrash.Status.RECOVERED,
             "trash_count": len(items),
         })

@@ -69,7 +69,6 @@ from .forms import (
     MediaUploadForm,
     MediaPublicationForm,
     WebsiteGalleryPostForm,
-    WebsitePastProjectForm,
     ServiceForm,
     ProcessStepForm,
     PublicPasswordResetForm,
@@ -134,7 +133,6 @@ from .models import (
     TimeEntry,
     MobilePushDevice,
     WorkflowEvent,
-    WarrantyItem,
     effective_employee_schedule,
     schedule_event_local_dates,
     sanitize_uploaded_name,
@@ -209,7 +207,7 @@ from .construction_policies import (
     external_estimate_enabled_for,
     visible_estimates,
 )
-from .construction_forms import ExternalEstimateStatusForm, ExternalInvoiceStatusForm, WarrantyResolutionForm
+from .construction_forms import ExternalEstimateStatusForm, ExternalInvoiceStatusForm
 from .project_archives import (
     estimate_history_delete_blocked,
     estimate_history_family,
@@ -511,12 +509,6 @@ def _operations_navigation_counts(user, *, team_mode=False, section_counts=None)
     open_tasks_count = tasks_qs.filter(
         status__in=[Task.Status.OPEN, Task.Status.IN_PROGRESS, Task.Status.BLOCKED]
     ).count()
-    if not is_admin_workspace and getattr(user, "is_staff", False):
-        open_tasks_count += WarrantyItem.objects.filter(
-            assigned_to=user,
-            project__archived_at__isnull=False,
-            status__in=[WarrantyItem.Status.OPEN, WarrantyItem.Status.IN_PROGRESS],
-        ).count()
     upcoming_events_count = schedule_qs.filter(start_at__gte=now).count()
     active_time_count = _visible_time_for_user(user).filter(clock_out__isnull=True).count()
     active_projects_count = projects_qs.exclude(status=Project.Status.COMPLETE).count()
@@ -604,7 +596,7 @@ def _localized_value(instance, field, language):
     return getattr(instance, field, "") or ""
 
 
-def _public_context(*, language="en", include_project_galleries=False):
+def _public_context(*, language="en", include_public_gallery=False):
     site_settings = _site_settings()
     for content_field in (
         "headline", "subheadline", "featured_title", "featured_body",
@@ -646,36 +638,21 @@ def _public_context(*, language="en", include_project_galleries=False):
         character for character in site_settings.contact_phone if character.isdigit()
     )
     phone_prefix = "+" if site_settings.contact_phone.lstrip().startswith("+") else ""
-    projects = []
-    if include_project_galleries:
-        website_posts = (
-            WebsiteGalleryPost.objects.filter(
-                published_at__isnull=False,
-                project__is_published=True,
-            )
-            .order_by("sort_order", "created_at")
+    public_gallery_posts = []
+    if include_public_gallery:
+        posts = (
+            WebsiteGalleryPost.objects.filter(published_at__isnull=False)
+            .order_by("sort_order", "created_at", "pk")
             .prefetch_related(Prefetch(
                 "items",
                 queryset=WebsiteGalleryPostItem.objects.select_related("asset").prefetch_related("asset__publications"),
             ))
         )
-        project_queryset = Project.objects.filter(
-            website_gallery_posts__published_at__isnull=False,
-            is_published=True,
-        ).distinct().select_related("client").prefetch_related(
-            Prefetch("website_gallery_posts", queryset=website_posts)
-        )
-        projects = list(project_queryset)
-        for project in projects:
-            project.display_public_title = _localized_value(project, "public_title", language) or ("Un proyecto de Grand Coast" if str(language).startswith("es") else "A Grand Coast project")
-            project.display_public_location = _localized_value(project, "public_location", language)
-            project.display_public_summary = _localized_value(project, "public_summary", language)
-            project.public_posts = [
-                presentation
-                for post in project.website_gallery_posts.all()
-                if (presentation := website_post_presentation(post, language=language))["slides"]
-            ]
-            project.public_posts.sort(key=lambda item: item["sort_order"])
+        public_gallery_posts = [
+            presentation
+            for post in posts
+            if (presentation := website_post_presentation(post, language=language))["slides"]
+        ]
     featured_project = site_settings.featured_project
     public_featured_project = featured_project if featured_project and featured_project.is_published else None
     if public_featured_project:
@@ -688,7 +665,7 @@ def _public_context(*, language="en", include_project_galleries=False):
         "process_steps": process_steps,
         "contact_service_areas": contact_service_areas,
         "contact_phone_href": f"tel:{phone_prefix}{phone_digits}" if phone_digits else "",
-        "public_projects": projects,
+        "public_gallery_posts": public_gallery_posts,
         "featured_project": public_featured_project,
         "featured_project_image": (
             _project_image(public_featured_project)
@@ -742,7 +719,7 @@ def set_language(request):
 def public_page(request, page="home"):
     if page not in PUBLIC_PAGES:
         page = "home"
-    context = _public_context(language=getattr(request, "LANGUAGE_CODE", "en"), include_project_galleries=page == "projects")
+    context = _public_context(language=getattr(request, "LANGUAGE_CODE", "en"), include_public_gallery=page == "projects")
     context["page"] = page
     context["public_dashboard_url"] = _public_dashboard_url(request.user)
     context["contact_form"] = ContactLeadForm(request=request)
@@ -1302,6 +1279,11 @@ def _dashboard_context(request, section, form_overrides=None):
         )
         .all()
     )
+    completed_project_archive_count = (
+        Project.objects.filter(archived_at__isnull=False).count()
+        if section == "projects"
+        else 0
+    )
     selected_project = None
     if request.GET.get("project"):
         selected_project = next((item for item in projects if str(item.pk) == request.GET["project"]), None)
@@ -1337,7 +1319,6 @@ def _dashboard_context(request, section, form_overrides=None):
     website_publishing_context = (
         _website_publishing_context(
             request,
-            Project.objects.select_related("client"),
             form_overrides=form_overrides,
         )
         if section == "content"
@@ -1506,6 +1487,7 @@ def _dashboard_context(request, section, form_overrides=None):
     return {
         "active_section": section,
         "operations_nav_role": "admin",
+        "mobile_webview": is_mobile_webview(request),
         "operations_nav_counts": operations_nav_counts,
         "leads": leads,
         "active_leads_count": active_leads_count,
@@ -1529,6 +1511,7 @@ def _dashboard_context(request, section, form_overrides=None):
         "external_status_idempotency_key": str(uuid.uuid4()),
         "external_email_idempotency_key": str(uuid.uuid4()),
         "projects": projects,
+        "completed_project_archive_count": completed_project_archive_count,
         "selected_project": selected_project,
         "media_assets": media_assets,
         "media_visibility": media_visibility,
@@ -1572,6 +1555,15 @@ def _dashboard_context(request, section, form_overrides=None):
     }
 
 
+@require_POST
+@never_cache
+def admin_session_heartbeat(request):
+    if not request.user.is_authenticated or not _can_access_dashboard(request.user):
+        return JsonResponse({"active": False}, status=403)
+    active = gate_is_valid(request, request.user)
+    return JsonResponse({"active": active}, status=200 if active else 401)
+
+
 @staff_required
 def dashboard(request, section="overview"):
     if section not in DASHBOARD_SECTIONS:
@@ -1597,7 +1589,6 @@ def project_archive(request):
         project.archive_message_count = project.messages.count()
         project.archive_document_count = project.documents.count()
         project.archive_media_count = project.media_assets.count()
-        project.archive_warranty_count = project.warranty_items.count()
     return render(
         request,
         "operations/project_archive.html",
@@ -1617,10 +1608,12 @@ def project_archive_export(request, pk):
         Project.objects.filter(archived_at__isnull=False),
         pk=pk,
     )
+    project_name = slugify(project.title)[:96].strip("-") or "project"
+    client_name = slugify(project.client.name if project.client_id else "client")[:64].strip("-") or "client"
     response = FileResponse(
         project_export_file(project),
         as_attachment=True,
-        filename=f"project-{project.pk}-archive.zip",
+        filename=f"{project_name}--{client_name}-archive.zip",
         content_type="application/zip",
     )
     response["Cache-Control"] = "private, no-store"
@@ -1688,7 +1681,6 @@ def project_archive_delete(request, pk):
             "document_count": project.documents.count(),
             "media_count": project.media_assets.count(),
             "task_count": project.tasks.count(),
-            "warranty_count": project.warranty_items.count(),
             "published_publicly": project.is_published,
             "estimate_history_count": estimate_history_count,
             "estimate_history_blocked": estimate_history_blocked,
@@ -2062,40 +2054,6 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
     elif task_due == "upcoming":
         tasks_qs = tasks_qs.filter(due_date__gte=timezone.localdate()).exclude(status=Task.Status.COMPLETE)
     tasks = list(tasks_qs)
-    warranty_items = list(
-        WarrantyItem.objects.filter(
-            assigned_to=request.user,
-            project__archived_at__isnull=False,
-            status__in=[WarrantyItem.Status.OPEN, WarrantyItem.Status.IN_PROGRESS],
-        ).select_related("project", "project__client")
-        if team_mode and not _can_access_dashboard(request.user)
-        else WarrantyItem.objects.none()
-    )
-    selected_warranty_id = request.GET.get("warranty")
-    selected_warranty = next(
-        (item for item in warranty_items if str(item.pk) == selected_warranty_id),
-        None,
-    )
-    if warranty_items:
-        website_media_ids = MediaPublication.objects.filter(
-            destination=MediaPublication.Destination.WEBSITE
-        ).values("asset_id")
-        for warranty_item in warranty_items:
-            warranty_item.project_documents = [
-                document
-                for document in warranty_item.project.documents.all()
-                if can_view_project_document(request.user, document)
-            ]
-            warranty_item.project_media = list(
-                warranty_item.project.media_assets.exclude(pk__in=website_media_ids)
-            )
-            for media_asset in warranty_item.project_media:
-                media_asset.display_url = reverse(
-                    "operations:media-file",
-                    kwargs={"pk": media_asset.pk},
-                )
-    warranty_resolution_form = WarrantyResolutionForm()
-
     schedule_queryset = _visible_team_schedule_for_user(request.user) if team_mode else _visible_schedule_for_user(request.user)
     events = list(schedule_queryset.select_related("project", "task", "created_by").prefetch_related("assignees"))
     derived_calendar_events = []
@@ -2561,7 +2519,7 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
         section_nav_counts["tasks"] = sum(
             task.status in actionable_task_statuses
             for task in tasks
-        ) + len(warranty_items)
+        )
     elif section == "calendar":
         month_events = {}
         current_time = timezone.now()
@@ -2584,11 +2542,15 @@ def _workspace_context(request, section, team_mode=False, form_overrides=None):
         "projects": projects,
         "selected_project": selected_project,
         "tasks": tasks,
-        "warranty_items": warranty_items,
-        "selected_warranty": selected_warranty,
-        "warranty_resolution_form": warranty_resolution_form,
         "task_filter_groups": task_filter_groups,
         "selected_task": selected_task,
+        "show_task_delete_dialog": bool(
+            not team_mode
+            and _can_manage_tasks(request.user)
+            and request.GET.get("confirm_task_delete") == "1"
+            and selected_task
+            and selected_task.status == Task.Status.COMPLETE
+        ),
         "task_status_choices": Task.Status.choices,
         "task_priority_choices": Task.Priority.choices,
         "task_status": task_status,
@@ -3005,6 +2967,48 @@ def task_update(request, pk):
         return _workspace_redirect(request, "tasks", task=task.pk)
     messages.error(request, "Please correct the task details and try again.")
     return _render_workspace_form_error(request, "tasks", {"task_form": form}, selections={"task": task.pk}, edit="task")
+
+
+@require_POST
+@staff_required
+@transaction.atomic
+def task_delete(request, pk):
+    if not _can_manage_tasks(request.user):
+        raise PermissionDenied
+
+    task = get_object_or_404(
+        Task.objects.select_for_update().select_related("project", "lead"),
+        pk=pk,
+    )
+    if task.status != Task.Status.COMPLETE:
+        messages.error(request, "Only completed tasks can be deleted here.")
+        return _workspace_redirect(request, "tasks", task=task.pk)
+    if request.POST.get("confirm_delete") != "yes":
+        return _workspace_redirect(
+            request,
+            "tasks",
+            task=task.pk,
+            confirm_task_delete="1",
+        )
+
+    task_title = task.title
+    task_id = task.pk
+    project = task.project
+    lead = task.lead
+    EmployeeNotification.objects.filter(task=task).delete()
+    ClientNotification.objects.filter(task=task).delete()
+    record_activity(
+        "Completed task permanently deleted",
+        f"{task_title} · {task_id}",
+        actor=request.user,
+        lead=lead,
+        project=project,
+    )
+    # Related calendar entries, time entries, subcontractor assignments, and
+    # problem reports use SET_NULL so their own records survive task deletion.
+    task.delete()
+    messages.success(request, "Completed task deleted. Linked operational records were kept.")
+    return _workspace_redirect(request, "tasks")
 
 
 @require_POST
@@ -5031,8 +5035,10 @@ def project_create(request):
     return _render_dashboard_form_error(request, "projects", {"project_form": form}, new="project")
 
 
-def _create_default_milestones(project, approved=False):
-    completed_through = 2 if approved else 1
+def _create_default_milestones(project):
+    # Projects can only be created from an approved external estimate.
+    # Keep both creation paths at the same starting progress.
+    completed_through = 2
     for index, title in enumerate(["Walkthrough", "Estimate approved", "Selections", "Construction", "Final walkthrough"], start=1):
         Milestone.objects.create(
             project=project,
@@ -5140,6 +5146,18 @@ def milestone_toggle(request, pk):
         is_complete=is_complete,
         idempotency_key=idempotency_key,
     )
+    if (
+        is_complete
+        and Project.objects.filter(
+            pk=updated_milestone.project_id,
+            archived_at__isnull=False,
+        ).exists()
+    ):
+        messages.success(
+            request,
+            "All project milestones are complete. The project was moved to the completed-project archive.",
+        )
+        return redirect("operations:project-archive")
     if updated_milestone.is_complete == is_complete:
         messages.success(
             request,
@@ -5397,97 +5415,74 @@ def _media_library_context(request, *, form_overrides=None):
     }
 
 
-def _website_publishing_context(request, projects, *, form_overrides=None):
+def _website_publishing_context(request, *, form_overrides=None):
     form_overrides = form_overrides or {}
-    website_projects = sorted(projects, key=lambda item: item.title.casefold())
-    selected_project = None
-    requested_project = request.GET.get("website_project")
-    if requested_project:
-        selected_project = next((project for project in website_projects if str(project.pk) == requested_project), None)
-    if selected_project is None and website_projects:
-        selected_project = website_projects[0]
-
     state = request.GET.get("website_state", "all")
     if state not in {"all", "draft", "published"}:
         state = "all"
 
+    posts = list(
+        WebsiteGalleryPost.objects.all()
+        .prefetch_related(Prefetch(
+            "items",
+            queryset=WebsiteGalleryPostItem.objects.select_related("asset").prefetch_related("asset__publications"),
+        ))
+        .order_by("sort_order", "created_at", "pk")
+    )
     rows = []
-    if selected_project:
-        posts = list(
-            WebsiteGalleryPost.objects.filter(project=selected_project)
-            .prefetch_related(Prefetch(
-                "items",
-                queryset=WebsiteGalleryPostItem.objects.select_related("asset").prefetch_related("asset__publications"),
-            ))
-            .order_by("sort_order", "created_at", "pk")
-        )
-        for position, post in enumerate(posts):
-            post.can_move_up = position > 0
-            post.can_move_down = position < len(posts) - 1
-            post.is_live = bool(post.published_at)
-            post.has_draft_changes = post.has_unpublished_changes
-            post.live_asset_ids = {
-                str(slide.get("asset_id"))
-                for slide in (post.published_data or {}).get("slides", [])
-                if slide.get("asset_id")
-            }
-            if state == "draft" and post.is_live and not post.has_draft_changes:
-                continue
-            if state == "published" and not post.is_live:
-                continue
-            for item in post.items.all():
-                item.display_url = reverse("operations:media-file", kwargs={"pk": item.asset_id})
-            post.form = WebsiteGalleryPostForm(
-                instance=post,
-                project=selected_project,
-                prefix=f"post-{post.pk}",
+    for position, post in enumerate(posts):
+        post.can_move_up = position > 0
+        post.can_move_down = position < len(posts) - 1
+        post.is_live = bool(post.published_at)
+        post.has_draft_changes = post.has_unpublished_changes
+        post.live_asset_ids = {
+            str(slide.get("asset_id"))
+            for slide in (post.published_data or {}).get("slides", [])
+            if slide.get("asset_id")
+        }
+        if state == "draft" and post.is_live and not post.has_draft_changes:
+            continue
+        if state == "published" and not post.is_live:
+            continue
+        for item in post.items.all():
+            item.display_url = reverse("operations:media-file", kwargs={"pk": item.asset_id})
+        post.form = WebsiteGalleryPostForm(instance=post, prefix=f"post-{post.pk}")
+        if str(post.pk) == str(form_overrides.get("website_post_error_id")):
+            post.form = form_overrides["website_post_form"]
+        post.items_for_editor = list(post.items.all())
+        post.draft_slide_count = sum(1 for item in post.items_for_editor if item.is_in_draft)
+        keep_field = post.form["items_to_keep"]
+        keep_by_asset = {}
+        for choice in keep_field:
+            choice.data["label"] = "Keep in this post"
+            keep_by_asset[str(choice.data["value"])] = choice
+        for item in post.items_for_editor:
+            item.is_in_live = str(item.asset_id) in post.live_asset_ids
+            item.keep_checkbox = keep_by_asset.get(str(item.asset_id))
+            item.order_field = post.form[f"slide_order_{item.asset_id}"]
+            poster_field_name = f"slide_poster_{item.asset_id}"
+            item.poster_field = post.form[poster_field_name] if poster_field_name in post.form.fields else None
+            item.poster_preview_url = (
+                reverse("operations:website-post-poster", kwargs={"pk": post.pk, "asset_id": item.asset_id})
+                + f"?preview=1&v={int(post.updated_at.timestamp())}"
+                if item.poster_image
+                else static("operations/images/video-poster-placeholder.svg")
             )
-            if str(post.pk) == str(form_overrides.get("website_post_error_id")):
-                post.form = form_overrides["website_post_form"]
-            post.items_for_editor = list(post.items.all())
-            post.draft_slide_count = sum(1 for item in post.items_for_editor if item.is_in_draft)
-            keep_field = post.form["items_to_keep"]
-            keep_by_asset = {}
-            for choice in keep_field:
-                choice.data["label"] = "Keep in this post"
-                keep_by_asset[str(choice.data["value"])] = choice
-            for item in post.items_for_editor:
-                item.is_in_live = str(item.asset_id) in post.live_asset_ids
-                item.keep_checkbox = keep_by_asset.get(str(item.asset_id))
-                item.order_field = post.form[f"slide_order_{item.asset_id}"]
-                poster_field_name = f"slide_poster_{item.asset_id}"
-                item.poster_field = post.form[poster_field_name] if poster_field_name in post.form.fields else None
-                item.poster_preview_url = (
-                    reverse("operations:website-post-poster", kwargs={"pk": post.pk, "asset_id": item.asset_id})
-                    + f"?preview=1&v={int(post.updated_at.timestamp())}"
-                    if item.poster_image
-                    else static("operations/images/video-poster-placeholder.svg")
-                )
-            _attach_existing_website_video_rows(post.form)
-            post.preview = website_post_presentation(post, preview=True, language=getattr(request, "LANGUAGE_CODE", "en"))
-            rows.append(post)
+        _attach_existing_website_video_rows(post.form)
+        post.preview = website_post_presentation(post, preview=True, language=getattr(request, "LANGUAGE_CODE", "en"))
+        rows.append(post)
 
     page = Paginator(rows, 10).get_page(request.GET.get("website_page"))
     page_rows = list(page)
     total_post_count = WebsiteGalleryPost.objects.count()
-    create_form = form_overrides.get("website_post_create_form") or WebsiteGalleryPostForm(
-        project=selected_project,
-        prefix="new-post",
-    )
+    create_form = form_overrides.get("website_post_create_form") or WebsiteGalleryPostForm(prefix="new-post")
     _attach_existing_website_video_rows(create_form)
-    create_project_form = (
-        form_overrides.get("website_past_project_create_form")
-        or WebsitePastProjectForm()
-    )
     return {
-        "website_projects": website_projects,
-        "website_project": selected_project,
         "website_post_count": total_post_count,
         "website_post_limit": WEBSITE_GALLERY_MAX_POSTS,
         "website_max_slides_per_post": WEBSITE_GALLERY_MAX_SLIDES_PER_POST,
         "website_max_upload_mb": WEBSITE_GALLERY_MAX_UPLOAD_SIZE // (1024 * 1024),
         "website_can_create_post": total_post_count < WEBSITE_GALLERY_MAX_POSTS,
-        "website_past_project_create_form": create_project_form,
         "website_post_create_form": create_form,
         "website_post_rows": page_rows,
         "website_post_page": page,
@@ -5496,7 +5491,7 @@ def _website_publishing_context(request, projects, *, form_overrides=None):
 
 
 def _attach_existing_website_video_rows(form):
-    """Attach the rendered choice and poster input to each reusable project file."""
+    """Attach the rendered choice and poster input to each reusable public file."""
     assets_by_id = {
         str(asset.pk): asset
         for asset in form.fields["existing_assets"].queryset.select_related("project")
@@ -5561,50 +5556,6 @@ def _delete_website_post_items_with_retained_posters(post, *, actor, is_in_draft
             )
     if items:
         WebsiteGalleryPostItem.objects.filter(pk__in=[item.pk for item in items]).delete()
-
-
-@require_POST
-@staff_required
-@transaction.atomic
-def website_past_project_create(request):
-    if not _can_manage_content(request.user):
-        raise PermissionDenied
-
-    form = WebsitePastProjectForm(request.POST)
-    selections = {
-        "website_project": request.POST.get("website_project", ""),
-        "content_page_focus": "projects",
-    }
-    if not form.is_valid():
-        response = _render_dashboard_form_error(
-            request,
-            "content",
-            {"website_past_project_create_form": form},
-            selections=selections,
-        )
-        response.status_code = 422
-        return response
-
-    title = form.cleaned_data["title"]
-    project = Project.objects.create(
-        title=title,
-        public_title=title,
-        is_portfolio_only=True,
-        is_published=False,
-        created_by=request.user,
-    )
-    record_activity(
-        "Past project added to website portfolio",
-        title,
-        actor=request.user,
-        project=project,
-    )
-    messages.success(request, "Past project added. You can now create its photo or video post.")
-    return _content_page_redirect(
-        "projects",
-        website_project=project.pk,
-        content_page_focus="projects",
-    )
 
 
 def _media_error(request, form, asset=None):
@@ -5803,9 +5754,8 @@ def client_media_prepare(request):
     return _render_dashboard_form_error(request, "media", {"client_media_prepare_form": form})
 
 
-def _website_post_form_error(request, form, *, project, post=None):
+def _website_post_form_error(request, form, *, post=None):
     selection = {
-        "website_project": project.pk if project else request.POST.get("website_project"),
         "website_state": request.POST.get("website_state", "all"),
         "website_page": request.POST.get("website_page", "1"),
         "content_page_focus": "projects",
@@ -5848,7 +5798,7 @@ def _remove_unpublished_website_publications(asset_ids):
         sync_legacy_visibility(asset)
 
 
-def _remove_website_asset_from_publishing(request, project, asset_id, *, state, page):
+def _remove_website_asset_from_publishing(request, asset_id, *, state, page):
     try:
         asset_id = uuid.UUID(asset_id)
     except (ValueError, TypeError, AttributeError):
@@ -5856,13 +5806,12 @@ def _remove_website_asset_from_publishing(request, project, asset_id, *, state, 
     asset = get_object_or_404(
         MediaAsset.objects.select_for_update(),
         pk=asset_id,
-        project=project,
+        project__isnull=True,
     )
     if WebsiteGalleryPostItem.objects.filter(asset=asset).exists():
-        messages.error(request, "Remove this file from its project post before removing it from the website file list.")
+        messages.error(request, "Remove this file from its gallery post before removing it from the public files list.")
         return _content_page_redirect(
             "projects",
-            website_project=project.pk,
             website_state=state,
             website_page=page,
             content_page_focus="projects",
@@ -5882,7 +5831,6 @@ def _remove_website_asset_from_publishing(request, project, asset_id, *, state, 
         "File removed from Publish Content",
         asset.title,
         actor=request.user,
-        project=project,
     )
     messages.success(
         request,
@@ -5891,7 +5839,6 @@ def _remove_website_asset_from_publishing(request, project, asset_id, *, state, 
 
     return _content_page_redirect(
         "projects",
-        website_project=project.pk,
         website_state=state,
         website_page=page,
         content_page_focus="projects",
@@ -5907,26 +5854,15 @@ def _save_website_gallery_post(request, *, post=None):
     if action not in {"save", "publish", "unpublish"}:
         raise Http404
     if is_new_post:
-        try:
-            project_id = uuid.UUID(request.POST.get("website_project", ""))
-        except (ValueError, TypeError, AttributeError):
-            raise Http404 from None
-        project = get_object_or_404(Project.objects.select_for_update().select_related("client"), pk=project_id)
-        max_sort_order = WebsiteGalleryPost.objects.filter(project=project).aggregate(
-            max_order=Max("sort_order")
-        )["max_order"]
+        max_sort_order = WebsiteGalleryPost.objects.aggregate(max_order=Max("sort_order"))["max_order"]
         post = WebsiteGalleryPost(
-            project=project,
             sort_order=(max_sort_order if max_sort_order is not None else -1) + 1,
         )
     else:
         post = get_object_or_404(
-            WebsiteGalleryPost.objects.select_for_update().select_related("project__client"),
+            WebsiteGalleryPost.objects.select_for_update(),
             pk=post.pk,
         )
-        if str(request.POST.get("website_project", "")) != str(post.project_id):
-            raise PermissionDenied
-        project = Project.objects.select_for_update().select_related("client").get(pk=post.project_id)
 
     remove_asset_id = request.POST.get("website_asset_remove")
     if remove_asset_id:
@@ -5935,7 +5871,6 @@ def _save_website_gallery_post(request, *, post=None):
             state = "all"
         return _remove_website_asset_from_publishing(
             request,
-            project,
             remove_asset_id,
             state=state,
             page=request.POST.get("website_page", "1"),
@@ -5945,18 +5880,17 @@ def _save_website_gallery_post(request, *, post=None):
         request.POST,
         request.FILES,
         instance=post,
-        project=project,
         prefix="new-post" if is_new_post else f"post-{post.pk}",
     )
     if not form.is_valid():
-        return _website_post_form_error(request, form, project=project, post=None if is_new_post else post)
+        return _website_post_form_error(request, form, post=None if is_new_post else post)
 
     if is_new_post and WebsiteGalleryPost.objects.count() >= WEBSITE_GALLERY_MAX_POSTS:
         form.add_error(
             None,
             f"The Projects page is limited to {WEBSITE_GALLERY_MAX_POSTS} total posts, including drafts. Remove an existing post before creating another.",
         )
-        return _website_post_form_error(request, form, project=project, post=None)
+        return _website_post_form_error(request, form, post=None)
 
     existing_assets = list(form.cleaned_data["existing_assets"])
     selected_asset_ids = {asset.pk for asset in existing_assets}
@@ -5973,7 +5907,7 @@ def _save_website_gallery_post(request, *, post=None):
     if existing_assets:
         locked_assets = list(
             MediaAsset.objects.select_for_update()
-            .filter(pk__in=selected_asset_ids, project=project)
+            .filter(pk__in=selected_asset_ids, project__isnull=True)
             .order_by("pk")
         )
         linked_asset_ids = set(
@@ -5986,7 +5920,7 @@ def _save_website_gallery_post(request, *, post=None):
                 "existing_assets",
                 "One or more selected files were added to another post. Reload the gallery and choose them again.",
             )
-            return _website_post_form_error(request, form, project=project, post=None if is_new_post else post)
+            return _website_post_form_error(request, form, post=None if is_new_post else post)
 
     removed_item_ids = {item.asset_id for item in current_items if item.asset_id not in retained_ids}
     for item in current_items:
@@ -6010,7 +5944,6 @@ def _save_website_gallery_post(request, *, post=None):
     }
     post = form.save(commit=False)
     post._storage_retention_actor = request.user
-    post.project = project
     post.save()
 
     if post.pk:
@@ -6044,7 +5977,7 @@ def _save_website_gallery_post(request, *, post=None):
 
     for upload_index, upload in enumerate(form.cleaned_data["files"]):
         filename = upload.name.replace("\\", "/").rsplit("/", 1)[-1]
-        title = filename.rsplit(".", 1)[0][:180] or "Project media"
+        title = filename.rsplit(".", 1)[0][:180] or "Public media"
         media_type = (
             MediaAsset.MediaType.VIDEO
             if filename.lower().endswith((".mp4", ".mov"))
@@ -6052,7 +5985,7 @@ def _save_website_gallery_post(request, *, post=None):
         )
         asset = MediaAsset.create_for_upload(
             "Public Content",
-            project=project,
+            project=None,
             title=title,
             file=upload,
             media_type=media_type,
@@ -6084,15 +6017,12 @@ def _save_website_gallery_post(request, *, post=None):
     )
     if action == "publish" and not active_items:
         form.add_error("items_to_keep", "Add at least one photo or video before publishing this post.")
-        return _website_post_form_error(request, form, project=project, post=None if is_new_post else post)
+        return _website_post_form_error(request, form, post=None if is_new_post else post)
 
     if action == "publish":
         active_ids = {str(item.asset_id) for item in active_items}
         try:
             with transaction.atomic():
-                if not project.is_published:
-                    project.is_published = True
-                    project.save(update_fields=["is_published", "updated_at"])
                 for item in active_items:
                     publication, _ = MediaPublication.objects.select_for_update().get_or_create(
                         asset=item.asset,
@@ -6111,7 +6041,7 @@ def _save_website_gallery_post(request, *, post=None):
                         unpublish(publication)
         except ValidationError as exc:
             form.add_error(None, exc)
-            return _website_post_form_error(request, form, project=project, post=post)
+            return _website_post_form_error(request, form, post=post)
 
         post.published_data = post.draft_data()
         post.published_at = timezone.now()
@@ -6125,12 +6055,11 @@ def _save_website_gallery_post(request, *, post=None):
             asset_id for asset_id in previous_live_ids - active_ids
         })
         record_activity(
-            "Project gallery post published",
+            "Public gallery post published",
             post.title,
             actor=request.user,
-            project=project,
         )
-        messages.success(request, "Project post published with its photos and videos.")
+        messages.success(request, "Public gallery post published with its photos and videos.")
     elif action == "unpublish":
         for asset_id in previous_live_ids:
             publication = MediaPublication.objects.select_for_update().filter(
@@ -6149,10 +6078,9 @@ def _save_website_gallery_post(request, *, post=None):
         )
         _remove_unpublished_website_publications(removed_item_ids)
         record_activity(
-            "Project gallery post unpublished",
+            "Public gallery post unpublished",
             post.title,
             actor=request.user,
-            project=project,
         )
         messages.success(request, "Post unpublished. Its original photos and videos are retained.")
     else:
@@ -6166,10 +6094,9 @@ def _save_website_gallery_post(request, *, post=None):
             )
             _remove_unpublished_website_publications(removed_item_ids)
         record_activity(
-            "Project gallery post draft saved",
+            "Public gallery post draft saved",
             post.title,
             actor=request.user,
-            project=project,
         )
         messages.success(request, "Post draft saved. The live post is unchanged.")
 
@@ -6178,7 +6105,6 @@ def _save_website_gallery_post(request, *, post=None):
         state = "all"
     return _content_page_redirect(
         "projects",
-        website_project=project.pk,
         website_state=state,
         website_page=request.POST.get("website_page", "1"),
         content_page_focus="projects",
@@ -6217,7 +6143,6 @@ def website_gallery_post_move(request, pk):
 
     posts = list(
         WebsiteGalleryPost.objects.select_for_update()
-        .filter(project_id=post.project_id)
         .order_by("sort_order", "created_at", "pk")
     )
     index = next((position for position, item in enumerate(posts) if item.pk == post.pk), None)
@@ -6239,7 +6164,6 @@ def website_gallery_post_move(request, pk):
         state = "all"
     return _content_page_redirect(
         "projects",
-        website_project=post.project_id,
         website_state=state,
         website_page=request.POST.get("website_page", "1"),
         content_page_focus="projects",
@@ -6254,14 +6178,13 @@ def website_gallery_post_delete(request, pk):
         raise PermissionDenied
 
     post = get_object_or_404(
-        WebsiteGalleryPost.objects.select_for_update().select_related("project"),
+        WebsiteGalleryPost.objects.select_for_update(),
         pk=pk,
     )
     if post.published_at:
         messages.error(request, "Unpublish this post before deleting its draft.")
         return _content_page_redirect(
             "projects",
-            website_project=post.project_id,
             website_state=request.POST.get("website_state", request.GET.get("website_state", "all")),
             website_page=request.POST.get("website_page", request.GET.get("website_page", "1")),
             content_page_focus="projects",
@@ -6299,7 +6222,6 @@ def website_gallery_post_delete(request, pk):
         ).delete()
 
     post_title = post.title
-    project = post.project
     _delete_website_post_items_with_retained_posters(
         post,
         actor=request.user,
@@ -6314,10 +6236,9 @@ def website_gallery_post_delete(request, pk):
     for asset in assets:
         sync_legacy_visibility(asset)
     record_activity(
-        "Project gallery post draft deleted",
+        "Public gallery post draft deleted",
         post_title,
         actor=request.user,
-        project=project,
     )
     messages.success(
         request,
@@ -6325,7 +6246,6 @@ def website_gallery_post_delete(request, pk):
     )
     return _content_page_redirect(
         "projects",
-        website_project=project.pk,
         website_state=request.POST.get("website_state", "all"),
         website_page=request.POST.get("website_page", "1"),
         content_page_focus="projects",
@@ -6339,7 +6259,7 @@ def website_gallery_post_preview(request, pk):
     if not _can_manage_content(request.user):
         raise PermissionDenied
     post = get_object_or_404(
-        WebsiteGalleryPost.objects.select_related("project__client").prefetch_related(
+        WebsiteGalleryPost.objects.prefetch_related(
             Prefetch(
                 "items",
                 queryset=WebsiteGalleryPostItem.objects.select_related("asset").prefetch_related("asset__publications"),
@@ -6350,7 +6270,7 @@ def website_gallery_post_preview(request, pk):
     return render(
         request,
         "operations/website_post_preview.html",
-        {"post": website_post_presentation(post, preview=True, language=getattr(request, "LANGUAGE_CODE", "en")), "project": post.project},
+        {"post": website_post_presentation(post, preview=True, language=getattr(request, "LANGUAGE_CODE", "en"))},
     )
 
 
@@ -6362,10 +6282,10 @@ def website_post_poster(request, pk, asset_id):
         raise PermissionDenied
 
     post = get_object_or_404(
-        WebsiteGalleryPost.objects.select_related("project").prefetch_related(
+        WebsiteGalleryPost.objects.prefetch_related(
             Prefetch(
                 "items",
-                queryset=WebsiteGalleryPostItem.objects.select_related("asset__project").prefetch_related(
+                queryset=WebsiteGalleryPostItem.objects.select_related("asset").prefetch_related(
                     "asset__publications"
                 ),
             )
@@ -6375,7 +6295,7 @@ def website_post_poster(request, pk, asset_id):
     if preview:
         snapshot = post.draft_data()
     else:
-        if not post.published_at or not post.project.is_published:
+        if not post.published_at:
             raise Http404
         snapshot = post.published_data or {}
 
@@ -6426,31 +6346,14 @@ def media_preview(request, pk):
         "media": media_presentation(asset, destination, preview=True, publication=publication, language=getattr(request, "LANGUAGE_CODE", "en")),
         "asset": asset, "destination": destination,
     }
-    if destination == MediaPublication.Destination.WEBSITE and asset.project_id:
-        gallery_assets = list(
-            MediaAsset.objects.filter(
-                project_id=asset.project_id,
-                publications__destination=MediaPublication.Destination.WEBSITE,
-                publications__published_at__isnull=False,
+    if destination == MediaPublication.Destination.WEBSITE:
+        post_item = WebsiteGalleryPostItem.objects.filter(asset=asset).select_related("post").first()
+        if post_item:
+            context["website_post_preview"] = website_post_presentation(
+                post_item.post,
+                preview=True,
+                language=getattr(request, "LANGUAGE_CODE", "en"),
             )
-            .select_related("project__client")
-            .prefetch_related("publications")
-            .order_by("publications__sort_order", "created_at")
-        )
-        ordered_preview_items = []
-        selected_in_gallery = False
-        for gallery_asset in gallery_assets:
-            if gallery_asset.pk == asset.pk:
-                item = context["media"]
-                selected_in_gallery = True
-            else:
-                if not website_is_live(gallery_asset):
-                    continue
-                item = media_presentation(gallery_asset, MediaPublication.Destination.WEBSITE, language=getattr(request, "LANGUAGE_CODE", "en"))
-            ordered_preview_items.append((item["sort_order"], gallery_asset.created_at, item))
-        if not selected_in_gallery:
-            ordered_preview_items.append((context["media"]["sort_order"], asset.created_at, context["media"]))
-        context["preview_gallery"] = [item for _, _, item in sorted(ordered_preview_items, key=lambda row: (row[0], row[1]))]
     return render(request, "operations/media_preview.html", context)
 
 
@@ -6733,13 +6636,10 @@ def google_reviews_sync(request):
 @require_GET
 def public_project_detail(request, pk):
     project = get_object_or_404(
-        Project.objects.filter(
-            website_gallery_posts__published_at__isnull=False,
-            is_published=True,
-        ).distinct(),
+        Project.objects.filter(is_published=True, is_portfolio_only=False),
         pk=pk,
     )
-    return redirect(f"{reverse('operations:projects')}#public-project-{project.pk}")
+    return redirect(reverse("operations:projects"))
 
 
 @require_GET

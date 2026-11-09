@@ -62,11 +62,9 @@ from .models import (
     SiteVisit,
     Subcontractor,
     SubcontractorAssignment,
-    WarrantyItem,
     WorkflowEvent,
 )
 
-from .construction_services import initialize_warranty
 from .construction_policies import STAFF_ROLES, assignable_staff_users
 
 
@@ -269,27 +267,17 @@ class ProjectAdmin(GrandCoastModelAdmin):
     list_display = ("title", "client", "status", "archived_at", "updated_at")
     list_filter = ("status", "archived_at")
     search_fields = ("title", "location", "client__name", "assigned_staff__username")
-    readonly_fields = ("archived_at", "cover")
+    readonly_fields = ("archived_at", "cover", "operational_phase")
 
     def get_readonly_fields(self, request, obj=None):
         fields = super().get_readonly_fields(request, obj)
-        if obj and obj.archived_at:
-            return (*fields, "status")
-        return fields
+        return fields if "status" in fields else (*fields, "status")
 
     def has_delete_permission(self, request, obj=None):
         # Project deletion must go through the archive flow so linked history
         # and external storage references are handled deliberately.
         return False
 
-    @transaction.atomic
-    def save_model(self, request, obj, form, change):
-        if obj.status == Project.Status.COMPLETE:
-            obj.operational_phase = Project.OperationalPhase.WARRANTY
-            obj.next_step = obj.next_step or "Warranty support"
-        super().save_model(request, obj, form, change)
-        if obj.status == Project.Status.COMPLETE:
-            initialize_warranty(obj, actor=request.user)
     exclude = (
         "is_published",
         "public_title",
@@ -662,7 +650,6 @@ grand_coast_admin_site.register(Selection, GrandCoastModelAdmin)
 grand_coast_admin_site.register(SiteVisit, GrandCoastModelAdmin)
 grand_coast_admin_site.register(Subcontractor, GrandCoastModelAdmin)
 grand_coast_admin_site.register(SubcontractorAssignment, GrandCoastModelAdmin)
-grand_coast_admin_site.register(WarrantyItem, GrandCoastModelAdmin)
 grand_coast_admin_site.register(WorkflowEvent, WorkflowEventAdmin)
 grand_coast_admin_site.register(AiActionDraft, GrandCoastModelAdmin)
 

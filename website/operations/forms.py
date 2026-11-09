@@ -657,7 +657,7 @@ class WebsiteGalleryPostForm(forms.ModelForm):
     existing_assets = forms.ModelMultipleChoiceField(
         queryset=MediaAsset.objects.none(),
         required=False,
-        label="Add existing project files",
+        label="Add existing public files",
         widget=forms.CheckboxSelectMultiple,
     )
     items_to_keep = forms.ModelMultipleChoiceField(
@@ -669,21 +669,28 @@ class WebsiteGalleryPostForm(forms.ModelForm):
 
     class Meta:
         model = WebsiteGalleryPost
-        fields = ["title", "caption", "label", "title_es", "caption_es", "label_es", "show_client_name", "layout", "accent"]
-        widgets = {"caption": forms.Textarea(attrs={"rows": 3})}
+        fields = [
+            "title", "caption", "label", "location",
+            "title_es", "caption_es", "label_es", "location_es",
+            "client_name", "layout", "accent",
+        ]
+        widgets = {
+            "caption": forms.Textarea(attrs={"rows": 3}),
+            "caption_es": forms.Textarea(attrs={"rows": 3}),
+        }
         labels = {
             "title": "Post title",
             "caption": "Post caption",
             "label": "Post label (optional)",
-            "show_client_name": "Show the client's name on this post",
+            "location": "Location (optional)",
+            "location_es": "Location (Spanish, optional)",
+            "client_name": "Client name (optional)",
             "layout": "Post layout",
             "accent": "Accent color",
         }
 
-    def __init__(self, *args, project=None, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        project = project or getattr(self.instance, "project", None)
-        self.project = project
         self.fields["files"].widget.attrs.update({
             "accept": ".jpg,.jpeg,.png,.webp,.mp4,.mov",
             "multiple": True,
@@ -692,30 +699,30 @@ class WebsiteGalleryPostForm(forms.ModelForm):
         self.fields["title_es"].label = "Post title (Spanish)"
         self.fields["caption_es"].label = "Post caption (Spanish)"
         self.fields["label_es"].label = "Post label (Spanish)"
+        self.fields["location"].help_text = "Enter the city or region shown with this public post."
+        self.fields["location_es"].help_text = "Optional Spanish version; English is shown if this is blank."
+        self.fields["client_name"].help_text = "Enter a name only when the client has agreed to public attribution."
         self.fields["files"].help_text = (
             f"Choose up to {WEBSITE_GALLERY_MAX_SLIDES_PER_POST} slides per post. "
-            f"New project-gallery files can be up to {WEBSITE_GALLERY_MAX_UPLOAD_SIZE // (1024 * 1024)} MB each."
+            f"New public-content files can be up to {WEBSITE_GALLERY_MAX_UPLOAD_SIZE // (1024 * 1024)} MB each."
         )
-        if project:
-            current_items = WebsiteGalleryPostItem.objects.filter(post=self.instance) if self.instance.pk else WebsiteGalleryPostItem.objects.none()
-            current_asset_ids = current_items.values_list("asset_id", flat=True)
-            self.fields["existing_assets"].queryset = (
-                MediaAsset.objects.filter(
-                    project=project,
-                    file__gt="",
-                    publications__destination=MediaPublication.Destination.WEBSITE,
-                )
-                .exclude(website_post_item__isnull=False)
-                .select_related("project")
-                .order_by("created_at", "title")
-                .distinct()
+        current_items = WebsiteGalleryPostItem.objects.filter(post=self.instance) if self.instance.pk else WebsiteGalleryPostItem.objects.none()
+        self.fields["existing_assets"].queryset = (
+            MediaAsset.objects.filter(
+                project__isnull=True,
+                file__gt="",
+                publications__destination=MediaPublication.Destination.WEBSITE,
             )
-            self.fields["items_to_keep"].queryset = MediaAsset.objects.filter(
-                website_post_item__post=self.instance
-            ).order_by("website_post_item__sort_order", "created_at") if self.instance.pk else MediaAsset.objects.none()
-            self.fields["items_to_keep"].initial = list(
-                current_items.filter(is_in_draft=True).values_list("asset_id", flat=True)
-            )
+            .exclude(website_post_item__isnull=False)
+            .order_by("created_at", "title")
+            .distinct()
+        )
+        self.fields["items_to_keep"].queryset = MediaAsset.objects.filter(
+            website_post_item__post=self.instance
+        ).order_by("website_post_item__sort_order", "created_at") if self.instance.pk else MediaAsset.objects.none()
+        self.fields["items_to_keep"].initial = list(
+            current_items.filter(is_in_draft=True).values_list("asset_id", flat=True)
+        )
         self.new_poster_prefix = self.add_prefix("new_poster_")
         self.new_poster_fields = []
         self.new_poster_field_names = []
@@ -734,31 +741,29 @@ class WebsiteGalleryPostForm(forms.ModelForm):
             )
             self.new_poster_fields.append(self[field_name])
             self.new_poster_field_names.append(field_name)
-        if project:
-            for item in WebsiteGalleryPostItem.objects.filter(
-                post=self.instance,
-                asset__media_type=MediaAsset.MediaType.VIDEO,
-            ).select_related("asset"):
-                field_name = f"slide_poster_{item.asset_id}"
-                self.fields[field_name] = WebsitePosterImageField(
-                    required=False,
-                    label=f"Thumbnail for {item.asset.title}",
-                    widget=forms.FileInput(attrs=poster_widget_attrs.copy()),
-                )
-            for asset in self.fields["existing_assets"].queryset.filter(
-                media_type=MediaAsset.MediaType.VIDEO
-            ):
-                field_name = f"existing_poster_{asset.pk}"
-                self.fields[field_name] = WebsitePosterImageField(
-                    required=False,
-                    label=f"Thumbnail for {asset.title}",
-                    widget=forms.FileInput(attrs=poster_widget_attrs.copy()),
-                )
-                self.existing_poster_fields_by_asset[str(asset.pk)] = self[field_name]
-                self.existing_video_assets.append(asset)
+        for item in WebsiteGalleryPostItem.objects.filter(
+            post=self.instance,
+            asset__media_type=MediaAsset.MediaType.VIDEO,
+        ).select_related("asset"):
+            field_name = f"slide_poster_{item.asset_id}"
+            self.fields[field_name] = WebsitePosterImageField(
+                required=False,
+                label=f"Thumbnail for {item.asset.title}",
+                widget=forms.FileInput(attrs=poster_widget_attrs.copy()),
+            )
+        for asset in self.fields["existing_assets"].queryset.filter(
+            media_type=MediaAsset.MediaType.VIDEO
+        ):
+            field_name = f"existing_poster_{asset.pk}"
+            self.fields[field_name] = WebsitePosterImageField(
+                required=False,
+                label=f"Thumbnail for {asset.title}",
+                widget=forms.FileInput(attrs=poster_widget_attrs.copy()),
+            )
+            self.existing_poster_fields_by_asset[str(asset.pk)] = self[field_name]
+            self.existing_video_assets.append(asset)
         self.fields["title"].help_text = "One title for the whole post."
         self.fields["caption"].help_text = "One caption for the whole post."
-        self.fields["show_client_name"].help_text = "Shown only when selected."
         self.fields["layout"].choices = WebsiteGalleryPost.Layout.choices
         self.fields["accent"].choices = WebsiteGalleryPost.Accent.choices
         if self.instance.pk:
@@ -784,7 +789,7 @@ class WebsiteGalleryPostForm(forms.ModelForm):
             if upload.size > WEBSITE_GALLERY_MAX_UPLOAD_SIZE:
                 max_size_mb = WEBSITE_GALLERY_MAX_UPLOAD_SIZE // (1024 * 1024)
                 raise ValidationError(
-                    _("%(filename)s: project-gallery files must be %(max_size)s MB or smaller.")
+                    _("%(filename)s: public-content files must be %(max_size)s MB or smaller.")
                     % {"filename": upload.name, "max_size": max_size_mb}
                 )
             try:
@@ -819,18 +824,7 @@ class WebsiteGalleryPostForm(forms.ModelForm):
             and (not self.instance.pk or action == "publish")
         ):
             self.add_error("items_to_keep", _("Add at least one photo or video to this post."))
-        if existing_count and not self.project:
-            self.add_error("existing_assets", _("Choose a project before adding existing media."))
         return cleaned
-
-
-class WebsitePastProjectForm(forms.Form):
-    title = forms.CharField(
-        max_length=180,
-        strip=True,
-        label="Past project name",
-        help_text="This name appears on the public Projects page. Avoid client names and street addresses.",
-    )
 
 
 class ClientMediaAssetField(forms.ModelChoiceField):

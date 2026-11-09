@@ -1,5 +1,5 @@
 {% extends 'operations/base.html' %}
-{% block title %}Delete project post draft | Grand Coast{% endblock %}
+{% block title %}Delete public gallery post draft | Grand Coast{% endblock %}
 {% block body %}
 <main class="container publication-preview website-post-delete-confirm">
     <section class="content-editor-panel">
@@ -9,9 +9,8 @@
         <form method="post" action="{% url 'operations:website-post-delete' pk=post.pk %}" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="delete">
-            <input type="hidden" name="website_project" value="{{ post.project_id }}">
             <div class="detail-actions">
-                <a class="button button-outline" href="{% url 'operations:dashboard-section' section='content' %}?website_project={{ post.project_id }}&amp;content_page_focus=projects#publish-page-projects">Keep draft</a>
+                <a class="button button-outline" href="{% url 'operations:dashboard-section' section='content' %}?content_page_focus=projects#publish-page-projects">Keep draft</a>
                 <button class="button button-danger" type="submit">Delete draft</button>
             </div>
         </form>

@@ -343,6 +343,14 @@
         if (!options.skipAutoFocus && (window.location.hash || new URL(window.location.href).searchParams.has("content_page_focus"))) {
             alignContentPageStage(nav, stage);
         }
+        if (window.location.hash.indexOf("#website-post-item-") === 0) {
+            var sourceItem = document.getElementById(decodeURIComponent(window.location.hash.slice(1)));
+            if (sourceItem && stage.contains(sourceItem)) {
+                window.requestAnimationFrame(function () {
+                    sourceItem.scrollIntoView({ behavior: "auto", block: "center" });
+                });
+            }
+        }
     }
 
     function initTaskAssociationSelectors() {
@@ -2804,7 +2812,7 @@
                 || form.matches("[data-website-post-create], [data-website-post-save]")
                 || form.hasAttribute("onsubmit")
                 || form.hasAttribute("target")
-                || form.matches("[data-delete-form], .calendar-delete-form, .lead-detail-delete-form, [data-lead-permanent-delete-form], [data-lead-permanent-delete-confirmed]")
+                || form.matches("[data-delete-form], .calendar-delete-form, .lead-detail-delete-form, [data-lead-permanent-delete-form], [data-lead-permanent-delete-confirmed], [data-task-delete-form], [data-task-delete-fallback-form]")
             ) return;
 
             var submitter = event.submitter || null;
@@ -3875,11 +3883,131 @@
         });
     }
 
+    function initTaskDeleteConfirmation() {
+        const dialog = document.querySelector("[data-task-delete-dialog]");
+        if (!dialog) return;
+
+        const taskList = dialog.querySelector("[data-task-delete-list]");
+        const cancelButton = dialog.querySelector("[data-task-delete-cancel]");
+        const confirmButton = dialog.querySelector("[data-task-delete-confirm]");
+        if (!taskList || !cancelButton || !confirmButton) return;
+        if (dialog.open && typeof dialog.showModal === "function") {
+            dialog.removeAttribute("open");
+            dialog.showModal();
+        }
+
+        dialog.addEventListener("close", function () {
+            const form = dialog._taskDeleteForm;
+            const trigger = dialog._taskDeleteTrigger;
+            dialog._taskDeleteForm = null;
+            dialog._taskDeleteTrigger = null;
+            if (trigger && trigger.isConnected) trigger.focus();
+            if (form && form.isConnected) form.removeAttribute("aria-busy");
+        });
+
+        document.addEventListener("submit", function (event) {
+            const form = event.target;
+            if (!form.matches || !form.matches("[data-task-delete-form]")) return;
+            if (form.dataset.taskDeleteConfirmed === "true") {
+                delete form.dataset.taskDeleteConfirmed;
+                return;
+            }
+
+            if (typeof dialog.showModal !== "function") {
+                if (!window.confirm("Delete this completed task permanently?")) {
+                    event.preventDefault();
+                    return;
+                }
+                const confirmation = document.createElement("input");
+                confirmation.type = "hidden";
+                confirmation.name = "confirm_delete";
+                confirmation.value = "yes";
+                form.appendChild(confirmation);
+                return;
+            }
+
+            event.preventDefault();
+            dialog._taskDeleteForm = form;
+            dialog._taskDeleteTrigger = event.submitter || form.querySelector("button[type='submit'], input[type='submit']");
+            taskList.replaceChildren();
+            const title = form.querySelector("[data-task-delete-name]");
+            const item = document.createElement("li");
+            item.textContent = title ? (title.textContent || "").trim() : "Completed task";
+            taskList.appendChild(item);
+            if (!dialog.open) dialog.showModal();
+            cancelButton.focus();
+        });
+
+        document.addEventListener("click", function (event) {
+            const cancel = event.target.closest && event.target.closest("[data-task-delete-cancel]");
+            if (cancel) {
+                if (dialog.open) dialog.close();
+                return;
+            }
+
+            const confirm = event.target.closest && event.target.closest("[data-task-delete-confirm]");
+            if (!confirm || !dialog.open) return;
+            const form = dialog._taskDeleteForm;
+            if (!form || !form.isConnected) return;
+
+            event.preventDefault();
+            const confirmation = document.createElement("input");
+            confirmation.type = "hidden";
+            confirmation.name = "confirm_delete";
+            confirmation.value = "yes";
+            form.appendChild(confirmation);
+            form.dataset.taskDeleteConfirmed = "true";
+            form.setAttribute("aria-busy", "true");
+            confirm.disabled = true;
+            confirm.setAttribute("aria-busy", "true");
+            dialog.close();
+            if (typeof form.requestSubmit === "function") {
+                form.requestSubmit();
+            } else {
+                form.submit();
+            }
+        });
+    }
+
+    function initAdminSessionHeartbeat() {
+        var endpoint = document.body && document.body.dataset.adminSessionHeartbeatUrl;
+        if (!endpoint || typeof window.fetch !== "function") return;
+
+        var intervalMs = 4 * 60 * 1000;
+        var requestInFlight = false;
+        var stopped = false;
+
+        function refreshGate() {
+            if (stopped || requestInFlight) return;
+            requestInFlight = true;
+
+            window.fetch(endpoint, {
+                method: "POST",
+                credentials: "same-origin",
+                keepalive: true,
+                headers: {
+                    "X-CSRFToken": csrfToken(),
+                    "X-Requested-With": "XMLHttpRequest"
+                }
+            }).then(function (response) {
+                if (response.status === 401 || response.status === 403) stopped = true;
+            }).catch(function () {
+                // The next scheduled heartbeat can retry if the network recovers.
+            }).then(function () {
+                requestInFlight = false;
+            });
+        }
+
+        window.setInterval(refreshGate, intervalMs);
+    }
+
     function init() {
+        initAdminSessionHeartbeat();
         // Bind the admin-wide POST handler first so other optional UI setup cannot
         // leave ordinary save and upload forms falling back to full-page submits.
         initAdminAsyncForms();
         initLeadPermanentDeleteConfirmation();
+        initTaskDeleteConfirmation();
         initMediaPublishing();
         initAdminWorkspaceContent();
         initPublicPageMotion();

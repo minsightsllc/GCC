@@ -40,7 +40,6 @@ from .construction_services import (
     create_subcontractor_assignment,
     initialize_readiness,
     initialize_closeout,
-    initialize_warranty,
     project_financial_summary,
     record_cost,
     record_deposit,
@@ -53,7 +52,6 @@ from .construction_services import (
     record_subcontractor_assignment_status,
     request_material,
     resolve_problem_report,
-    resolve_warranty_item,
     set_milestone_status,
     submit_daily_report,
     submit_problem_report,
@@ -86,7 +84,6 @@ from .models import (
     Subcontractor,
     SubcontractorAssignment,
     Task,
-    WarrantyItem,
     WorkflowEvent,
 )
 from .notifications import queue_client_notifications, queue_employee_notifications
@@ -635,15 +632,24 @@ def _run_closeout(context, checks):
     closeout_items = list(project.closeout_items.filter(required=True).order_by("key"))
     for item in closeout_items:
         complete_closeout_item(item, actor=manager, notes="Verified in the full lifecycle simulation.", idempotency_key=_key(f"closeout:{item.key}"))
+    for milestone in project.milestones.filter(is_complete=False).order_by("sort_order"):
+        set_milestone_status(
+            milestone,
+            actor=manager,
+            is_complete=True,
+            idempotency_key=_key(f"complete-milestone:{milestone.sort_order}"),
+        )
     project.refresh_from_db()
-    warranty = project.warranty_items.order_by("created_at").first()
-    if warranty is None:
-        warranty, _created = initialize_warranty(project, actor=manager)
-    warranty = resolve_warranty_item(warranty, actor=manager, resolution="Warranty coverage initialized and simulation claim resolved.", idempotency_key=_key("warranty-resolve"))
-    warranty_retry = resolve_warranty_item(warranty, actor=manager, resolution="Retry of the same warranty resolution.", idempotency_key=_key("warranty-resolve"))
-    project.refresh_from_db()
-    _check(checks, "closeout advances to warranty without duplicate items", project.operational_phase == Project.OperationalPhase.WARRANTY and project.status == Project.Status.COMPLETE and warranty.status == WarrantyItem.Status.RESOLVED and warranty.pk == warranty_retry.pk and project.warranty_items.count() == 1, f"phase={project.operational_phase}, status={project.status}, warranty_status={warranty.status}, warranty_id={warranty.pk}, retry_id={warranty_retry.pk}, warranty_count={project.warranty_items.count()}")
-    return warranty
+    _check(
+        checks,
+        "final milestone archives the project without warranty work",
+        project.status == Project.Status.COMPLETE
+        and project.archived_at is not None
+        and project.operational_phase == Project.OperationalPhase.CLOSEOUT
+        and project.warranty_items.count() == 0,
+        f"phase={project.operational_phase}, status={project.status}, archived={project.archived_at is not None}, warranty_count={project.warranty_items.count()}",
+    )
+    return project
 
 
 def run_full_lifecycle():
@@ -654,9 +660,8 @@ def run_full_lifecycle():
         context = _run_inquiry(_create_accounts(), checks)
         context = _run_construction(context, checks)
         context = _run_financials_and_reporting(context, checks)
-        warranty = _run_closeout(context, checks)
+        project = _run_closeout(context, checks)
         accounts = context["accounts"]
-        project = context["project"]
         lead = context["lead"]
         client = context["client"]
         estimate = context["estimate"]
@@ -699,7 +704,6 @@ def run_full_lifecycle():
                 "payment_id": str(payment.pk),
                 "document_id": str(context["document"].pk),
                 "media_id": str(context["media"].pk),
-                "warranty_id": str(warranty.pk),
             },
             "metrics": {key: str(value) if isinstance(value, Decimal) else value for key, value in metrics.items()},
             "financials": {key: str(value) if isinstance(value, Decimal) else value for key, value in financials.items()},

@@ -70,7 +70,6 @@ from .models import (
     Subcontractor,
     SubcontractorAssignment,
     Task,
-    WarrantyItem,
     WorkflowEvent,
     validate_construction_document,
 )
@@ -96,7 +95,6 @@ CLOSEOUT_TEMPLATE = (
     ("closeout-documents", "documents", "Closeout documents delivered"),
     ("client-walkthrough", "client_walkthrough", "Client final walkthrough"),
     ("final-invoice", "final_invoice", "Final invoice reconciled"),
-    ("warranty", "warranty", "Warranty information delivered"),
 )
 
 
@@ -227,21 +225,46 @@ def initialize_closeout(project, *, actor=None):
     return created
 
 
-def initialize_warranty(project, *, actor=None):
-    if actor is not None and not can_manage_project_operations(actor, project):
-        raise PermissionDenied("You cannot initialize warranty for this project.")
-    warranty_until = timezone.localdate() + timedelta(days=365)
-    item, created = WarrantyItem.objects.get_or_create(
-        project=project,
-        title="Post-closeout warranty coverage",
-        defaults={
-            "description": "Track warranty requests and resolutions after closeout.",
-            "status": WarrantyItem.Status.OPEN,
-            "assigned_to": project.project_manager,
-            "warranty_until": warranty_until,
-        },
+def _complete_project_and_archive(project, *, actor, completion_source):
+    """Apply the shared completion transition for project workflows."""
+    if project.status == Project.Status.COMPLETE and project.archived_at:
+        return False
+
+    before = state_snapshot(
+        project,
+        ["status", "operational_phase", "next_step", "archived_at"],
     )
-    return item, created
+    project.operational_phase = Project.OperationalPhase.CLOSEOUT
+    project.status = Project.Status.COMPLETE
+    project.next_step = "Project archived"
+    project.save(
+        update_fields=[
+            "operational_phase",
+            "status",
+            "next_step",
+            "updated_at",
+        ]
+    )
+    after = state_snapshot(
+        project,
+        ["status", "operational_phase", "next_step", "archived_at"],
+    )
+    record_workflow_event(
+        "project_completed",
+        actor=actor,
+        related=project,
+        before_state=before,
+        after_state=after,
+        metadata={"completion_source": completion_source},
+        event_key_override=f"project-completed:{project.pk}",
+    )
+    record_activity(
+        "Project completed and archived",
+        project.title,
+        actor=actor,
+        project=project,
+    )
+    return True
 
 
 @transaction.atomic
@@ -2626,17 +2649,6 @@ def complete_closeout_item(item, *, actor, status=CloseoutItem.Status.COMPLETE, 
     locked.completed_at = timezone.now()
     locked.completed_by = actor
     locked.save()
-    if not locked.project.closeout_items.filter(
-        required=True,
-    ).exclude(status__in=[CloseoutItem.Status.COMPLETE, CloseoutItem.Status.NOT_APPLICABLE]).exists():
-        # Initialize coverage while the project is still operational. Saving
-        # Complete archives it immediately, after which only an Owner may make
-        # non-warranty changes to archived project records.
-        initialize_warranty(locked.project, actor=actor)
-        locked.project.operational_phase = Project.OperationalPhase.WARRANTY
-        locked.project.status = Project.Status.COMPLETE
-        locked.project.next_step = "Warranty support"
-        locked.project.save(update_fields=["operational_phase", "status", "next_step", "updated_at"])
     record_workflow_event(
         "closeout_item_completed",
         actor=actor,
@@ -2806,6 +2818,8 @@ def set_milestone_status(milestone, *, actor, is_complete, idempotency_key=None)
     locked = Milestone.objects.select_for_update().select_related("project").get(pk=milestone.pk)
     if not can_manage_project_operations(actor, locked.project):
         raise PermissionDenied("You cannot update this project milestone.")
+    if locked.project.archived_at:
+        raise PermissionDenied("Archived projects are read-only.")
     if idempotency_key and WorkflowEvent.objects.filter(
         idempotency_key=_workflow_event_key("milestone_status_updated", locked, idempotency_key),
     ).exists():
@@ -2817,6 +2831,16 @@ def set_milestone_status(milestone, *, actor, is_complete, idempotency_key=None)
     locked.is_complete = complete
     locked.completed_at = timezone.now() if complete else None
     locked.save(update_fields=["is_complete", "completed_at"])
+    if (
+        complete
+        and not locked.project.is_portfolio_only
+        and not locked.project.milestones.filter(is_complete=False).exists()
+    ):
+        _complete_project_and_archive(
+            locked.project,
+            actor=actor,
+            completion_source="milestones",
+        )
     released_draws = []
     if complete:
         schedules = PaymentSchedule.objects.select_for_update().filter(
@@ -3003,60 +3027,6 @@ def record_subcontractor_assignment_status(assignment, *, actor, status, idempot
         project=locked.project,
         before_state=before,
         after_state=state_snapshot(locked, ["status"]),
-        idempotency_key=idempotency_key,
-    )
-    return locked
-
-
-@transaction.atomic
-def resolve_warranty_item(
-    item,
-    *,
-    actor,
-    resolution,
-    status=WarrantyItem.Status.RESOLVED,
-    idempotency_key=None,
-):
-    locked = WarrantyItem.objects.select_for_update().select_related("project").get(pk=item.pk)
-    assigned_archived_warranty_actor = bool(
-        locked.project.archived_at
-        and is_staff_user(actor)
-        and locked.assigned_to_id == actor.pk
-    )
-    if idempotency_key and WorkflowEvent.objects.filter(
-        idempotency_key=_workflow_event_key("warranty_item_resolved", locked, idempotency_key),
-    ).exists():
-        # An assigned employee may safely retry the same completed command.
-        # The existing event makes this a no-op; it cannot change the record.
-        if not can_manage_project_operations(actor, locked.project) and not assigned_archived_warranty_actor:
-            raise PermissionDenied("You cannot resolve this warranty item.")
-        return locked
-    assigned_archived_warranty = bool(
-        assigned_archived_warranty_actor
-        and locked.status in {WarrantyItem.Status.OPEN, WarrantyItem.Status.IN_PROGRESS}
-    )
-    if not can_manage_project_operations(actor, locked.project) and not assigned_archived_warranty:
-        raise PermissionDenied("You cannot resolve this warranty item.")
-    if status not in {WarrantyItem.Status.RESOLVED, WarrantyItem.Status.CLOSED}:
-        raise ValidationError("Warranty items can only be resolved or closed by this command.")
-    resolution = str(resolution or "").strip()
-    if not resolution:
-        raise ValidationError("A warranty resolution is required.")
-    if len(resolution) > 20000:
-        raise ValidationError("Warranty resolution is too long.")
-    before = state_snapshot(locked, ["status", "resolution", "resolved_at", "resolved_by_id"])
-    locked.status = status
-    locked.resolution = resolution
-    locked.resolved_at = timezone.now()
-    locked.resolved_by = actor
-    locked.save()
-    record_workflow_event(
-        "warranty_item_resolved",
-        actor=actor,
-        related=locked,
-        project=locked.project,
-        before_state=before,
-        after_state=state_snapshot(locked, ["status", "resolution", "resolved_at", "resolved_by_id"]),
         idempotency_key=idempotency_key,
     )
     return locked

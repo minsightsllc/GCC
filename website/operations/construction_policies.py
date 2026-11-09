@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 
-from .models import EmployeeProfile, Estimate, Lead, Project, Subcontractor, WarrantyItem
+from .models import EmployeeProfile, Estimate, Lead, Project, Subcontractor
 
 
 STAFF_ROLES = {"Owner", "Manager", "Office", "Field", "Sales"}
@@ -145,17 +145,7 @@ def visible_projects(user):
 def can_view_project(user, project):
     if not getattr(project, "pk", None):
         return False
-    if visible_projects(user).filter(pk=project.pk).exists():
-        return True
-    return bool(
-        project.archived_at
-        and is_staff_user(user)
-        and WarrantyItem.objects.filter(
-            project=project,
-            assigned_to=user,
-            status__in=[WarrantyItem.Status.OPEN, WarrantyItem.Status.IN_PROGRESS],
-        ).exists()
-    )
+    return visible_projects(user).filter(pk=project.pk).exists()
 
 
 def require_project_access(user, project, *, mutate=False):
