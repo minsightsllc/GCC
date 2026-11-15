@@ -688,21 +688,21 @@ class GrandCoastAdminSite(UnfoldAdminSite):
             if request.method == "POST":
                 if form.is_valid() and verify_admin_pin(pending_user, form.cleaned_data["pin"]):
                     return _complete_admin_sign_in(request, pending_user, next_url)
-                if form.is_valid():
-                    register_gate_failure(request)
-                    form.add_error(None, "That PIN could not be verified.")
-                    try:
-                        record_admin_security_event(
-                            request,
-                            AdminSecurityEvent.EventType.PIN_FAILURE,
-                            user=pending_user,
-                            attempted_identifier=pending_user.username,
-                            detail="The administrator PIN could not be verified.",
-                        )
-                    except Exception:
-                        logger.exception(
-                            "Unable to record an administrator PIN failure event."
-                        )
+                register_gate_failure(request)
+                form.errors.clear()
+                form.add_error(None, "That PIN could not be verified.")
+                try:
+                    record_admin_security_event(
+                        request,
+                        AdminSecurityEvent.EventType.PIN_FAILURE,
+                        user=pending_user,
+                        attempted_identifier=pending_user.username,
+                        detail="The administrator PIN could not be verified.",
+                    )
+                except Exception:
+                    logger.exception(
+                        "Unable to record an administrator PIN failure event."
+                    )
                 if admin_gate_locked(request):
                     form.add_error(None, "Too many attempts. Try again in 15 minutes.")
             return self._render_admin_page(

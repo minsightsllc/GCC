@@ -1502,16 +1502,10 @@ class AdminGateIdentifierForm(forms.Form):
 class AdminPinForm(forms.Form):
     pin = forms.CharField(
         label="Admin PIN",
-        max_length=6,
-        min_length=6,
+        max_length=64,
+        required=False,
         widget=forms.PasswordInput(attrs={"inputmode": "numeric", "autocomplete": "one-time-code"}),
     )
-
-    def clean_pin(self):
-        pin = self.cleaned_data["pin"]
-        if not re.fullmatch(r"\d{6}", pin):
-            raise ValidationError(_("Enter the six-digit PIN."))
-        return pin
 
 
 class AdminOtpForm(forms.Form):

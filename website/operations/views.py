@@ -930,13 +930,15 @@ def mobile_owner_pin(request):
         return _render_mobile_owner_challenge(request, form=form, step="pin", status=403)
 
     locked = mobile_owner_factor_locked(request, "pin")
-    if request.method == "POST" and not locked and form.is_valid():
-        if verify_admin_pin(user, form.cleaned_data["pin"]):
+    if request.method == "POST" and not locked:
+        form_is_valid = form.is_valid()
+        if form_is_valid and verify_admin_pin(user, form.cleaned_data["pin"]):
             if confirmed_totp_device(user) is not None:
                 set_mobile_owner_challenge(request, user, "otp")
                 return redirect(_mobile_owner_challenge_url("mobile-owner-otp"))
             return _complete_mobile_owner_login(request, user)
         locked = _mobile_owner_factor_failure(request, user, "pin")
+        form.errors.clear()
         form.add_error(None, "That verification code could not be verified.")
 
     if locked:

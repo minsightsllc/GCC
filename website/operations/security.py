@@ -533,8 +533,10 @@ def pin_is_enabled(user):
 
 
 def verify_admin_pin(user, pin):
+    if not isinstance(pin, str) or len(pin) != 6 or not pin.isdecimal():
+        return False
     profile = admin_security_profile(user)
-    return bool(profile.pin_enabled and profile.pin_hash and check_password(pin or "", profile.pin_hash))
+    return bool(profile.pin_enabled and profile.pin_hash and check_password(pin, profile.pin_hash))
 
 
 def resolve_admin_identifier(identifier):
