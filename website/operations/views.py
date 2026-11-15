@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import calendar as calendar_module
 import json
+import logging
 import mimetypes
 import uuid
 from datetime import date, datetime, time, timedelta
@@ -223,6 +224,8 @@ from .email_delivery import (
     queue_employee_invite_email,
 )
 
+
+logger = logging.getLogger(__name__)
 
 PUBLIC_PAGES = {"home", "services", "projects", "process", "contact"}
 DASHBOARD_SECTIONS = {"overview", "clients", "leads", "estimates", "projects", "tasks", "calendar", "time", "media", "documents", "team", "notifications", "content"}
@@ -866,21 +869,26 @@ def _complete_mobile_owner_login(request, user):
 
 def _mobile_owner_factor_failure(request, user, factor):
     locked = register_mobile_owner_failure(request, factor)
-    record_admin_security_event(
-        request,
-        (
-            AdminSecurityEvent.EventType.PIN_FAILURE
-            if factor == "pin"
-            else AdminSecurityEvent.EventType.OTP_FAILURE
-        ),
-        user=user,
-        attempted_identifier=user.get_username(),
-        detail=(
-            "The mobile Operations admin PIN could not be verified."
-            if factor == "pin"
-            else "The mobile Operations authenticator code could not be verified."
-        ),
-    )
+    try:
+        record_admin_security_event(
+            request,
+            (
+                AdminSecurityEvent.EventType.PIN_FAILURE
+                if factor == "pin"
+                else AdminSecurityEvent.EventType.OTP_FAILURE
+            ),
+            user=user,
+            attempted_identifier=user.get_username(),
+            detail=(
+                "The mobile Operations admin PIN could not be verified."
+                if factor == "pin"
+                else "The mobile Operations authenticator code could not be verified."
+            ),
+        )
+    except Exception:
+        logger.exception(
+            "Unable to record a mobile administrator %s failure event.", factor
+        )
     return locked
 
 

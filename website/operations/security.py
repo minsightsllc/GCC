@@ -495,7 +495,8 @@ def record_admin_security_event(
     )
     if email_status == AdminSecurityEvent.EmailStatus.PENDING:
         transaction.on_commit(
-            lambda event_id=event.pk: dispatch_admin_security_email(event_id)
+            lambda event_id=event.pk: dispatch_admin_security_email(event_id),
+            robust=True,
         )
     return event
 
