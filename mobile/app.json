@@ -8,7 +8,10 @@
     "scheme": "grandcoast",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.grandcoastconstruction.app"
+      "bundleIdentifier": "com.grandcoastconstruction.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.grandcoastconstruction.app"
@@ -35,7 +38,8 @@
       [
         "expo-notifications",
         {
-          "defaultChannel": "schedule-updates"
+          "defaultChannel": "schedule-updates",
+          "enableRemoteNotifications": true
         }
       ],
       [
@@ -49,7 +53,10 @@
       ]
     ],
     "extra": {
-      "expoProjectId": "REPLACE_WITH_EXPO_PROJECT_ID"
+      "expoProjectId": "REPLACE_WITH_EXPO_PROJECT_ID",
+      "eas": {
+        "projectId": "60e505f1-7fbf-432c-8248-fdd610af7146"
+      }
     }
   }
 }

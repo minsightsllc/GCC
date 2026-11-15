@@ -21,7 +21,7 @@ This is an Expo-managed React Native app. It keeps the existing Django website i
 From PowerShell:
 
 ~~~powershell
-cd C:\dev\GCC\mobile
+cd .\mobile
 npm start
 ~~~
 
@@ -31,7 +31,7 @@ The npm start command automatically loads mobile/.env.mobile. Set EXPO_PUBLIC_WE
 - Android Emulator: http://10.0.2.2:8000
 - Physical phone: http://YOUR-COMPUTER-LAN-IP:8000
 
-Start Django separately from C:\dev\GCC\website:
+Start Django separately from .\website:
 
 ~~~powershell
 .\venv\Scripts\python.exe manage.py runserver 0.0.0.0:8000
@@ -84,18 +84,9 @@ $env:GCC_MOBILE_OWNER_PUSH_ENABLED = "true"
 $env:GCC_AI_ENABLED = "false"
 ~~~
 
-The app loads `/accounts/login/?mobile=1`, preserves the WebView session cookie, and
-opens `/dashboard/` after successful authentication. If the account has administrator
-PIN or TOTP enabled, both factors are completed before Django creates the session. The
-app never opens `/gccad/`; attempted admin-catalog navigation is redirected to the
-Command Center. Normal browser login still rejects superuser credentials, while the
-existing protected `/gccad/` browser gate remains compatible.
+The app loads `/accounts/login/?mobile=1`, preserves the WebView session, and opens the Operations workspace after successful authentication. If administrator PIN or TOTP is enabled, both checks finish before Django creates the session. Admin-catalog navigation remains inside Operations. Normal browser login still rejects superuser credentials, and browser administration stays behind its protected gate.
 
-Owner push registration is accepted only when the server flag is enabled and the
-request is identified as the Grand Coast mobile WebView. The server remains authoritative
-if the optional client setting is omitted. Push destinations are limited to authorized
-Operations paths and fall back to the Operations Notifications page; they never open
-`/gccad/`.
+Owner push registration is accepted only when the server flag is enabled and the request is identified as the Grand Coast mobile WebView. The server remains authoritative if the optional client setting is omitted. Push destinations are limited to authorized Operations paths and fall back to the Operations Notifications page.
 
 Use this sequence for a disposable development test:
 
@@ -103,13 +94,9 @@ Use this sequence for a disposable development test:
 2. Start the Expo app with `EXPO_PUBLIC_WEB_APP_URL` pointing to the reachable Django
    development URL.
 3. Sign in as the existing temporary superuser and complete PIN/TOTP if prompted.
-4. Verify the Command Center, Operations drawer, owner financial visibility, logout,
-   and `/gccad/` redirect behavior.
+4. Verify the Command Center, Operations drawer, owner financial visibility, logout, and that admin-catalog navigation returns to Operations.
 5. Enable push only after native notification credentials are configured; verify device
    registration, an internal notification destination, and deactivation on logout.
 6. Turn the flags off and verify the app returns to the existing compatibility behavior.
 
-Never place passwords, PINs, OTP codes, session values, recovery tokens, Django CSRF
-secrets, or push credentials in `mobile/.env.mobile`, native storage, screenshots, or
-committed files. The same admin credentials remain usable through the private browser
-admin gate by design.
+Never place passwords, PINs, OTP codes, session values, recovery tokens, Django CSRF secrets, or push credentials in `mobile/.env.mobile`, native storage, screenshots, or committed files. Browser administration remains protected by its separate verification flow.

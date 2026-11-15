@@ -37,7 +37,7 @@ The application now includes:
 - Public project detail pages and gallery readiness
 - Content Studio for public website content
 - Optional Google Review link
-- Unfold for the private /gccad/ interface
+- Unfold for the private Django Administration interface
 - Operations search from the Unfold admin home
 
 I intentionally did not add Stripe, payment processing, payment webhooks, card collection, contact-form email notifications, external calendar synchronization, payroll functionality, or geolocation tracking.
@@ -81,7 +81,7 @@ The old demo app has been retired. Old /demo/... links only redirect to the curr
 I open PowerShell and move into the Django project:
 
 ~~~powershell
-cd C:\dev\GCC\website
+cd .\website
 ~~~
 
 If I need to create the virtual environment from scratch, I run:
@@ -144,13 +144,13 @@ I create a superuser if I do not already have one:
 
 I use that account for:
 
-- The separate Django/Unfold administration area at /gccad/
+- The separate private Django/Unfold administration area
 - The established Operations workspace at /dashboard/, with Projects as the canonical project record
 - Employee access, assignments, schedules, and visibility controls
 - Local setup and data inspection
 
 
-Only an active superuser can enter /gccad/ or /dashboard/. The seed command automatically places an existing superuser in the Owner group, creates an EmployeeProfile for staff accounts, and creates a disabled AdminSecurityProfile for each superuser. The Owner group is reserved for this account; employee invitations offer Manager, Office, Sales, and Field.
+Only an active superuser can enter Django Administration or /dashboard/. The seed command automatically places an existing superuser in the Owner group, creates an EmployeeProfile for staff accounts, and creates a disabled AdminSecurityProfile for each superuser. The Owner group is reserved for this account; employee invitations offer Manager, Office, Sales, and Field.
 
 ## 4. I seed the local presentation data
 
@@ -173,13 +173,7 @@ The seed command creates or preserves sample:
 - Tasks and activity entries
 - Site content
 
-For a local client-portal walkthrough, I can create the seeded Maya client login by passing a password explicitly:
-
-~~~powershell
-.\venv\Scripts\python.exe manage.py seed_operations --client-password "ChangeThisLocalOnly123!"
-~~~
-
-That password is only for my local presentation database. I do not put credentials in source control, and the command has no hardcoded default password.
+For a local client-portal walkthrough, create a temporary client login using a password supplied only in your local workflow. Keep the value out of documentation, command examples, and source control. The seed command has no default password.
 
 The command also creates these groups idempotently:
 
@@ -210,7 +204,6 @@ I then open:
 - Preserved workspace overview: http://127.0.0.1:8000/dashboard/overview/
 - Employee Team workspace: http://127.0.0.1:8000/team/
 - Authenticated client portal: http://127.0.0.1:8000/portal/
-- Owner-only administration launchpad: http://127.0.0.1:8000/gccad/
 - Sign-in page: http://127.0.0.1:8000/accounts/login/
 
 ## 6. I understand the account permissions
@@ -223,11 +216,11 @@ I use an active superuser as the Owner. The Owner can use the full Operations wo
 
 ### Manager
 
-A Manager uses /team/ and cannot enter /dashboard/ or /gccad/. A Manager can view the complete Team calendar, including assigned employee names, and work with their own permitted assigned projects, tasks, internal reports, personal time entries, and clock-in/out. The calendar is read-only for Managers; they cannot create or edit schedules, change assignments, change employee access, or publish client-visible or public material.
+A Manager uses /team/ and cannot enter /dashboard/ or Django Administration. A Manager can view the complete Team calendar, including assigned employee names, and work with their own permitted assigned projects, tasks, internal reports, personal time entries, and clock-in/out. The calendar is read-only for Managers; they cannot create or edit schedules, change assignments, change employee access, or publish client-visible or public material.
 
 ### Office
 
-An Office user uses /team/ and cannot enter /dashboard/ or /gccad/. Office visibility is assignment-scoped: assigned projects, personally relevant tasks, assigned schedule events, relevant client context, internal reports, personal time entries, and clock-in/out. Office users cannot view another employee's schedule or change anyone's access, assignments, or publication visibility.
+An Office user uses /team/ and cannot enter /dashboard/ or Django Administration. Office visibility is assignment-scoped: assigned projects, personally relevant tasks, assigned schedule events, relevant client context, internal reports, personal time entries, and clock-in/out. Office users cannot view another employee's schedule or change anyone's access, assignments, or publication visibility.
 
 ### Sales
 
@@ -720,11 +713,8 @@ The Google Review field is a normal external URL. If it is blank, the public rev
 
 ## 21. I use the native Unfold administration
 
-I open:
+I use Django Administration only with the Owner account for low-level configuration.
 
-~~~text
-/gccad/
-~~~
 
 Unfold is the lower-level Django administration interface. It is separate from the branded Operations workspace at /dashboard/, and both are restricted to the active Owner superuser.
 
@@ -757,37 +747,6 @@ The Unfold admin search is extended to search Operations records, including:
 
 When I select an Operations result, it opens the branded dashboard or Team workspace instead of sending me to an unrelated native edit page.
 
-## 21A. I secure the private administration and install the PWA
-
-I use the private administration entry at:
-
-~~~text
-/gccad/
-~~~
-
-The old /admin/ path intentionally returns 404. The public /accounts/login/ page is for employee and client accounts; it rejects superuser credentials with the same generic invalid-login response as any failed login. I do not reveal the private administration route through public navigation, the regular login page, or recovery pages.
-
-When I open /gccad/, I first enter the administrator username or email. If that superuser has enabled PIN protection, I enter the six-digit PIN before the password form. If authenticator verification is enabled, I enter a fresh code from the authenticator app after the password is accepted. Direct requests to the login, model pages, or authenticator page cannot skip the gate.
-
-After I sign in, I can open Security settings from the Unfold account area. I can enable or disable my own PIN and enroll or disable my own authenticator app without re-entering credentials. PIN setup uses two six-digit fields, and authenticator setup displays a QR code that I scan with my app before choosing the enable button. Existing superusers start with PIN and authenticator protection disabled until I turn them on.
-
-If I forget the administrator password, I choose the password-recovery link on the private login or access screen and submit the verified administrator email. The form only proceeds for an active superuser email. An unmatched email stays on the form and shows the remaining attempts; after five unmatched submissions, that browser is paused for 15 minutes. A matching request uses the configured email backend to send a one-time link that expires after one hour. Password recovery changes only the password, does not disable PIN or authenticator protection, and never signs me in automatically.
-
-If I forget the PIN or lose the authenticator, I choose the separate recovery link on the private access screen and submit the verified administrator email. The form only proceeds for an active superuser email. An unmatched email stays on the form and shows the remaining attempts; after five unmatched submissions, that browser is paused for 15 minutes. A matching request uses the configured email backend to send a one-time recovery link that expires after 30 minutes. Recovery lets me choose a new six-digit PIN, disables authenticator verification, revokes existing administrator sessions, and never signs me in automatically. Locally, email uses the console backend; production SMTP values come from environment variables.
-
-The Security settings page also provides the active Owner superuser with an administration access watch. It records invalid administrator identifiers, passwords, PINs, authenticator codes, recovery verification failures, blocked attempts, and successful administrator sign-ins with the source IP, route, user agent, account when known, review state, and email-delivery state. It never records a password, PIN, authenticator code, session value, or recovery token. From that page I can search and review events, manually block an IP address for administration routes, lock an administrator's next sign-in, mark events reviewed, and reversibly unblock a target. Existing signed-in administrator sessions remain available so an accidental IP block can be removed. A signed-in administrator cannot lock their own account.
-
-Failed administration authentication and security-verification events can send alerts to every active staff superuser with a non-empty, valid email address. Delivery is queued after the event is committed, so an SMTP failure never changes the login response. Configure `DEFAULT_FROM_EMAIL` and the existing Django email settings to enable delivery. The emergency `ADMIN_SECURITY_EMAIL_ALERTS_ENABLED=false` switch preserves event records while suppressing alert delivery. Because the alert policy intentionally emails every failed attempt, a brute-force attack can create substantial email volume; use a monitored security mailbox and review the dashboard as the primary audit trail. Failed or unavailable deliveries can be retried with:
-
-~~~powershell
-.\venv\Scripts\python.exe manage.py dispatch_admin_security_emails --limit 100
-~~~
-
-The administration security controls use `REMOTE_ADDR` by default. I leave `ADMIN_TRUSTED_PROXY_IPS` empty unless a known reverse proxy is terminating requests. Only explicitly listed proxy IPs are allowed to provide `X-Forwarded-For` or `Forwarded` client information; spoofed forwarding headers from other sources are ignored. For a trusted proxy deployment, I provide a comma-separated list of the proxy addresses, for example `203.0.113.10,2001:db8::10`. Blocks apply only to administration access and do not block employee, client, public, or other account routes.
-
-The website is also installable as a Progressive Web App. Public pages register /service-worker.js and reference /manifest.webmanifest. Public static assets can be cached for faster repeat visits, while public navigation uses the network first and falls back to /offline/. The service worker never caches POST requests, credentials, CSRF tokens, administrator pages, Team pages, client portal pages, account pages, private documents, or private media. Private routes require a live connection.
-
-I can install the PWA from the browser’s install prompt or address-bar install control. The application name is Grand Coast Construction, it opens at /, and it uses the existing Grand Coast logo and navy, blue, gold, and white color system.
 
 ## 22. I understand local file storage and production storage
 
@@ -855,7 +814,7 @@ the admin UI.
 For production security-alert delivery, I also set the existing Django SMTP settings and the alert controls:
 
 ~~~powershell
-$env:DEFAULT_FROM_EMAIL = 'security@grandcoastconstruction.com'
+$env:DEFAULT_FROM_EMAIL = 'notifications@example.com'
 $env:EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 $env:EMAIL_HOST = 'smtp.example.com'
 $env:EMAIL_PORT = '587'
@@ -865,7 +824,7 @@ $env:EMAIL_USE_TLS = 'true'
 $env:EMAIL_USE_SSL = 'false'
 $env:ADMIN_SECURITY_EMAIL_ALERTS_ENABLED = 'true'
 # Only when a known reverse proxy is in front of Django:
-$env:ADMIN_TRUSTED_PROXY_IPS = '203.0.113.10'
+$env:ADMIN_TRUSTED_PROXY_IPS = '<trusted-proxy-ip>'
 ~~~
 
 `DEFAULT_FROM_EMAIL` and `EMAIL_HOST`/`EMAIL_PORT`/`EMAIL_HOST_USER`/`EMAIL_HOST_PASSWORD` must be configured for delivery. I keep SMTP credentials out of source control. I set `ADMIN_TRUSTED_PROXY_IPS` only to actual proxy addresses, never to a broad network range.
@@ -974,7 +933,7 @@ After starting the server, I test the application in this order.
 7. I update a task.
 8. I add an internal project update.
 9. I clock in and clock out.
-10. I confirm that the employee cannot open /dashboard/, /gccad/, or another employee's information, and cannot create or edit schedules.
+10. I confirm that the employee cannot open /dashboard/, Django Administration, or another employee's information, and cannot create or edit schedules.
 
 ### Client workflow
 
@@ -991,7 +950,7 @@ After starting the server, I test the application in this order.
 
 ### Unfold workflow
 
-1. I open /gccad/ as the Owner.
+1. I open Django Administration as the Owner.
 2. I confirm the Grand Coast logo and colors.
 3. I use the admin search for a known lead, project, estimate, or client.
 4. I click the result.
@@ -1016,9 +975,9 @@ I check at least one desktop size and one narrow mobile size. I verify:
 I verify that:
 
 - Anonymous visitors can view public pages but not staff or client workspaces.
-- Only the active Owner superuser can access /dashboard/ and /gccad/.
+- Only the active Owner superuser can access /dashboard/ and Django Administration.
 - Managers, Office, and Field employees can access only the permitted /team/ records.
-- Clients cannot access /dashboard/, /team/, or /gccad/.
+- Clients cannot access /dashboard/, /team/, or Django Administration.
 - Employees cannot access another employee's schedule, access controls, assignments, or private records.
 - Public pages expose no Operations or Client Portal destination links.
 - Managers can view the full Team calendar but cannot create or edit its schedule events.
@@ -1127,11 +1086,10 @@ behavior.
 
 ### Emulator setup
 
-The launcher defaults to MinIO at 127.0.0.1:9000 with the following
-development-only values:
+The launcher defaults to MinIO at 127.0.0.1:9000. Before starting, set unique local-only values for MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in the current process or a local secret manager. Avoid default credentials and never reuse production values:
 
 ~~~powershell
-docker run --name gcc-certification-minio -p 9000:9000 -p 9001:9001 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio server /data --console-address ":9001"
+docker run --name gcc-certification-minio -p 9000:9000 -p 9001:9001 -e MINIO_ROOT_USER -e MINIO_ROOT_PASSWORD minio/minio server /data --console-address ":9001"
 ~~~
 
 The launcher creates the gcc-certification bucket when it does not exist and
@@ -1158,7 +1116,7 @@ $env:USE_SUPABASE_STORAGE = "true"
 $env:SUPABASE_S3_ENDPOINT = "https://<development-s3-endpoint>"
 $env:SUPABASE_S3_ACCESS_KEY = "<development-only-key>"
 $env:SUPABASE_S3_SECRET_KEY = "<development-only-secret>"
-$env:SUPABASE_STORAGE_BUCKET = "gcc-development-private"
+$env:SUPABASE_STORAGE_BUCKET = "<development-bucket-name>"
 $env:SUPABASE_S3_REGION = "<development-region>"
 ~~~
 
@@ -1439,92 +1397,13 @@ Troubleshooting:
 AI remains disabled for every development, certification, and staging run.
 
 
-## 31. Disposable manual-test account logins
+## 31. Disposable manual testing
 
-The following accounts are seeded only in the disposable manual-certification
-database. They are intended to make the complete manual workflow testable
-without manually creating employees or accepting invitation links.
-
-These credentials are fake, temporary, and must never be used in staging,
-production, or with real client information.
-
-| Name | Role | Login email / username | Password | Login location |
-| --- | --- | --- | --- | --- |
-| Manual Owner | Owner / Admin | `owner@manual.test` | `GccManual-Owner-2026!` | `/gccad/` |
-| Mike Rivera | Manager | `manager@manual.test` | `GccManual-Manager-2026!` | `/accounts/login/` |
-| Olivia Bennett | Office | `office@manual.test` | `GccManual-Office-2026!` | `/accounts/login/` |
-| Ethan Cole | Field | `field@manual.test` | `GccManual-Field-2026!` | `/accounts/login/` |
-| Sam Lopez / Harbor Electrical LLC | Subcontractor | `subcontractor@manual.test` | `GccManual-Subcontractor-2026!` | `/accounts/login/` |
-| Taylor Unassigned | Unassigned Field test user | `unauthorized@manual.test` | `GccManual-Unassigned-2026!` | `/accounts/login/` |
-
-The Owner account is a superuser and enters through the protected administration
-gate at `/gccad/`. Managers, Office, Field, Clients, and Subcontractors use
-the normal account login flow. The `unauthorized@manual.test` account is an
-active Field user intentionally left unassigned for project-boundary tests.
-
-The temporary server is available at:
-
-~~~text
-http://127.0.0.1:8001/
-~~~
-
-The disposable database is:
-
-~~~text
-C:\Users\isaia\AppData\Local\Temp\gcc-manual-c98a3fc4e2864860ab697369c4484dbe\db.sqlite3
-~~~
-
-The database is configured with:
-
-- AI disabled (`GCC_AI_ENABLED=false`).
-- Execution-loop testing enabled.
-- Local email and push delivery disabled.
-- No pending employee invitations.
-- Only Owner, Manager, Office, and Field internal roles.
-- An active Harbor Electrical LLC subcontractor portal identity.
-
-The clean workflow state is:
-
-~~~text
-Leads:       0
-Estimates:   0
-Projects:    0
-Tasks:       0
-Site visits: 0
-Pending invites: 0
-Clients:      0
-~~~
-
-The client portal identity is intentionally not pre-seeded. Create a dummy
-Client record through the Operations workspace, create its client portal
-invite, and complete that invite with a temporary password. Use the same
-client email for the website inquiry so lead conversion can reuse the client
-record instead of creating a duplicate.
-
-### Manual test start
-
-1. Open `/gccad/` and sign in as `owner@manual.test`.
-2. Open Overview, then use Projects to manage a project record.
-3. Create a dummy Client record and client portal invite through Operations.
-4. Complete the client invite in a separate browser profile and establish a
-   temporary client password.
-5. Submit a website inquiry using that same client email.
-6. Convert the lead and create the estimate, agreement, deposit, and project.
-7. In the Projects tab, select the project and assign:
-   - `manager@manual.test` as Project Manager.
-   - `office@manual.test` as Office staff.
-   - `field@manual.test` as Field staff.
-8. Log in separately as each employee and verify their scoped workspace.
-9. Use the Client account to approve selections, change orders, and review
-   shared project information.
-10. Verify the shared milestone sequence, project updates, employee tasks,
-    and the currently implemented project status workflow. Additional
-    readiness and closeout steps await Owner requirements.
-
-Refresh or sign out and back in if a browser session was open before the
-accounts were seeded. The temporary credentials and database are disposable;
-delete the exact generated `gcc-manual-*` directory after testing and never
-delete a broad temporary or workspace directory.
+Use a fresh local database and create test accounts through the application's normal
+setup and invitation flows. Supply unique temporary passwords locally and keep them
+out of documentation, screenshots, and source control. Use synthetic client and project
+data, keep AI and external email/push delivery disabled, and remove only the generated
+test data when finished.
 
 ## 32. Estimate details stay in the service your team chooses
 
@@ -1603,9 +1482,7 @@ Google attribution plus a direct “Read on Google” link.
 
 ## 34. Mobile owner Operations access
 
-The existing admin/superuser account can optionally use the Expo WebView as the Owner
-workspace. This does not create a new Owner role, does not expose the `/gccad/` admin
-catalog in the app, and does not change normal browser login behavior.
+The existing superuser account can optionally use the Expo WebView as the Owner workspace. This does not create a new Owner role or expose the Django admin catalog in the app.
 
 Enable it only for a development or staging test session:
 
@@ -1615,12 +1492,7 @@ $env:GCC_MOBILE_OWNER_PUSH_ENABLED = "true"
 $env:GCC_AI_ENABLED = "false"
 ~~~
 
-The mobile app opens `/accounts/login/?mobile=1`. The owner must still complete the
-existing administrator PIN and authenticator verification steps when those protections
-are enabled. Only after the factors succeed is the Django session created, and the app
-lands at `/dashboard/` (the standard Overview). The app redirects any `/gccad/` navigation
-back to `/dashboard/`; browser access to `/gccad/` remains available through its existing
-protected administration gate.
+The mobile app opens `/accounts/login/?mobile=1` and creates a Django session only after the enabled administrator verification steps succeed. It lands on `/dashboard/`; admin-catalog attempts in the app return to the standard Operations workspace. Browser administration remains behind its existing protected gate.
 
 The mobile owner flags are disabled by default. Keep the server-side flags authoritative;
 the optional mobile setting below only controls whether the native shell attempts owner
@@ -1632,7 +1504,7 @@ EXPO_PUBLIC_MOBILE_OWNER_PUSH_ENABLED=true
 
 Owner push registration is accepted only for a marked Grand Coast mobile WebView while
 `GCC_MOBILE_OWNER_PUSH_ENABLED=true`. Push links are permission-checked Operations paths
-and never open `/gccad/`. Logout deactivates the registered device. Passwords, PINs,
+and never open Django Administration. Logout deactivates the registered device. Passwords, PINs,
 authenticator codes, session cookies, recovery tokens, and push credentials are not
 stored in native plaintext storage or written to logs.
 
@@ -1667,7 +1539,7 @@ and copy the Postgres resource ID from its Render dashboard page. If a service c
 be reached, the admin home shows an unavailable state instead of displaying zero usage.
 
 After adding or changing the variables, redeploy the Render web service. The meters
-appear at the top of the protected Django Administration home (`/gccad/`).
+appear at the top of the protected Django Administration home.
 
 ### Mobile owner validation checklist
 
@@ -1677,16 +1549,10 @@ appear at the top of the protected Django Administration home (`/gccad/`).
    the standard Operations Overview.
 3. If enabled, verify the PIN page appears before a session exists; then verify the
    authenticator page appears before a session exists.
-4. Open the app drawer and verify Operations links work while `/gccad/` redirects to
-   the standard Overview.
-5. Enable owner push, register a device, open an Operations notification, and verify the
-   destination is internal and not `/gccad/`.
+4. Open the app drawer and verify Operations links work and admin-catalog attempts return to the standard Overview.
+5. Enable owner push, register a device, open an Operations notification, and verify the destination stays within Operations.
 6. Log out and verify the device is deactivated.
 7. Repeat the same checks with the flags disabled and confirm employee and client login
    behavior is unchanged.
 
-Do not enable these flags in production until HTTPS, secure cookies, Turnstile, PIN/TOTP,
-push credentials, audit events, and logout behavior have been verified in staging. The
-same superuser credentials can still access `/gccad/` in a browser by design; restricting
-one credential cryptographically to only one app would require a separate scoped account
-or device-attestation system.
+Do not enable these flags in production until HTTPS, secure cookies, Turnstile, PIN/TOTP, push credentials, audit events, and logout behavior have been verified in staging.
