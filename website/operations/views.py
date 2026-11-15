@@ -155,6 +155,7 @@ from .security import (
     admin_ip_block,
     admin_user_block,
     confirmed_totp_device,
+    is_valid_otp_code,
     is_active_admin,
     gate_is_valid,
     mark_mobile_owner_session,
@@ -977,16 +978,19 @@ def mobile_owner_otp(request):
 
     locked = mobile_owner_factor_locked(request, "otp")
     device = confirmed_totp_device(user)
-    if request.method == "POST" and not locked and form.is_valid():
+    if request.method == "POST" and not locked:
+        form_is_valid = form.is_valid()
+        code = form.cleaned_data.get("token", "") if form_is_valid else ""
         valid = False
-        if device is not None:
+        if device is not None and is_valid_otp_code(code):
             try:
-                valid = bool(device.verify_token(form.cleaned_data["token"]))
+                valid = bool(device.verify_token(code))
             except (TypeError, ValueError):
                 valid = False
         if valid:
             return _complete_mobile_owner_login(request, user)
         locked = _mobile_owner_factor_failure(request, user, "otp")
+        form.errors.clear()
         form.add_error(None, "That verification code could not be verified.")
 
     if locked:

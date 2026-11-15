@@ -75,6 +75,7 @@ from .security import (
     gate_is_valid,
     gate_next,
     has_totp_enabled,
+    is_valid_otp_code,
     is_active_admin,
     is_mobile_owner_session,
     mark_otp_verified,
@@ -752,14 +753,17 @@ class GrandCoastAdminSite(UnfoldAdminSite):
             return HttpResponseForbidden("Administration access is restricted.")
 
         form = AdminOtpForm(request.POST or None)
-        if request.method == "POST" and form.is_valid():
+        if request.method == "POST":
+            form_is_valid = form.is_valid()
             verification_error = False
-            try:
-                verified = device.verify_token(form.cleaned_data["token"])
-            except Exception:
-                logger.exception("Administrator authenticator verification failed unexpectedly.")
-                verified = False
-                verification_error = True
+            code = form.cleaned_data.get("token", "") if form_is_valid else ""
+            verified = False
+            if is_valid_otp_code(code):
+                try:
+                    verified = device.verify_token(code)
+                except Exception:
+                    logger.exception("Administrator authenticator verification failed unexpectedly.")
+                    verification_error = True
 
             if verified:
                 next_url = pending_otp_next(request)
@@ -789,6 +793,7 @@ class GrandCoastAdminSite(UnfoldAdminSite):
                 )
             except Exception:
                 logger.exception("Could not record a failed administrator authenticator attempt.")
+            form.errors.clear()
             if locked:
                 clear_otp_challenge(request)
                 clear_gate(request)

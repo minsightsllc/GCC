@@ -523,6 +523,10 @@ def confirmed_totp_device(user):
     )
 
 
+def is_valid_otp_code(token):
+    return isinstance(token, str) and len(token) == 6 and token.isdecimal()
+
+
 def has_totp_enabled(user):
     return confirmed_totp_device(user) is not None
 

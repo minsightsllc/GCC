@@ -1511,16 +1511,10 @@ class AdminPinForm(forms.Form):
 class AdminOtpForm(forms.Form):
     token = forms.CharField(
         label="Authenticator code",
-        max_length=6,
-        min_length=6,
+        max_length=64,
+        required=False,
         widget=forms.TextInput(attrs={"inputmode": "numeric", "autocomplete": "one-time-code"}),
     )
-
-    def clean_token(self):
-        token = self.cleaned_data["token"]
-        if not re.fullmatch(r"\d{6}", token):
-            raise ValidationError(_("Enter the six-digit authenticator code."))
-        return token
 
 
 class AdminRecoveryRequestForm(forms.Form):
